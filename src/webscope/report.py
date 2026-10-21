@@ -21,6 +21,7 @@ ACCEPTANCE: dict[str, str] = {
     "content/missing-title": "У документа есть непустой <title>.",
     "content/missing-description": 'В <head> есть <meta name="description" content="..."> с описанием страницы.',
     "content/missing-viewport": 'Есть <meta name="viewport" content="width=device-width, initial-scale=1">.',
+    "content/missing-charset": 'В <head> есть <meta charset="utf-8"> — кодировка страницы задана явно.',
     "content/no-h1": "На странице ровно один <h1> с осмысленным текстом.",
     "content/multiple-h1": "На странице остался один <h1>.",
     "content/heading-order": "Уровни заголовков идут без пропусков (h2 -> h3, не h2 -> h4).",

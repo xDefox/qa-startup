@@ -51,6 +51,7 @@ COLLECT = r"""
     description: meta('description'),
     viewport: meta('viewport'),
     charset: doc.characterSet || '',
+    hasCharsetMeta: !!doc.querySelector('meta[charset]'),
     protocol: location.protocol,
     headings,
     images,
@@ -114,6 +115,14 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
             "Нет viewport meta",
             "Страница не адаптируется под мобильные экраны.",
             help_url="https://www.w3.org/WAI/WCAG22/Understanding/adapt-content-to-keyboard.html",
+        )
+
+    if not data.get("hasCharsetMeta"):
+        add(
+            "content/missing-charset",
+            Severity.MODERATE,
+            "Не указан charset страницы",
+            "Без <meta charset> браузер угадывает кодировку — кириллица и другие не-ASCII символы ломаются.",
         )
 
     headings = data.get("headings") or []
