@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ site.url }} — проверка сайта{% endblock %}
+{% block content %}
+
+{% if pending %}
+<div class="flash" id="pending">
+  Идёт проверка сайта… это занимает до минуты. Страница обновится сама.
+</div>
+{% endif %}
+
+{% if last_error %}
+<div class="error">
+  Последняя проверка не удалась: {{ last_error }}.
+  {% if view %}Показываем результат предыдущей проверки.{% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="row" style="align-items: center;">
+    <div style="flex: 2 1 auto;">
+      <h1 style="margin-bottom:4px;">{{ site.url }}</h1>
+      <div class="muted small">
+        Автоматическая проверка: {{ schedule_label }}
+        {% if site.email %} · отчёты на {{ site.email }}{% endif %}
+      </div>
+    </div>
+    <div style="flex: 0 0 auto; text-align: right;">
+      {% if view %}
+      <div class="score">{{ view.score }}<small>/100</small></div>
+      <div class="muted small">{{ view.score_label }}</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="row" style="margin-top: 18px;">
+    <form method="post" action="/sites/{{ site.id }}/scan" class="actions">
+      <button type="submit">Проверить ещё раз</button>
+    </form>
+    <div class="actions">
+      <a class="pill" href="/sites/{{ site.id }}/history">История проверок</a>
+    </div>
+  </div>
+</div>
+
+{% if view %}
+  {% if view.diff and view.diff.new_count %}
+  <div class="card">
+    <h2>Что сломалось с прошлого раза</h2>
+    <p class="muted small">
+      Оценка: {{ view.diff.score_before }} → {{ view.diff.score_after }}
+      {% if view.diff.delta > 0 %}(+{{ view.diff.delta }}){% elif view.diff.delta < 0 %}({{ view.diff.delta }}){% endif %}
+      · новых проблем: {{ view.diff.new_count }} · исправлено: {{ view.diff.fixed_count }}
+    </p>
+    <ul class="small">
+      {% for item in view.diff.new %}
+      <li><span class="badge {{ item.severity }}">{{ item.severity }}</span> {{ item.title }} — <span class="muted">{{ item.url }}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Что сделать в первую очередь</h2>
+    {% if view.actions %}
+    <ol class="actions-list">
+      {% for action in view.actions %}
+      <li>
+        <div>{{ action.meaning }}</div>
+        <div class="fix">Что сделать: {{ action.fix }}</div>
+        <div class="where">{{ action.url }}</div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="muted">Серьёзных проблем не найдено — сайт в порядке.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Все находки ({{ view.total }})</h2>
+    {% for group in view.groups %}
+    <div class="sev {{ group.key }}">
+      <h3>{{ group.title }} ({{ group.count }})</h3>
+      {% for item in group.problems %}
+      <div class="issue">
+        <div>{{ item.meaning }}</div>
+        <div class="fix">Что сделать: {{ item.fix }}</div>
+        <div class="where">{{ item.url }}{% if item.selector %} · {{ item.selector }}{% endif %}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">Ничего не найдено.</p>
+    {% endfor %}
+  </div>
+{% elif not pending %}
+<div class="card">
+  <h2>Отчёта пока нет</h2>
+  <p class="muted">Запустите первую проверку — она начнётся сразу.</p>
+  <form method="post" action="/sites/{{ site.id }}/scan">
+    <button type="submit">Проверить сайт</button>
+  </form>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if pending %}
+<script>
+  // Ждём окончания проверки и обновляем страницу.
+  const check = async () => {
+    try {
+      const response = await fetch('/api/sites/{{ site.id }}/runs');
+      const data = await response.json();
+      const running = (data.runs || []).some((run) => run.status === 'running');
+      if (!running) { window.location.reload(); return; }
+    } catch (error) { /* молча пробуем ещё раз */ }
+    setTimeout(check, 3000);
+  };
+  setTimeout(check, 3000);
+</script>
+{% endif %}
+{% endblock %}

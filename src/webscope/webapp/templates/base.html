@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}webscope — проверка сайта{% endblock %}</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ink: #1c2333;
+    --muted: #667085;
+    --line: #e4e7ec;
+    --accent: #2563eb;
+    --critical: #b42318;
+    --serious: #d97706;
+    --moderate: #b54708;
+    --minor: #667085;
+    --ok: #087443;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  a { color: var(--accent); }
+  .top {
+    background: var(--card);
+    border-bottom: 1px solid var(--line);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .top .logo { font-weight: 700; font-size: 19px; letter-spacing: -0.02em; }
+  .top .logo span { color: var(--accent); }
+  .top nav { margin-left: auto; display: flex; gap: 18px; font-size: 15px; }
+  main { max-width: 940px; margin: 0 auto; padding: 28px 20px 60px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 24px;
+    margin-bottom: 18px;
+  }
+  h1 { font-size: 30px; line-height: 1.25; letter-spacing: -0.02em; margin: 0 0 12px; }
+  h2 { font-size: 21px; letter-spacing: -0.01em; margin: 0 0 14px; }
+  h3 { font-size: 16px; margin: 0 0 8px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 14px; }
+  input[type=text], input[type=email], select {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    font-size: 16px;
+    background: #fff;
+    color: var(--ink);
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: 0;
+    border-radius: 10px;
+    padding: 13px 20px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: #1d4ed8; }
+  button.secondary { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+  button.secondary:hover { background: var(--bg); }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+  .row > * { flex: 1 1 180px; }
+  .row > .actions { flex: 0 0 auto; }
+  .error {
+    background: #fef3f2;
+    border: 1px solid #fecdca;
+    color: var(--critical);
+    padding: 12px 14px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+  }
+  .hero { text-align: center; padding: 40px 24px 34px; }
+  .hero p { max-width: 560px; margin: 0 auto 22px; color: var(--muted); }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-top: 18px; }
+  .step { background: var(--bg); border-radius: 12px; padding: 16px; }
+  .step b { display: block; margin-bottom: 4px; }
+  .score {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 46px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+  .score small { font-size: 18px; font-weight: 500; color: var(--muted); }
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .badge.critical { background: #fee4e2; color: var(--critical); }
+  .badge.serious { background: #fef0c7; color: var(--serious); }
+  .badge.moderate { background: #fdf1e3; color: var(--moderate); }
+  .badge.minor { background: #f2f4f7; color: var(--minor); }
+  .badge.ok { background: #dcfae6; color: var(--ok); }
+  .sev { border-left: 4px solid var(--line); padding-left: 14px; margin-bottom: 18px; }
+  .sev.critical { border-color: var(--critical); }
+  .sev.serious { border-color: var(--serious); }
+  .sev.moderate { border-color: var(--moderate); }
+  .sev.minor { border-color: var(--minor); }
+  .issue { margin-bottom: 14px; }
+  .issue .fix { color: var(--muted); font-size: 14px; }
+  .issue .where { font-size: 13px; color: var(--muted); word-break: break-all; }
+  ol.actions-list { margin: 0; padding-left: 22px; }
+  ol.actions-list li { margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .site-list { list-style: none; padding: 0; margin: 0; }
+  .site-list li { padding: 14px 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 14px; align-items: center; }
+  .site-list li:last-child { border-bottom: 0; }
+  .site-score { font-size: 20px; font-weight: 700; }
+  footer { color: var(--muted); font-size: 13px; text-align: center; padding: 26px 20px 40px; }
+  .pill { display: inline-block; background: var(--bg); border-radius: 8px; padding: 4px 10px; font-size: 13px; }
+  .flash { background: #eff8ff; border: 1px solid #b2ddff; color: #175cd3; padding: 12px 14px; border-radius: 10px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo">webscope<span>.</span></div>
+  <nav>
+    <a href="/">Все сайты</a>
+  </nav>
+</header>
+<main>
+  {% block content %}{% endblock %}
+</main>
+<footer>
+  Проверка автоматическая: она находит типовые проблемы доступности, работоспособности
+  и удобства на телефоне, но не заменяет проверку человеком.
+</footer>
+{% block scripts %}{% endblock %}
+</body>
+</html>

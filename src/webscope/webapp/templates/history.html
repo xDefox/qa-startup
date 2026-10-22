@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ site.url }} — история проверок{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h1>История проверок</h1>
+  <p class="muted small"><a href="/sites/{{ site.id }}">← к отчёту</a> · {{ site.url }}</p>
+
+  {% if runs %}
+    {% set scores = runs | map(attribute='score') | list %}
+    {% set best = scores | max %}
+    {% set worst = scores | min %}
+    <div style="margin: 18px 0 24px;">
+      <svg viewBox="0 0 600 120" width="100%" height="120" preserveAspectRatio="none" role="img" aria-label="Динамика оценки">
+        {% set count = runs | length %}
+        {% set step = 600 / (count - 1) if count > 1 else 0 %}
+        <polyline fill="none" stroke="#2563eb" stroke-width="2"
+          points="{% for run in runs %}{{ loop.index0 * step }},{{ 110 - (run.score or 0) * 0.9 }}{% if not loop.last %} {% endif %}{% endfor %}" />
+        {% for run in runs %}
+        <circle cx="{{ loop.index0 * step }}" cy="{{ 110 - (run.score or 0) * 0.9 }}" r="3.5" fill="#2563eb">
+          <title>{{ run.finished_at[:16].replace('T', ' ') }} — {{ run.score }}/100</title>
+        </circle>
+        {% endfor %}
+      </svg>
+      <div class="muted small">Оценка по прогонам: от {{ worst }} до {{ best }}</div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Когда</th>
+          <th class="num">Оценка</th>
+          <th class="num">Критично</th>
+          <th class="num">Существенно</th>
+          <th class="num">Желательно</th>
+          <th class="num">Мелочи</th>
+          <th class="num">Страниц</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+        {% set bucket = counts.get(run.id, {}) %}
+        <tr>
+          <td>{{ run.finished_at[:16].replace('T', ' ') if run.finished_at else run.started_at[:16].replace('T', ' ') }}</td>
+          <td class="num"><b>{{ run.score }}</b></td>
+          <td class="num">{{ bucket.get('critical', 0) }}</td>
+          <td class="num">{{ bucket.get('serious', 0) }}</td>
+          <td class="num">{{ bucket.get('moderate', 0) }}</td>
+          <td class="num">{{ bucket.get('minor', 0) }}</td>
+          <td class="num">{{ run.pages_scanned }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">История пуста — сделайте первую проверку.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

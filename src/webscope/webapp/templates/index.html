@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}webscope — проверка сайта{% endblock %}
+{% block content %}
+
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
+<div class="card hero">
+  <h1>Проверьте свой сайт — бесплатно</h1>
+  <p>
+    Проверим, что на сайте не сломано: нет ли картинок без подписей, полей без
+    подписей, кнопок без названия, ошибок в консоли и прокрутки вбок на телефоне.
+    Покажем оценку и скажем, что исправить в первую очередь.
+  </p>
+  <form method="post" action="/sites">
+    <div class="field">
+      <label for="url">Адрес вашего сайта</label>
+      <input id="url" type="text" name="url" placeholder="example.com" required>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="email">Куда присылать отчёты (необязательно)</label>
+        <input id="email" type="email" name="email" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label for="schedule">Как часто проверять</label>
+        <select id="schedule" name="schedule">
+          {% for value, label in schedules.items() %}
+          <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="actions">
+        <button type="submit">Проверить сайт</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Как это работает</h2>
+  <div class="steps">
+    <div class="step"><b>1. Обходим сайт</b><span class="muted small">Находим все типы страниц: главная, каталог, новости, контакты.</span></div>
+    <div class="step"><b>2. Проверяем в браузере</b><span class="muted small">Реальный браузер, реальные ошибки — не догадки.</span></div>
+    <div class="step"><b>3. Показываем отчёт</b><span class="muted small">Оценка, список проблем и три первых дела.</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Ваши сайты</h2>
+  {% if sites %}
+  <ul class="site-list">
+    {% for item in sites %}
+    <li>
+      <div>
+        <a href="/sites/{{ item.site.id }}">{{ item.site.url }}</a>
+        <div class="muted small">
+          {% if item.run and item.run.status == 'ok' %}
+            последняя проверка: {{ item.run.finished_at[:16].replace('T', ' ') }}
+          {% elif item.run %}
+            проверка выполняется…
+          {% else %}
+            проверка ещё не выполнялась
+          {% endif %}
+        </div>
+      </div>
+      {% if item.run and item.run.status == 'ok' %}
+      <div class="site-score">{{ item.run.score }}/100</div>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Пока ни одного сайта. Вставьте адрес выше — и первая проверка начнётся сразу.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

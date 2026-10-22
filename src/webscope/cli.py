@@ -63,6 +63,20 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_cmd = sub.add_parser("mcp", help="Запустить MCP-сервер (stdio)")
     mcp_cmd.add_argument("--allow-private", action="store_true", help="Разрешить локальные адреса")
 
+    serve_cmd = sub.add_parser("serve", help="Запустить веб-интерфейс (для владельца сайта)")
+    serve_cmd.add_argument("--host", default="127.0.0.1", help="Адрес прослушивания")
+    serve_cmd.add_argument("--port", type=int, default=8000, help="Порт")
+    serve_cmd.add_argument("--db", type=Path, default=Path("webscope.db"), help="Файл базы данных SQLite")
+    serve_cmd.add_argument("--max-pages", type=int, default=20, help="Максимум страниц в обходе")
+    serve_cmd.add_argument("--depth", type=int, default=2, help="Глубина обхода")
+    serve_cmd.add_argument(
+        "--check-interval",
+        type=int,
+        default=300,
+        help="Как часто планировщик проверяет расписание, секунд",
+    )
+    serve_cmd.add_argument("--allow-private", action="store_true", help="Разрешить локальные адреса")
+
     crawl_cmd = sub.add_parser("crawl", help="Обойти сайт и проверить по одной странице каждого шаблона")
     crawl_cmd.add_argument("url", help="Адрес сайта")
     crawl_cmd.add_argument("--max-pages", type=int, default=30, help="Максимум страниц в обходе")
@@ -164,6 +178,37 @@ def cmd_scan(args: argparse.Namespace) -> int:
     threshold = _severity_threshold(args.fail_on)
     if any(finding.severity.rank <= threshold for finding in result.findings):
         return EXIT_FINDINGS
+    return EXIT_OK
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Запускает веб-интерфейс: сайт для владельца + планировщик проверок."""
+    try:
+        import uvicorn
+    except ImportError:
+        print(
+            "webscope: нужен uvicorn и fastapi — установите: pip install 'webscope[web]'",
+            file=sys.stderr,
+        )
+        return EXIT_ERROR
+
+    from .webapp.app import create_app
+    from .webapp.scheduler import ScanOptions
+
+    options = ScanOptions(
+        max_pages=args.max_pages,
+        depth=args.depth,
+        allow_private=args.allow_private,
+    )
+    app = create_app(
+        db_path=args.db,
+        options=options,
+        check_interval=args.check_interval,
+        allow_private=args.allow_private,
+    )
+
+    print(f"webscope: веб-интерфейс на http://{args.host}:{args.port}", file=sys.stderr)
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     return EXIT_OK
 
 
@@ -281,6 +326,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_history(args)
     if args.command == "mcp":
         return cmd_mcp(args)
+    if args.command == "serve":
+        return cmd_serve(args)
     parser.error(f"неизвестная команда: {args.command}")
     return EXIT_ERROR
 

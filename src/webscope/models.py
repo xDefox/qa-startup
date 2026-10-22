@@ -98,6 +98,13 @@ class ScanResult:
         counts["total"] = len(self.findings)
         return counts
 
+    @property
+    def score(self) -> int:
+        """Оценка «здоровья» 0–100 (логика — в scoring.compute_score)."""
+        from .scoring import compute_score
+
+        return compute_score(self.findings)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
@@ -108,6 +115,7 @@ class ScanResult:
             "archetype": self.archetype,
             "duration_ms": self.duration_ms,
             "pages_scanned": self.pages_scanned,
+            "score": self.score,
             "summary": self.summary,
             "findings": [finding.to_dict() for finding in self.findings],
         }
