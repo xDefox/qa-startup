@@ -272,6 +272,18 @@ def render_plain(result: ScanResult) -> str:
         lines.append(f"Название: {result.title}")
     lines.append(f"Проверено страниц: {result.pages_scanned}")
     lines.append(f"Оценка: {score}/100 — {score_label(score)}")
+    # Попробуем передать контекст редиректа/авторизации, если есть
+    try:
+        # контекст не хранится в ScanResult, но можем попытаться вывести по final_url
+        from urllib.parse import urlparse
+
+        fu = result.final_url or result.url
+        pu = urlparse(fu)
+        pth = (pu.path or "").lower()
+        if any(k in pth for k in ("/login", "/signin", "/auth", "/sso")) or "login" in fu.lower():
+            lines.append("Примечание: проверена страница авторизации (доступ без логина). Для полной проверки личного кабинета нужен тестовый логин/пароль.")
+    except Exception:
+        pass
     lines.append("")
 
     if not result.findings:
