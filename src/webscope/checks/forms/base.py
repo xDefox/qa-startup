@@ -6,8 +6,8 @@
 
 from __future__ import annotations
 
-from ..context import ScanContext
-from ..models import Finding, Severity
+from ...context import ScanContext
+from ...models import Finding, Severity
 
 COLLECT = r"""
 () => {

@@ -56,9 +56,11 @@ def normalize_url(url: str) -> str:
 def build_report_view(storage: Storage, run: Run) -> dict:
     """Готовит данные для страницы отчёта: группы, план действий, дифф."""
     findings = storage.findings_as_models(run.id)
+    from ..scoring import group_by_rule
+
     groups = []
     for severity, title, key in SEVERITY_GROUPS:
-        items = [finding for finding in findings if finding.severity == severity]
+        items = group_by_rule([finding for finding in findings if finding.severity == severity])
         if not items:
             continue
         groups.append(
@@ -68,12 +70,14 @@ def build_report_view(storage: Storage, run: Run) -> dict:
                 "count": len(items),
                 "problems": [
                     {
-                        "meaning": plain_impact(finding)[0],
-                        "fix": plain_impact(finding)[1],
-                        "url": finding.url,
-                        "selector": finding.selector,
+                        "meaning": group["meaning"],
+                        "fix": group["fix"],
+                        "url": ", ".join(group["examples"]) if group["examples"] else "",
+                        "pages_count": group["pages_count"],
+                        "count": group["count"],
+                        "rule": group["rule"],
                     }
-                    for finding in items
+                    for group in items
                 ],
             }
         )

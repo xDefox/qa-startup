@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 from .models import Finding, Severity
 
 # Вес находки по серьёзности для итогового балла.
@@ -16,10 +18,6 @@ _WEIGHTS = {
     Severity.MINOR: 1,
 }
 
-# Сколько находок одного правила максимум учитываем: 30 страниц с одним и тем же
-# дефектом не должны обнулять балл — иначе счёт бессмысленен.
-_MAX_PER_RULE = 3
-
 
 # Сколько страниц затронуто правилом — показывается отдельно от балла.
 def affected_pages(findings: list[Finding]) -> dict[str, int]:
@@ -28,6 +26,46 @@ def affected_pages(findings: list[Finding]) -> dict[str, int]:
     for finding in findings:
         counts[finding.rule] = counts.get(finding.rule, 0) + 1
     return counts
+
+
+def group_by_rule(findings: list[Finding]) -> list[dict]:
+    """Агрегирует находки по правилу: одна строка вместо горы дублей."""
+    if not findings:
+        return []
+
+    groups: dict[str, list[Finding]] = defaultdict(list)
+    for finding in findings:
+        groups[finding.rule].append(finding)
+
+    result = []
+    for rule, items in groups.items():
+        worst = min(items, key=lambda f: f.severity.rank)
+        pages = sorted({item.url for item in items if item.url})
+        selectors = [item.selector for item in items if item.selector]
+        # Берём представителя с селектором/фрагментом если есть
+        rep = worst
+        for item in items:
+            if getattr(item, "selector", None) and not getattr(rep, "selector", None):
+                rep = item
+                break
+        result.append(
+            {
+                "rule": rule,
+                "severity": worst.severity,
+                "title": worst.title,
+                "meaning": plain_impact(worst)[0],
+                "fix": plain_impact(worst)[1],
+                "count": len(items),
+                "pages_count": len(pages),
+                "pages": pages,
+                "examples": pages[:3],
+                "selectors_count": len(selectors),
+                "representative": rep,
+            }
+        )
+
+    result.sort(key=lambda g: (g["severity"].rank, -g["pages_count"], -g["count"], g["rule"]))
+    return result
 
 
 # Понятный владельцу сайта язык: (что это значит, что делать).
@@ -46,7 +84,7 @@ PLAIN_IMPACT: dict[str, tuple[str, str]] = {
     ),
     "content/missing-viewport": (
         "Сайт не подстраивается под телефон — часть мобильных клиентов уходит сразу.",
-        'Добавьте <meta name="viewport" content="width=device-width, initial-scale=1">.',
+        'Добавьте <meta name="viewport" content="width=device-width, initial-scale=1">',
     ),
     "content/missing-charset": (
         "Кириллица и другие нелатинские символы могут отображаться «кракозябрами» — это выглядит как поломка сайта.",
@@ -104,6 +142,22 @@ PLAIN_IMPACT: dict[str, tuple[str, str]] = {
         "Кнопка отправки без подписи — клиент не понимает, что это кнопка отправки.",
         "Добавьте текст на кнопку или aria-label.",
     ),
+    "forms/novalidate": (
+        "Форма отключает встроенную браузерную валидацию, но своей проверки нет. Заявка может уйти с ошибками.",
+        "Уберите novalidate с формы либо добавьте понятные JS-проверки и сообщения об ошибках.",
+    ),
+    "forms/email-wrong-type": (
+        "Поле для e-mail имеет тип «text». На мобильном не появится нужная клавиатура, базовая проверка слабее.",
+        'Используйте type="email" для поля ввода почты.',
+    ),
+    "forms/tel-missing-inputmode": (
+        'Поле телефона лучше сделать с inputmode="tel" — так на мобильном будет удобнее набирать номер.',
+        'Добавьте inputmode="tel" (и при необходимости pattern) к полю телефона.',
+    ),
+    "forms/no-required": (
+        "В форме есть признаки обязательных полей, но нет явной разметки required. Поведенческая проверка сабмита точнее — пока это наблюдение.",
+        "Проверьте реальную валидацию при отправке пустой формы. Если сервер принимает пустые значения — добавьте валидацию.",
+    ),
     "links/empty-href": (
         "Ссылка ведёт в никуда — клик не даёт эффекта и выглядит как поломка.",
         "Укажите реальный адрес или используйте кнопку.",
@@ -145,8 +199,12 @@ PLAIN_IMPACT: dict[str, tuple[str, str]] = {
         "Ограничьте ширину блока и включите перенос.",
     ),
     "viewport/target-size": (
-        "Кнопки слишком маленькие для пальца — клиент промахивается и не нажимает.",
-        "Увеличьте интерактивные элементы до 24×24 px и более.",
+        "Кнопки мелковаты — удобнее, если увеличить, но если по ним можно кликнуть, это не блокер.",
+        "При возможности увеличьте кликабельную область, не перекрывая элемент другими блоками.",
+    ),
+    "interaction/button-blocked": (
+        "Кнопку или ссылку нельзя кликнуть — другой элемент перекрывает её. Из-за этого клиент не может оставить заявку/заказ.",
+        "Убрать/сдвинуть перекрывающий элемент, скорректировать z-index или отступы.",
     ),
 }
 
@@ -267,12 +325,10 @@ def plain_impact(finding: Finding) -> tuple[str, str]:
 
 def top_actions(findings: list[Finding], limit: int = 3) -> list[Finding]:
     """Топ находок, которые стоит закрыть первыми: по серьёзности и количеству страниц."""
-    counts: dict[str, int] = {}
-    for finding in findings:
-        counts[finding.rule] = counts.get(finding.rule, 0) + 1
+    counts = affected_pages(findings)
 
     def sort_key(finding: Finding) -> tuple[int, int, str]:
-        return (finding.severity.rank, -counts[finding.rule], finding.rule)
+        return (finding.severity.rank, -counts.get(finding.rule, 1), finding.rule)
 
     unique: dict[str, Finding] = {}
     for finding in sorted(findings, key=sort_key):

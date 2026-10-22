@@ -16,12 +16,13 @@ CheckFn = Callable[[object, ScanContext], list[Finding]]
 
 
 def _load() -> dict[str, CheckFn]:
-    from . import a11y, console, content, forms, links, viewport
+    from . import a11y, console, content, forms, interaction, links, viewport
 
     return {
         "a11y": a11y.run,
         "content": content.run,
         "forms": forms.run,
+        "interaction": interaction.run,
         "links": links.run,
         "console": console.run,
         "viewport": viewport.run,
@@ -30,6 +31,14 @@ def _load() -> dict[str, CheckFn]:
 
 REGISTRY: dict[str, CheckFn] = _load()
 
-DEFAULT_CHECKS: tuple[str, ...] = ("a11y", "content", "forms", "links", "console", "viewport")
+DEFAULT_CHECKS: tuple[str, ...] = (
+    "a11y",
+    "content",
+    "forms",
+    "interaction",
+    "links",
+    "console",
+    "viewport",
+)
 
 __all__ = ["DEFAULT_CHECKS", "REGISTRY", "CheckFn"]

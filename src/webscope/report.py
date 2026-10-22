@@ -262,7 +262,7 @@ WCAG и не являются юридическим заключением о �
 
 def render_plain(result: ScanResult) -> str:
     """Отчёт для владельца сайта: без терминов, с баллом и планом действий."""
-    from .scoring import compute_score, plain_impact, score_label, top_actions
+    from .scoring import compute_score, group_by_rule, plain_impact, score_label, top_actions
 
     score = compute_score(result.findings)
     lines: list[str] = []
@@ -289,25 +289,70 @@ def render_plain(result: ScanResult) -> str:
                 lines.append(f"     Страница: {finding.url}")
         lines.append("")
 
+    blockers = group_by_rule([f for f in result.findings if f.rule == "interaction/button-blocked"])
+    if blockers:
+        lines.append("БЛОКИРУЕТ КЛИКИ — нельзя нажать кнопку/ссылку (критично)")
+        for group in blockers:
+            meaning, fix = group["meaning"], group["fix"]
+            rep = group.get("representative")
+            lines.append(f"  • {meaning}")
+            if rep and getattr(rep, "selector", None):
+                lines.append(f"    Селектор: {rep.selector}")
+            if group["pages_count"] > 1 or group["count"] > 1:
+                lines.append(f"    Затронуто: {group['pages_count']} стр., элементов: {group['count']}")
+                if group["examples"]:
+                    if len(group["examples"]) == 1:
+                        location = group["examples"][0]
+                    else:
+                        location = ", ".join(group["examples"])
+                        if len(group["pages"]) > len(group["examples"]):
+                            location += f" и ещё {len(group['pages']) - len(group['examples'])} стр."
+                    lines.append(f"    Где: {location}")
+            elif group["count"] == 1 and group["examples"]:
+                lines.append(f"    Страница: {group['examples'][0]}")
+            lines.append(f"    Что сделать: {fix}")
+            if rep and getattr(rep, "snippet", None):
+                lines.append(f"    Фрагмент: {rep.snippet}")
+        lines.append("")
+
     groups = (
         ("КРИТИЧНО — сайт работает неправильно", "critical"),
         ("СУЩЕСТВЕННО — часть клиентов теряется", "serious"),
-        ("ЖЕЛАТЕЛЬНО — стоит поправить", "moderate"),
+        ("РЕКОМЕНДАЦИИ ПО УЛУЧШЕНИЮ", "moderate"),
         ("МЕЛОЧИ — на ваше усмотрение", "minor"),
     )
     for title, key in groups:
-        items = [finding for finding in result.findings if finding.severity.value == key]
+        items = group_by_rule(
+            [
+                finding
+                for finding in result.findings
+                if finding.severity.value == key and finding.rule != "interaction/button-blocked"
+            ]
+        )
         if not items:
             continue
-        lines.append(f"{title} ({len(items)})")
-        for finding in items:
-            meaning, fix = plain_impact(finding)
+        lines.append(f"{title} ({len(items)} правил)")
+        for group in items:
+            meaning, fix = group["meaning"], group["fix"]
             lines.append(f"  • {meaning}")
+            rep = group.get("representative")
+            if rep and getattr(rep, "selector", None):
+                lines.append(f"    Селектор: {rep.selector}")
+            if group["pages_count"] > 1 or group["count"] > 1:
+                lines.append(f"    Затронуто: {group['pages_count']} стр., элементов: {group['count']}")
+                if group["examples"]:
+                    if len(group["examples"]) == 1:
+                        location = group["examples"][0]
+                    else:
+                        location = ", ".join(group["examples"])
+                        if len(group["pages"]) > len(group["examples"]):
+                            location += f" и ещё {len(group['pages']) - len(group['examples'])} стр."
+                    lines.append(f"    Где: {location}")
+            elif group["count"] == 1 and group["examples"]:
+                lines.append(f"    Страница: {group['examples'][0]}")
             lines.append(f"    Что сделать: {fix}")
-            location = finding.url
-            if finding.selector:
-                location += f" (элемент: {finding.selector})"
-            lines.append(f"    Где: {location}")
+            if rep and getattr(rep, "snippet", None):
+                lines.append(f"    Фрагмент: {rep.snippet}")
         lines.append("")
 
     lines.append(
