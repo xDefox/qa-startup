@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import html as html_lib
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .models import Finding, ScanResult, Severity
+
+if TYPE_CHECKING:
+    from .history import DiffReport
 
 SEVERITY_LABEL = {
     Severity.CRITICAL: "CRITICAL",
@@ -255,6 +258,122 @@ def render_html(result: ScanResult) -> str:
 WCAG и не являются юридическим заключением о соответствии.</p>
 </body>
 </html>"""
+
+
+def render_plain(result: ScanResult) -> str:
+    """Отчёт для владельца сайта: без терминов, с баллом и планом действий."""
+    from .scoring import compute_score, plain_impact, score_label, top_actions
+
+    score = compute_score(result.findings)
+    lines: list[str] = []
+
+    lines.append(f"Проверка сайта: {result.final_url or result.url}")
+    if result.title:
+        lines.append(f"Название: {result.title}")
+    lines.append(f"Проверено страниц: {result.pages_scanned}")
+    lines.append(f"Оценка: {score}/100 — {score_label(score)}")
+    lines.append("")
+
+    if not result.findings:
+        lines.append("Серьёзных проблем не найдено. Сайт в порядке.")
+        return "\n".join(lines)
+
+    actions = top_actions(result.findings, limit=3)
+    if actions:
+        lines.append("ЧТО СДЕЛАТЬ В ПЕРВУЮ ОЧЕРЕДЬ")
+        for index, finding in enumerate(actions, start=1):
+            meaning, fix = plain_impact(finding)
+            lines.append(f"  {index}. {meaning}")
+            lines.append(f"     Что сделать: {fix}")
+            if finding.url:
+                lines.append(f"     Страница: {finding.url}")
+        lines.append("")
+
+    groups = (
+        ("КРИТИЧНО — сайт работает неправильно", "critical"),
+        ("СУЩЕСТВЕННО — часть клиентов теряется", "serious"),
+        ("ЖЕЛАТЕЛЬНО — стоит поправить", "moderate"),
+        ("МЕЛОЧИ — на ваше усмотрение", "minor"),
+    )
+    for title, key in groups:
+        items = [finding for finding in result.findings if finding.severity.value == key]
+        if not items:
+            continue
+        lines.append(f"{title} ({len(items)})")
+        for finding in items:
+            meaning, fix = plain_impact(finding)
+            lines.append(f"  • {meaning}")
+            lines.append(f"    Что сделать: {fix}")
+            location = finding.url
+            if finding.selector:
+                location += f" (элемент: {finding.selector})"
+            lines.append(f"    Где: {location}")
+        lines.append("")
+
+    lines.append(
+        "Проверка автоматическая: она находит типовые проблемы доступности, скорости и "
+        "работоспособности, но не заменяет проверку человеком."
+    )
+    return "\n".join(lines)
+
+
+def render_diff(diff: DiffReport) -> str:
+    """Человекочитаемый разбор изменений между двумя прогонами."""
+    delta = diff.score_after - diff.score_before
+    arrow = "+" if delta > 0 else ""
+    lines = [
+        f"Сравнение: {diff.old_at} → {diff.new_at}",
+        f"Оценка: {diff.score_before} → {diff.score_after} ({arrow}{delta})",
+        (
+            f"Новых проблем: {len(diff.new_findings)} · исправлено: {len(diff.fixed_findings)} · "
+            f"изменилось: {len(diff.changed_findings)}"
+        ),
+        "",
+    ]
+
+    if diff.new_findings:
+        lines.append("НОВЫЕ ПРОБЛЕМЫ")
+        for entry in diff.new_findings:
+            lines.append(f"  • [{entry.severity_after}] {entry.title} — {entry.url}")
+        lines.append("")
+
+    if diff.fixed_findings:
+        lines.append("ИСПРАВЛЕНО")
+        for entry in diff.fixed_findings:
+            lines.append(f"  • {entry.title} — {entry.url}")
+        lines.append("")
+
+    if diff.changed_findings:
+        lines.append("ИЗМЕНИЛОСЬ")
+        for entry in diff.changed_findings:
+            lines.append(f"  • {entry.title}: {entry.severity_before} → {entry.severity_after} — {entry.url}")
+        lines.append("")
+
+    if not (diff.new_findings or diff.fixed_findings or diff.changed_findings):
+        lines.append("Изменений нет — сайт в том же состоянии.")
+
+    return "\n".join(lines)
+
+
+def render_trend(points: list[dict]) -> str:
+    """Таблица динамики по истории прогонов."""
+    if not points:
+        return "История пуста — сделайте первый прогон."
+    lines = ["дата                оценка  всего  crit  serious  moderate  minor  страниц"]
+    for point in points:
+        lines.append(
+            "{taken_at:<20} {score:>5}  {total:>5}  {critical:>4}  {serious:>6}  {moderate:>8}  {minor:>5}  {pages:>6}".format(
+                taken_at=point.get("taken_at", "")[:19],
+                score=point.get("score", 0),
+                total=point.get("total", 0),
+                critical=point.get("critical", 0),
+                serious=point.get("serious", 0),
+                moderate=point.get("moderate", 0),
+                minor=point.get("minor", 0),
+                pages=point.get("pages_scanned", 0),
+            )
+        )
+    return "\n".join(lines)
 
 
 def build_fix_prompt(result: ScanResult, rules: list[str] | None = None) -> str:

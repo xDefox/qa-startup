@@ -17,6 +17,7 @@ from .archetype import detect_archetype
 from .checks import DEFAULT_CHECKS, REGISTRY
 from .checks.js import JS_UTILS
 from .context import ScanContext
+from .crawler import CrawlResult, crawl, representative_pages
 from .models import Finding, ScanResult, sort_findings
 
 # Системные Chromium-ы — фолбэк, если playwright install chromium не выполнен.
@@ -173,6 +174,96 @@ def _dedupe_findings(findings: list[Finding]) -> list[Finding]:
     return result
 
 
+def _scan_page(
+    page,
+    url: str,
+    *,
+    checks: Sequence[str],
+    timeout_ms: int,
+    evidence_dir: Path | None,
+    max_link_checks: int,
+) -> tuple[list[Finding], ScanContext]:
+    """Открывает страницу и прогоняет по ней проверки. Возвращает находки и контекст."""
+    console_messages: list[dict[str, str]] = []
+    failed_requests: list[dict] = []
+
+    def on_console(message) -> None:
+        try:
+            location = str(message.location)
+        except Exception:  # noqa: BLE001
+            location = ""
+        console_messages.append({"type": message.type, "text": message.text, "location": location})
+
+    def on_request_failed(request) -> None:
+        failure = getattr(request, "failure", None)
+        failed_requests.append(
+            {
+                "url": request.url,
+                "method": request.method,
+                "status": None,
+                "failure": getattr(failure, "error_text", None) or "request failed",
+            }
+        )
+
+    def on_response(response) -> None:
+        if response.status >= 400:
+            failed_requests.append(
+                {
+                    "url": response.url,
+                    "method": response.request.method,
+                    "status": response.status,
+                    "failure": None,
+                }
+            )
+
+    page.on("console", on_console)
+    page.on("requestfailed", on_request_failed)
+    page.on("response", on_response)
+
+    try:
+        response = page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        if response is not None and response.status >= 400:
+            raise ScanError(f"Целевая страница вернула HTTP {response.status}")
+        try:
+            page.wait_for_load_state("networkidle", timeout=min(5000, timeout_ms))
+        except PlaywrightError:
+            pass  # networkidle недостижим на SPA с long-poll — это не ошибка
+
+        page.add_script_tag(content=JS_UTILS)
+
+        archetype = _collect_archetype(page)
+        ctx = ScanContext(
+            url=url,
+            final_url=page.url,
+            title=page.title(),
+            archetype=archetype,
+            console_messages=console_messages,
+            failed_requests=failed_requests,
+            evidence_dir=evidence_dir,
+            timeout_ms=timeout_ms,
+            max_link_checks=max_link_checks,
+        )
+
+        findings: list[Finding] = []
+        for name in checks:
+            findings.extend(REGISTRY[name](page, ctx))
+        if evidence_dir is not None:
+            _capture_evidence(page, findings, ctx)
+        return findings, ctx
+    finally:
+        page.remove_listener("console", on_console)
+        page.remove_listener("requestfailed", on_request_failed)
+        page.remove_listener("response", on_response)
+
+
+def _resolve_checks(checks: Sequence[str] | None) -> list[str]:
+    selected = list(checks or DEFAULT_CHECKS)
+    unknown = [name for name in selected if name not in REGISTRY]
+    if unknown:
+        raise ScanError(f"Неизвестные проверки: {', '.join(unknown)}. Доступны: {', '.join(sorted(REGISTRY))}")
+    return selected
+
+
 def scan(
     url: str,
     *,
@@ -184,16 +275,10 @@ def scan(
     allow_private: bool = False,
     user_agent: str = DEFAULT_UA,
 ) -> ScanResult:
-    """Сканирует страницу и возвращает результат."""
+    """Сканирует одну страницу и возвращает результат."""
     validate_target(url, allow_private=allow_private)
-
-    selected = list(checks or DEFAULT_CHECKS)
-    unknown = [name for name in selected if name not in REGISTRY]
-    if unknown:
-        raise ScanError(f"Неизвестные проверки: {', '.join(unknown)}. Доступны: {', '.join(sorted(REGISTRY))}")
-
+    selected = _resolve_checks(checks)
     started = time.monotonic()
-    findings: list[Finding] = []
 
     with sync_playwright() as playwright:
         browser = _launch_chromium(playwright, headless)
@@ -203,84 +288,110 @@ def scan(
             ignore_https_errors=False,
         )
         page = context.new_page()
-
-        console_messages: list[dict[str, str]] = []
-        failed_requests: list[dict] = []
-
-        def on_console(message) -> None:
-            location = ""
-            try:
-                location = str(message.location)
-            except Exception:  # noqa: BLE001
-                location = ""
-            console_messages.append({"type": message.type, "text": message.text, "location": location})
-
-        def on_request_failed(request) -> None:
-            failure = getattr(request, "failure", None)
-            failed_requests.append(
-                {
-                    "url": request.url,
-                    "method": request.method,
-                    "status": None,
-                    "failure": getattr(failure, "error_text", None) or "request failed",
-                }
-            )
-
-        def on_response(response) -> None:
-            if response.status >= 400:
-                failed_requests.append(
-                    {
-                        "url": response.url,
-                        "method": response.request.method,
-                        "status": response.status,
-                        "failure": None,
-                    }
-                )
-
-        page.on("console", on_console)
-        page.on("requestfailed", on_request_failed)
-        page.on("response", on_response)
-
         try:
-            response = page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-            if response is not None and response.status >= 400:
-                raise ScanError(f"Целевая страница вернула HTTP {response.status}")
-            try:
-                page.wait_for_load_state("networkidle", timeout=min(5000, timeout_ms))
-            except PlaywrightError:
-                pass  # networkidle недостижим на SPA с long-poll — это не ошибка
-
-            page.add_script_tag(content=JS_UTILS)
-
-            archetype = _collect_archetype(page)
-            ctx = ScanContext(
-                url=url,
-                final_url=page.url,
-                title=page.title(),
-                archetype=archetype,
-                console_messages=console_messages,
-                failed_requests=failed_requests,
-                evidence_dir=evidence_dir,
+            findings, ctx = _scan_page(
+                page,
+                url,
+                checks=selected,
                 timeout_ms=timeout_ms,
+                evidence_dir=evidence_dir,
                 max_link_checks=max_link_checks,
-            )
-
-            for name in selected:
-                findings.extend(REGISTRY[name](page, ctx))
-
-            if evidence_dir is not None:
-                _capture_evidence(page, findings, ctx)
-
-            duration_ms = int((time.monotonic() - started) * 1000)
-            return ScanResult(
-                url=url,
-                final_url=page.url,
-                title=page.title(),
-                archetype=archetype,
-                findings=sort_findings(_dedupe_findings(findings)),
-                duration_ms=duration_ms,
-                pages_scanned=1,
             )
         finally:
             context.close()
             browser.close()
+
+    duration_ms = int((time.monotonic() - started) * 1000)
+    return ScanResult(
+        url=url,
+        final_url=ctx.final_url,
+        title=ctx.title,
+        archetype=ctx.archetype,
+        findings=sort_findings(_dedupe_findings(findings)),
+        duration_ms=duration_ms,
+        pages_scanned=1,
+    )
+
+
+def scan_site(
+    root_url: str,
+    *,
+    max_pages: int = 30,
+    max_depth: int = 2,
+    respect_robots: bool = True,
+    all_pages: bool = False,
+    checks: Sequence[str] | None = None,
+    timeout_ms: int = 30_000,
+    headless: bool = True,
+    evidence_dir: Path | None = None,
+    max_link_checks: int = 20,
+    allow_private: bool = False,
+    user_agent: str = DEFAULT_UA,
+) -> tuple[ScanResult, CrawlResult]:
+    """Обходит сайт и сканирует по одной странице каждого шаблона.
+
+    Возвращает (результат, результат обхода). Одна страница = один шаблон:
+    300 страниц каталога проверяются по одному представителю.
+    """
+    validate_target(root_url, allow_private=allow_private)
+    selected = _resolve_checks(checks)
+    started = time.monotonic()
+
+    crawl_result = crawl(
+        root_url,
+        max_pages=max_pages,
+        max_depth=max_depth,
+        respect_robots=respect_robots,
+        user_agent=user_agent,
+    )
+    targets = representative_pages(crawl_result, all_pages=all_pages)
+
+    findings: list[Finding] = []
+    archetype: dict = {}
+    title = ""
+    final_url = root_url
+    scanned = 0
+
+    with sync_playwright() as playwright:
+        browser = _launch_chromium(playwright, headless)
+        context = browser.new_context(
+            viewport={"width": 1280, "height": 800},
+            user_agent=user_agent,
+            ignore_https_errors=False,
+        )
+        page = context.new_page()
+        try:
+            for target in targets:
+                try:
+                    page_findings, ctx = _scan_page(
+                        page,
+                        target.url,
+                        checks=selected,
+                        timeout_ms=timeout_ms,
+                        evidence_dir=evidence_dir,
+                        max_link_checks=max_link_checks,
+                    )
+                except ScanError as exc:
+                    crawl_result.skipped.append({"url": target.url, "reason": str(exc)})
+                    continue
+                findings.extend(page_findings)
+                scanned += 1
+                if not archetype:
+                    archetype = ctx.archetype
+                    title = ctx.title
+                    final_url = ctx.final_url
+        finally:
+            context.close()
+            browser.close()
+
+    duration_ms = int((time.monotonic() - started) * 1000)
+    result = ScanResult(
+        url=root_url,
+        final_url=final_url,
+        title=title,
+        archetype=archetype,
+        findings=sort_findings(_dedupe_findings(findings)),
+        duration_ms=duration_ms,
+        pages_scanned=scanned,
+    )
+    return result, crawl_result

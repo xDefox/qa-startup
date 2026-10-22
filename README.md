@@ -1,11 +1,12 @@
 # webscope
 
-Детерминированный движок веб-QA: сканирует страницу, подтверждает каждую находку в
+Детерминированный движок веб-QA: обходит сайт, подтверждает каждую находку в
 реальном браузере и отдаёт результат в машинно-читаемом виде — в том числе как готовое
 ТЗ для AI-кодинг-агента.
 
 ```
 webscope scan https://example.com --format json
+webscope crawl https://example.com --history-dir .webscope
 webscope scan https://example.com --fix-prompt > fix.md
 claude mcp add webscope -- webscope mcp
 ```
@@ -53,6 +54,40 @@ webscope scan https://example.com --checks a11y,forms --evidence-dir evidence/
 # CI: код возврата 1, если есть находки от serious и выше
 webscope scan https://example.com --fail-on serious
 ```
+
+### Обход сайта, история и сравнение
+
+```bash
+# обойти сайт и проверить по одной странице каждого шаблона (/catalog/1 и /catalog/2 — один шаблон)
+webscope crawl https://example.com --max-pages 30 --depth 2
+
+# тот же обход, но с сохранением снимка и сравнением с прошлым прогоном
+webscope crawl https://example.com --history-dir .webscope
+
+# отчёт для владельца сайта: без терминов, с оценкой и планом из 3 действий
+webscope crawl https://example.com --format plain
+
+# сравнить два снимка вручную
+webscope diff .webscope/old.json .webscope/new.json
+
+# динамика по прогону: оценка и количество проблем по дням
+webscope history https://example.com --dir .webscope
+```
+
+История хранится рядом: `.webscope/<домен>/<метка>.json` + `latest.json`.
+Формат снимка — тот же JSON, что у `scan --format json`, поэтому его можно
+скармлить в свой пайплайн.
+
+### Форматы отчётов
+
+| Формат | Для чего |
+|---|---|
+| `text` | Технический отчёт для разработчика |
+| `plain` | Отчёт для владельца сайта: оценка 0–100, «почему это важно», «что делать» |
+| `json` | Для пайплайнов и агентов |
+| `html` | Отчёт для отправки клиенту или вложения в письмо |
+| `sarif` | GitHub Code Scanning |
+| `junit` | JUnit XML для CI |
 
 ### MCP
 
