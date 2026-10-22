@@ -45,18 +45,44 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
         AXE_TAGS,
     )
 
+    _AXE_TRANSLATE = {
+        "link-in-text-block": "Ссылки нужно отличать от окружающего текста не только цветом",
+        "color-contrast": "Недостаточный контраст текста и фона",
+        "image-alt": "Изображение без альтернативного текста",
+        "button-name": "Кнопка без доступного названия",
+        "link-name": "Ссылка без доступного названия",
+        "label": "Поле формы без подписи",
+        "document-title": "У страницы нет заголовка <title>",
+        "html-has-lang": "У <html> не указан язык страницы",
+        "landmark-one-main": "На странице нет основного ориентира <main>",
+        "region": "Содержимое не размещено в семантических блоках",
+        "heading-order": "Неправильный порядок заголовков",
+        "frame-title": "У iframe нет заголовка",
+        "duplicate-id": "Повторяющиеся id на странице",
+        "tabindex": "Некорректное использование tabindex",
+    }
+
     findings: list[Finding] = []
     for violation in raw or []:
         severity = severity_from_impact(violation.get("impact"))
         for node in violation.get("nodes", []):
             targets = node.get("target") or []
             selector = targets[0] if targets else None
+            rule_id = violation["id"]
+            help = violation.get("help") or rule_id
+            if help.startswith("Ensure") or help.startswith("Elements"):
+                help = _AXE_TRANSLATE.get(rule_id, help)
+            message = violation.get("description") or ""
+            if message.startswith("Ensure"):
+                # Попробуем сделать чуть понятнее
+                if rule_id == "link-in-text-block":
+                    message = "Ссылки должны отличаться от обычного текста не только по цвету — добавьте подчеркивание или другой признак."
             findings.append(
                 Finding(
-                    rule=violation["id"],
+                    rule=rule_id,
                     severity=severity,
-                    title=violation.get("help") or violation["id"],
-                    message=violation.get("description") or "",
+                    title=help,
+                    message=message,
                     url=ctx.final_url,
                     selector=selector,
                     snippet=node.get("html"),
