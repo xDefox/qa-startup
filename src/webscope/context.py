@@ -20,6 +20,7 @@ class ScanContext:
     evidence_dir: Path | None = None
     timeout_ms: int = 30_000
     max_link_checks: int = 20
+    notes: list[str] = field(default_factory=list)
 
     def evidence_path(self, name: str) -> Path | None:
         """Путь для сохранения evidence-файла (None, если evidence выключена)."""
