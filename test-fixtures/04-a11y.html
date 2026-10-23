@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Тест a11y</title>
+  <style>
+    body{font-family:sans-serif}
+    .low-contrast{color:#9ca3af;background:#ffffff}
+    .link{color:#9ca3af;text-decoration:none}
+  </style>
+</head>
+<body>
+  <h1>Первый заголовок</h1>
+  <h1>Второй h1</h1>
+  <h3>Пропущен h2</h3>
+  <p>Текст с <span class="low-contrast">низким контрастом</span></p>
+  <img src="https://placehold.co/200x100" width="200" height="100">
+  <p>Читайте подробнее <a class="link" href="#">здесь</a></p>
+  <form>
+    <input type="text" placeholder="Введите имя">
+    <button>Отправить</button>
+  </form>
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Тест: кнопка перекрыта</title>
+  <style>
+    body{font-family:sans-serif;margin:0}
+    .header{height:70px;background:#fff;border-bottom:1px solid #ddd}
+    main{padding:200px 40px 40px}
+    .cta{padding:16px 24px;background:#2563eb;color:#fff;border:0;border-radius:10px}
+    .blocker{position:fixed;left:0;right:0;top:0;height:320px;background:rgba(0,0,0,.6);z-index:9999;pointer-events:auto}
+  </style>
+</head>
+<body>
+  <div class="header"></div>
+  <main>
+    <h1>Форма заявки</h1>
+    <p>Кнопка ниже перекрыта слоем</p>
+    <button id="cta" class="cta">Оставить заявку</button>
+  </main>
+  <div class="blocker"></div>
+</body>
+</html>

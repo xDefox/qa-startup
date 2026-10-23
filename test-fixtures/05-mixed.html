@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Тест: микс</title>
+  <style>
+    body{font-family:sans-serif;margin:0}
+    .header{height:60px;background:#fff;border-bottom:1px solid #eee}
+    main{padding:30px}
+    .btn{padding:14px 18px;background:#059669;color:#fff;border:0}
+    .banner{position:fixed;bottom:0;left:0;right:0;background:#111;color:#fff;padding:14px;text-align:center;z-index:10000}
+  </style>
+</head>
+<body>
+  <div class="header">Шапка</div>
+  <main>
+    <h1>Заявка</h1>
+    <form novalidate>
+      <input type="text" name="mail" placeholder="Ваш e-mail">
+      <input type="text" name="name" placeholder="Имя">
+    </form>
+    <button class="btn" id="order">Заказать</button>
+    <p class="low-contrast" style="color:#b5b5b5">Мелкий текст</p>
+  </main>
+  <div class="banner">Реклама перекрывает кнопку</div>
+  <script src="/bad.js"></script>
+  <script>console.error("ReferenceError: x is not defined");</script>
+</body>
+</html>

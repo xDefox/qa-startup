@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Тест: консоль и ресурсы</title>
+</head>
+<body>
+  <h1>Консольные ошибки</h1>
+  <p>Эта страница бросает ошибку в консоли и грузит несуществующие ресурсы</p>
+  <script src="/assets/missing.js"></script>
+  <link rel="stylesheet" href="/assets/missing.css">
+  <img src="/images/404.png" alt="">
+  <script>
+    console.error("Uncaught TypeError: Cannot read properties of null (reading 'addEventListener')");
+    throw new Error("boom");
+  </script>
+</body>
+</html>

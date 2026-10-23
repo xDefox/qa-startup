@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -150,7 +151,7 @@ def create_app(
 ) -> FastAPI:
     """Собирает приложение: хранилище, монитор, планировщик и маршруты."""
     scan_options = options or ScanOptions()
-    if allow_private:
+    if allow_private or os.environ.get("WEBSCOPE_ALLOW_PRIVATE") == "1":
         scan_options.allow_private = True
 
     storage = Storage(db_path)
