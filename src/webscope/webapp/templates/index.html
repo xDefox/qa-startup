@@ -16,12 +16,12 @@
   <form method="post" action="/sites">
     <div class="field">
       <label for="url">Адрес вашего сайта</label>
-      <input id="url" type="text" name="url" placeholder="example.com" required>
+      <input id="url" type="text" name="url" placeholder="example.com" required inputmode="url" autocomplete="url">
     </div>
     <div class="row">
       <div class="field">
         <label for="email">Куда присылать отчёты (необязательно)</label>
-        <input id="email" type="email" name="email" placeholder="you@example.com">
+        <input id="email" type="email" name="email" placeholder="you@example.com" autocomplete="email" spellcheck="false">
       </div>
       <div class="field">
         <label for="schedule">Как часто проверять</label>

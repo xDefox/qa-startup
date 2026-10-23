@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f6f7f9">
 <title>{% block title %}webscope — проверка сайта{% endblock %}</title>
 <style>
   :root {
@@ -12,20 +13,41 @@
     --muted: #667085;
     --line: #e4e7ec;
     --accent: #2563eb;
+    --accent-hover: #1d4ed8;
     --critical: #b42318;
     --serious: #d97706;
     --moderate: #b54708;
     --minor: #667085;
     --ok: #087443;
   }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1026;
+      --card: #101625;
+      --ink: #e6e8ee;
+      --muted: #9aa2b4;
+      --line: #232a3d;
+      --accent: #4f9bff;
+      --accent-hover: #6aa8ff;
+      --critical: #f87171;
+      --serious: #f59e0b;
+      --moderate: #f59e0b;
+      --minor: #9aa2b4;
+      --ok: #22c55e;
+    }
+  }
   * { box-sizing: border-box; }
+  html { color-scheme: light dark; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--ink);
-    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
   }
-  a { color: var(--accent); }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:hover { color: var(--accent-hover); }
   .top {
     background: var(--card);
     border-bottom: 1px solid var(--line);
@@ -44,10 +66,11 @@
     border-radius: 14px;
     padding: 22px 24px;
     margin-bottom: 18px;
+    box-shadow: 0 1px 1px rgba(15, 23, 42, 0.01), 0 10px 30px -20px rgba(15, 23, 42, 0.8);
   }
-  h1 { font-size: 30px; line-height: 1.25; letter-spacing: -0.02em; margin: 0 0 12px; }
-  h2 { font-size: 21px; letter-spacing: -0.01em; margin: 0 0 14px; }
-  h3 { font-size: 16px; margin: 0 0 8px; }
+  h1 { font-size: 30px; line-height: 1.25; letter-spacing: -0.02em; margin: 0 0 12px; text-wrap: balance; }
+  h2 { font-size: 21px; letter-spacing: -0.01em; margin: 0 0 14px; text-wrap: balance; }
+  h3 { font-size: 16px; margin: 0 0 8px; text-wrap: balance; }
   p { margin: 0 0 12px; }
   .muted { color: var(--muted); }
   .small { font-size: 14px; }
@@ -57,10 +80,17 @@
     border: 1px solid var(--line);
     border-radius: 10px;
     font-size: 16px;
-    background: #fff;
+    background: var(--card);
     color: var(--ink);
+    font: inherit;
   }
-  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  input:focus:not(:focus-visible), select:focus:not(:focus-visible), button:focus:not(:focus-visible), a:focus:not(:focus-visible) {
+    outline: none;
+  }
   .field { margin-bottom: 14px; }
   .field label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
   button {
@@ -72,16 +102,19 @@
     font-size: 16px;
     font-weight: 600;
     cursor: pointer;
+    transition: background-color 120ms ease-in-out;
+    touch-action: manipulation;
   }
-  button:hover { background: #1d4ed8; }
-  button.secondary { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+  button:hover { background: var(--accent-hover); }
+  button:active { background: #1e40af; }
+  button.secondary { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
   button.secondary:hover { background: var(--bg); }
   .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
   .row > * { flex: 1 1 180px; }
   .row > .actions { flex: 0 0 auto; }
   .error {
-    background: #fef3f2;
-    border: 1px solid #fecdca;
+    background: color-mix(in srgb, var(--card) 92%, #fee2e2);
+    border: 1px solid rgba(248, 113, 113, 0.5);
     color: var(--critical);
     padding: 12px 14px;
     border-radius: 10px;
@@ -121,7 +154,7 @@
   .issue { margin-bottom: 14px; }
   .issue .fix { color: var(--muted); font-size: 14px; }
   .issue .where { font-size: 13px; color: var(--muted); word-break: break-all; }
-  .issue code { background: var(--bg); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
+  .issue code { background: var(--bg); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
   .issue pre.snippet {
     margin: 6px 0 0;
     padding: 8px 10px;
@@ -130,13 +163,14 @@
     font-size: 12.5px;
     overflow-x: auto;
     white-space: pre-wrap;
-    word-break: break-all;
+    word-break: break-word;
   }
-  .card.blockers { border-color: #fecdca; background: #fffbfa; }
+  .card.blockers { border-color: rgba(248, 113, 113, 0.5); background: color-mix(in srgb, var(--card) 92%, #fee2e2); }
   .card.blockers h2 { color: var(--critical); }
-  .note-context { margin-top: 8px; font-size: 13px; color: #b54708; background: #fffaeb; border: 1px solid #fedf89; border-radius: 8px; padding: 8px 10px; }
+  .note-context { margin-top: 8px; font-size: 13px; color: var(--serious); background: color-mix(in srgb, var(--card) 92%, #f59e0b); border: 1px solid color-mix(in srgb, var(--line) 70%, #f59e0b); border-radius: 8px; padding: 8px 10px; }
   ol.actions-list { margin: 0; padding-left: 22px; }
   ol.actions-list li { margin-bottom: 12px; }
+  .diff-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
   table { width: 100%; border-collapse: collapse; font-size: 15px; }
   th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
   th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; }
@@ -147,7 +181,7 @@
   .site-score { font-size: 20px; font-weight: 700; }
   footer { color: var(--muted); font-size: 13px; text-align: center; padding: 26px 20px 40px; }
   .pill { display: inline-block; background: var(--bg); border-radius: 8px; padding: 4px 10px; font-size: 13px; }
-  .flash { background: #eff8ff; border: 1px solid #b2ddff; color: #175cd3; padding: 12px 14px; border-radius: 10px; margin-bottom: 16px; }
+  .flash { background: color-mix(in srgb, var(--card) 92%, #3b82f6); border: 1px solid color-mix(in srgb, var(--line) 70%, #3b82f6); color: var(--accent); padding: 12px 14px; border-radius: 10px; margin-bottom: 16px; }
 </style>
 </head>
 <body>

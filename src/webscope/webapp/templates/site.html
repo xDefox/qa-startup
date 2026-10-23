@@ -55,7 +55,7 @@
       {% if view.diff.delta > 0 %}(+{{ view.diff.delta }}){% elif view.diff.delta < 0 %}({{ view.diff.delta }}){% endif %}
       · новых проблем: {{ view.diff.new_count }} · исправлено: {{ view.diff.fixed_count }}
     </p>
-    <ul class="small">
+    <ul class="small diff-list">
       {% for item in view.diff.new %}
       <li><span class="badge {{ item.severity }}">{{ item.severity }}</span> {{ item.title }} — <span class="muted">{{ item.url }}</span></li>
       {% endfor %}
