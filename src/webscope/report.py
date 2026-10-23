@@ -267,20 +267,19 @@ def render_plain(result: ScanResult) -> str:
     score = compute_score(result.findings)
     lines: list[str] = []
 
-    lines.append(f"Проверка сайта: {result.final_url or result.url}")
+    fu = result.final_url or result.url
+    lines.append(f"Проверка сайта: {fu}")
     if result.title:
         lines.append(f"Название: {result.title}")
     lines.append(f"Проверено страниц: {result.pages_scanned}")
     lines.append(f"Оценка: {score}/100 — {score_label(score)}")
     # Попробуем передать контекст редиректа/авторизации, если есть
     try:
-        # контекст не хранится в ScanResult, но можем попытаться вывести по final_url
         from urllib.parse import urlparse
 
-        fu = result.final_url or result.url
         pu = urlparse(fu)
         pth = (pu.path or "").lower()
-        if any(k in pth for k in ("/login", "/signin", "/auth", "/sso")) or "login" in fu.lower():
+        if any(k in pth for k in ("/login", "/signin", "/auth", "/sso")) or "login" in fu.lower() or "auth" in pu.netloc.lower():
             lines.append("Примечание: проверена страница авторизации (доступ без логина). Для полной проверки личного кабинета нужен тестовый логин/пароль.")
     except Exception:
         pass
@@ -322,6 +321,8 @@ def render_plain(result: ScanResult) -> str:
                     lines.append(f"    Где: {location}")
             elif group["count"] == 1 and group["examples"]:
                 lines.append(f"    Страница: {group['examples'][0]}")
+            if rep and getattr(rep, "url", None) and (group["pages_count"] <= 1 or rep.url not in (group.get("examples") or [])):
+                lines.append(f"    URL: {rep.url}")
             lines.append(f"    Что сделать: {fix}")
             if rep and getattr(rep, "snippet", None):
                 lines.append(f"    Фрагмент: {rep.snippet}")
@@ -361,10 +362,19 @@ def render_plain(result: ScanResult) -> str:
                             location += f" и ещё {len(group['pages']) - len(group['examples'])} стр."
                     lines.append(f"    Где: {location}")
             elif group["count"] == 1 and group["examples"]:
-                lines.append(f"    Страница: {group['examples'][0]}")
+                lines.append(f"    Страница: {group['examples"][0]}")
+            if rep and getattr(rep, "url", None) and (group["pages_count"] <= 1 or rep.url not in (group.get("examples") or [])):
+                lines.append(f"    URL: {rep.url}")
             lines.append(f"    Что сделать: {fix}")
             if rep and getattr(rep, "snippet", None):
                 lines.append(f"    Фрагмент: {rep.snippet}")
+            if rep and getattr(rep, "rule", "") in ("console/error", "console/failed-request"):
+                if getattr(rep, "message", None):
+                    lines.append(f"    Детали: {rep.message}")
+                if rep.details:
+                    loc = rep.details.get("location") or rep.details.get("location_url") or rep.details.get("resource")
+                    if loc and loc not in str(rep.message):
+                        lines.append(f"    Источник/ресурс: {loc}")
         lines.append("")
 
     lines.append(

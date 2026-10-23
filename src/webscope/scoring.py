@@ -279,6 +279,14 @@ _AXE_IMPACT: dict[str, tuple[str, str]] = {
         "ARIA-разметка настроена неверно — вспомогательные технологии читают её неправильно.",
         "Исправьте атрибуты ARIA по документации.",
     ),
+    "skip-link": (
+        "Отсутствует ссылка для быстрого перехода к основному содержимому.",
+        "Добавьте skip-link в начале страницы.",
+    ),
+    "meta-viewport": (
+        "Настройки viewport мешают масштабированию — это затрудняет чтение на мобильных.",
+        "Исправьте <meta name=\"viewport\"> без user-scalable=no и жёстких ограничений масштаба.",
+    ),
 }
 
 
@@ -321,9 +329,12 @@ def plain_impact(finding: Finding) -> tuple[str, str]:
         return PLAIN_IMPACT[finding.rule]
     if finding.rule in _AXE_IMPACT:
         return _AXE_IMPACT[finding.rule]
+    msg = finding.message or finding.title or ""
+    if msg.strip().startswith(("Ensure", "Elements", "All page content")):
+        msg = finding.title or msg
     return (
-        finding.message or finding.title,
-        "Исправьте элемент на странице в соответствии со стандартом WCAG 2.2.",
+        msg or finding.title or "Есть проблема с элементом на странице.",
+        "Исправьте конкретный элемент по селектору/фрагменту выше. При необходимости посмотрите справку по правилу.",
     )
 
 
