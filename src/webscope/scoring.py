@@ -285,7 +285,7 @@ _AXE_IMPACT: dict[str, tuple[str, str]] = {
     ),
     "meta-viewport": (
         "Настройки viewport мешают масштабированию — это затрудняет чтение на мобильных.",
-        "Исправьте <meta name=\"viewport\"> без user-scalable=no и жёстких ограничений масштаба.",
+        'Исправьте <meta name="viewport"> без user-scalable=no и жёстких ограничений масштаба.',
     ),
 }
 

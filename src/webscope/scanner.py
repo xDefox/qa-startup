@@ -19,6 +19,7 @@ from .checks.js import JS_UTILS
 from .context import ScanContext
 from .crawler import CrawlResult, crawl, representative_pages
 from .models import Finding, ScanResult, sort_findings
+from .pages import page_notes
 
 # Системные Chromium-ы — фолбэк, если playwright install chromium не выполнен.
 _CHROMIUM_CANDIDATES = (
@@ -232,15 +233,7 @@ def _scan_page(
         page.add_script_tag(content=JS_UTILS)
 
         archetype = _collect_archetype(page)
-        notes: list[str] = []
-        try:
-            final_u = page.url
-            parsed = urlparse(final_u)
-            path = (parsed.path or "").lower()
-            if any(k in path for k in ("/login", "/signin", "/auth", "/sso")) or "login" in final_u.lower():
-                notes.append("Проверена страница авторизации (редирект/форма входа). Для полной проверки личного кабинета нужен тестовый логин/пароль.")
-        except Exception:
-            pass
+        notes: list[str] = page_notes(url, page.url)
         ctx = ScanContext(
             url=url,
             final_url=page.url,

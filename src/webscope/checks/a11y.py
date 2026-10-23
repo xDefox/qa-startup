@@ -70,13 +70,14 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
             selector = targets[0] if targets else None
             rule_id = violation["id"]
             help = violation.get("help") or rule_id
-            if help.startswith("Ensure") or help.startswith("Elements"):
+            if help.startswith(("Ensure", "Elements")):
                 help = _AXE_TRANSLATE.get(rule_id, help)
             message = violation.get("description") or ""
-            if message.startswith("Ensure"):
-                # Попробуем сделать чуть понятнее
-                if rule_id == "link-in-text-block":
-                    message = "Ссылки должны отличаться от обычного текста не только по цвету — добавьте подчеркивание или другой признак."
+            if message.startswith("Ensure") and rule_id == "link-in-text-block":
+                message = (
+                    "Ссылки должны отличаться от обычного текста не только по цвету — "
+                    "добавьте подчеркивание или другой признак."
+                )
             findings.append(
                 Finding(
                     rule=rule_id,
