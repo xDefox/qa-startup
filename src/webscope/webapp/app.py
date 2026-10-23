@@ -26,6 +26,8 @@ LOGGER = logging.getLogger("webscope.webapp")
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
+BLOCKER_RULE = "interaction/button-blocked"
+
 SEVERITY_GROUPS = (
     (Severity.CRITICAL, "Критично — сайт работает неправильно", "critical"),
     (Severity.SERIOUS, "Существенно — часть клиентов теряется", "serious"),
@@ -53,14 +55,39 @@ def normalize_url(url: str) -> str:
     return cleaned
 
 
+def _problem_view(group: dict) -> dict:
+    """Одна проблема для шаблона: что, где и как проверить."""
+    rep = group.get("representative")
+    details = getattr(rep, "details", None) or {}
+    source = details.get("location") or details.get("location_url") or details.get("resource") or ""
+    return {
+        "meaning": group["meaning"],
+        "fix": group["fix"],
+        "url": ", ".join(group["examples"]) if group["examples"] else "",
+        "pages_count": group["pages_count"],
+        "count": group["count"],
+        "rule": group["rule"],
+        "selector": getattr(rep, "selector", None) or "",
+        "snippet": getattr(rep, "snippet", None) or "",
+        "message": getattr(rep, "message", None) or "",
+        "source": source,
+    }
+
+
 def build_report_view(storage: Storage, run: Run) -> dict:
     """Готовит данные для страницы отчёта: группы, план действий, дифф."""
     findings = storage.findings_as_models(run.id)
+    from ..pages import page_notes
     from ..scoring import group_by_rule
+
+    blocker_groups = group_by_rule([f for f in findings if f.rule == BLOCKER_RULE])
+    blockers = [_problem_view(group) for group in blocker_groups]
 
     groups = []
     for severity, title, key in SEVERITY_GROUPS:
-        items = group_by_rule([finding for finding in findings if finding.severity == severity])
+        items = group_by_rule(
+            [finding for finding in findings if finding.severity == severity and finding.rule != BLOCKER_RULE]
+        )
         if not items:
             continue
         groups.append(
@@ -68,17 +95,7 @@ def build_report_view(storage: Storage, run: Run) -> dict:
                 "title": title,
                 "key": key,
                 "count": len(items),
-                "problems": [
-                    {
-                        "meaning": group["meaning"],
-                        "fix": group["fix"],
-                        "url": ", ".join(group["examples"]) if group["examples"] else "",
-                        "pages_count": group["pages_count"],
-                        "count": group["count"],
-                        "rule": group["rule"],
-                    }
-                    for group in items
-                ],
+                "problems": [_problem_view(group) for group in items],
             }
         )
 
@@ -87,6 +104,7 @@ def build_report_view(storage: Storage, run: Run) -> dict:
             "meaning": plain_impact(finding)[0],
             "fix": plain_impact(finding)[1],
             "url": finding.url,
+            "selector": finding.selector or "",
         }
         for finding in top_actions(findings, limit=3)
     ]
@@ -112,10 +130,12 @@ def build_report_view(storage: Storage, run: Run) -> dict:
         "run": run,
         "score": score,
         "score_label": score_label(score),
+        "blockers": blockers,
         "groups": groups,
         "actions": actions,
         "diff": diff_view,
         "total": len(findings),
+        "notes": page_notes(run.raw.get("url"), run.raw.get("final_url")),
     }
 
 

@@ -23,6 +23,11 @@
         Автоматическая проверка: {{ schedule_label }}
         {% if site.email %} · отчёты на {{ site.email }}{% endif %}
       </div>
+      {% if view and view.notes %}
+      <div class="note-context">
+        {% for note in view.notes %}<div>Примечание: {{ note }}</div>{% endfor %}
+      </div>
+      {% endif %}
     </div>
     <div style="flex: 0 0 auto; text-align: right;">
       {% if view %}
@@ -58,6 +63,26 @@
   </div>
   {% endif %}
 
+  {% if view.blockers %}
+  <div class="card blockers">
+    <h2>Блокирует клики — нельзя нажать кнопку или ссылку</h2>
+    <p class="muted small">Это прямо мешает оставить заявку или заказ — исправлять в первую очередь.</p>
+    {% for item in view.blockers %}
+    <div class="issue">
+      <div>{{ item.meaning }}</div>
+      {% if item.selector %}<div class="where">Селектор: <code>{{ item.selector }}</code></div>{% endif %}
+      {% if item.pages_count > 1 %}
+      <div class="where">Затронуто: {{ item.pages_count }} стр., элементов: {{ item.count }}{% if item.url %} · {{ item.url }}{% if item.pages_count > 3 %} и др.{% endif %}{% endif %}</div>
+      {% elif item.url %}
+      <div class="where">Страница: {{ item.url }}</div>
+      {% endif %}
+      <div class="fix">Что сделать: {{ item.fix }}</div>
+      {% if item.snippet %}<pre class="snippet">{{ item.snippet }}</pre>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <div class="card">
     <h2>Что сделать в первую очередь</h2>
     {% if view.actions %}
@@ -66,7 +91,7 @@
       <li>
         <div>{{ action.meaning }}</div>
         <div class="fix">Что сделать: {{ action.fix }}</div>
-        <div class="where">{{ action.url }}</div>
+        <div class="where">{{ action.url }}{% if action.selector %} · <code>{{ action.selector }}</code>{% endif %}</div>
       </li>
       {% endfor %}
     </ol>
@@ -83,12 +108,20 @@
       {% for item in group.problems %}
       <div class="issue">
         <div>{{ item.meaning }}</div>
-        <div class="fix">Что сделать: {{ item.fix }}</div>
+        {% if item.selector %}<div class="where">Селектор: <code>{{ item.selector }}</code></div>{% endif %}
         {% if item.pages_count > 1 %}
         <div class="where">Затронуто: {{ item.pages_count }} стр., элементов: {{ item.count }}{% if item.url %} · {{ item.url }}{% if item.pages_count > 3 %} и др.{% endif %}{% endif %}</div>
-        {% else %}
-        <div class="where">{{ item.url }}{% if item.selector %} · {{ item.selector }}{% endif %}</div>
+        {% elif item.url %}
+        <div class="where">Страница: {{ item.url }}</div>
         {% endif %}
+        <div class="fix">Что сделать: {{ item.fix }}</div>
+        {% if item.message and item.rule in ('console/error', 'console/failed-request') %}
+        <div class="where">Детали: {{ item.message }}</div>
+        {% endif %}
+        {% if item.source %}
+        <div class="where">Источник/ресурс: <code>{{ item.source }}</code></div>
+        {% endif %}
+        {% if item.snippet %}<pre class="snippet">{{ item.snippet }}</pre>{% endif %}
       </div>
       {% endfor %}
     </div>

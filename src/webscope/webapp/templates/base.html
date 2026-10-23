@@ -121,6 +121,20 @@
   .issue { margin-bottom: 14px; }
   .issue .fix { color: var(--muted); font-size: 14px; }
   .issue .where { font-size: 13px; color: var(--muted); word-break: break-all; }
+  .issue code { background: var(--bg); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
+  .issue pre.snippet {
+    margin: 6px 0 0;
+    padding: 8px 10px;
+    background: var(--bg);
+    border-radius: 8px;
+    font-size: 12.5px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .card.blockers { border-color: #fecdca; background: #fffbfa; }
+  .card.blockers h2 { color: var(--critical); }
+  .note-context { margin-top: 8px; font-size: 13px; color: #b54708; background: #fffaeb; border: 1px solid #fedf89; border-radius: 8px; padding: 8px 10px; }
   ol.actions-list { margin: 0; padding-left: 22px; }
   ol.actions-list li { margin-bottom: 12px; }
   table { width: 100%; border-collapse: collapse; font-size: 15px; }
