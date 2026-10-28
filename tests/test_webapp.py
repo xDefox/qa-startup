@@ -253,7 +253,10 @@ def test_history_page(client: TestClient) -> None:
 def test_normalize_url() -> None:
     assert normalize_url("example.com") == "https://example.com"
     assert normalize_url("http://example.com/x") == "http://example.com/x"
+    # локальные стенды и загруженные файлы проверяются через localhost
+    assert normalize_url("localhost") == "https://localhost"
+    assert normalize_url("localhost:8888/a.html") == "https://localhost:8888/a.html"
     with pytest.raises(ValueError):
         normalize_url("")
     with pytest.raises(ValueError):
-        normalize_url("localhost")
+        normalize_url("это не адрес")
