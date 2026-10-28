@@ -10,12 +10,13 @@
     --bg: #f6f7f9;
     --card: #ffffff;
     --ink: #1c2333;
-    --muted: #667085;
+    --muted: #5b6474;
     --line: #e4e7ec;
     --accent: #2563eb;
     --accent-hover: #1d4ed8;
     --critical: #b42318;
     --serious: #d97706;
+    --serious-ink: #92400e;
     --moderate: #b54708;
     --minor: #667085;
     --ok: #087443;
@@ -31,6 +32,7 @@
     --accent-hover: #6aa8ff;
     --critical: #f87171;
     --serious: #f59e0b;
+    --serious-ink: #f59e0b;
     --moderate: #f59e0b;
     --minor: #9aa2b4;
     --ok: #22c55e;
@@ -47,6 +49,7 @@
       --accent-hover: #6aa8ff;
       --critical: #f87171;
       --serious: #f59e0b;
+      --serious-ink: #f59e0b;
       --moderate: #f59e0b;
       --minor: #9aa2b4;
       --ok: #22c55e;
@@ -164,6 +167,8 @@
   button:active, .btn-like:active { background: #1e40af; }
   button.secondary, .btn-like.secondary { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
   button.secondary:hover, .btn-like.secondary:hover { background: var(--bg); color: var(--ink); }
+  button.danger { background: var(--card); color: #b42318; border: 1px solid #f2b8b5; }
+  button.danger:hover { background: #fee4e2; color: #b42318; }
   .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
   .row > * { flex: 1 1 180px; }
   .row > .actions { flex: 0 0 auto; }
@@ -189,6 +194,29 @@
     letter-spacing: -0.03em;
   }
   .score small { font-size: 18px; font-weight: 500; color: var(--muted); }
+  /* Прошлый балл «заклеен»: перечёркнут насквозь и припечатан полоской-скотчем. */
+  .score-prev {
+    position: relative;
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--muted);
+    text-decoration: line-through;
+    text-decoration-thickness: 3px;
+    text-decoration-color: currentColor;
+    opacity: 0.75;
+    margin-right: 2px;
+  }
+  .score-prev::after {
+    content: "";
+    position: absolute;
+    left: -3px;
+    right: -3px;
+    top: 52%;
+    height: 7px;
+    background: color-mix(in srgb, var(--muted) 26%, transparent);
+    border-radius: 2px;
+    transform: rotate(-2deg);
+  }
   .badge {
     display: inline-block;
     padding: 3px 10px;
@@ -196,11 +224,14 @@
     font-size: 13px;
     font-weight: 600;
   }
-  .badge.critical { background: #fee4e2; color: var(--critical); }
-  .badge.serious { background: #fef0c7; color: var(--serious); }
-  .badge.moderate { background: #fdf1e3; color: var(--moderate); }
-  .badge.minor { background: #f2f4f7; color: var(--minor); }
-  .badge.ok { background: #dcfae6; color: var(--ok); }
+  /* Бейджи: светлые фоны фиксированы, поэтому и текст — фиксированный тёмный
+     (в тёмной теме светлая «табличка» с тёмным текстом читается нормально,
+     а темовые светлые цвета на светлом фоне проваливали контраст). */
+  .badge.critical { background: #fee4e2; color: #b42318; }
+  .badge.serious { background: #fef0c7; color: #92400e; }
+  .badge.moderate { background: #fdf1e3; color: #9a3412; }
+  .badge.minor { background: #f2f4f7; color: #475467; }
+  .badge.ok { background: #dcfae6; color: #087443; }
   .sev { border-left: 4px solid var(--line); padding-left: 14px; margin-bottom: 18px; }
   .sev.critical { border-color: var(--critical); }
   .sev.serious { border-color: var(--serious); }
@@ -222,7 +253,7 @@
   }
   .card.blockers { border-color: rgba(248, 113, 113, 0.5); background: color-mix(in srgb, var(--card) 92%, #fee2e2); }
   .card.blockers h2 { color: var(--critical); }
-  .note-context { margin-top: 8px; font-size: 13px; color: var(--serious); background: color-mix(in srgb, var(--card) 92%, #f59e0b); border: 1px solid color-mix(in srgb, var(--line) 70%, #f59e0b); border-radius: 8px; padding: 8px 10px; }
+  .note-context { margin-top: 8px; font-size: 13px; color: var(--serious-ink); background: color-mix(in srgb, var(--card) 92%, #f59e0b); border: 1px solid color-mix(in srgb, var(--line) 70%, #f59e0b); border-radius: 8px; padding: 8px 10px; }
   ol.actions-list { margin: 0; padding-left: 22px; }
   ol.actions-list li { margin-bottom: 12px; }
   .diff-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; }

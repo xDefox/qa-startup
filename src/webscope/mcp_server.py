@@ -32,19 +32,28 @@ mcp = _Server(
     ),
 )
 
-_CACHE: dict[str, tuple[float, ScanResult]] = {}
+_CACHE: dict[tuple, tuple[float, ScanResult]] = {}
 _CACHE_TTL_SECONDS = 300
 
 _STATE: dict[str, Any] = {"allow_private": False}
 
 
-def _cached_scan(url: str) -> ScanResult:
+def _cached_scan(url: str, checks: str = "", timeout_ms: int = 30000) -> ScanResult:
+    # Ключ учитывает параметры скана: иначе list_findings мог бы вернуть
+    # результат частичного скана, сделанного scan_page с --checks.
+    key = (url, checks, timeout_ms)
     now = time.monotonic()
-    cached = _CACHE.get(url)
+    cached = _CACHE.get(key)
     if cached and now - cached[0] < _CACHE_TTL_SECONDS:
         return cached[1]
-    result = scan(url, allow_private=bool(_STATE.get("allow_private")))
-    _CACHE[url] = (now, result)
+    selected = [name.strip() for name in checks.split(",") if name.strip()] or None
+    result = scan(
+        url,
+        checks=selected,
+        timeout_ms=timeout_ms,
+        allow_private=bool(_STATE.get("allow_private")),
+    )
+    _CACHE[key] = (now, result)
     return result
 
 
@@ -57,14 +66,7 @@ def scan_page(url: str, checks: str = "", timeout_ms: int = 30000) -> dict:
         checks: список проверок через запятую. Пусто — все проверки.
         timeout_ms: таймаут загрузки страницы.
     """
-    selected = [name.strip() for name in checks.split(",") if name.strip()] or None
-    result = scan(
-        url,
-        checks=selected,
-        timeout_ms=timeout_ms,
-        allow_private=bool(_STATE.get("allow_private")),
-    )
-    _CACHE[url] = (time.monotonic(), result)
+    result = _cached_scan(url, checks=checks, timeout_ms=timeout_ms)
     return result.to_dict()
 
 

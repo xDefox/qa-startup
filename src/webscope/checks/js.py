@@ -13,9 +13,35 @@ JS_UTILS = r"""
 
   const text = (el) => ((el && (el.innerText || el.textContent)) || '').replace(/\s+/g, ' ').trim();
 
+  // Сгенерированные id (react-aria-123, :r0:, uuid, счётчики) меняются между
+  // рендерами — по ним нельзя строить устойчивый селектор для диффов.
+  const looksGenerated = (id) => {
+    if (!id) return true;
+    if (id.length > 64) return true;
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id)) return true;  // uuid
+    if (/^[0-9a-f]{16,}$/i.test(id)) return true;            // hex-хеш
+    if (/^\d+$/.test(id)) return true;                        // чистое число
+    if (/^:r[0-9a-z]+:$/i.test(id)) return true;              // react hooks / radix
+    if (/-{1,2}\d{2,}$/.test(id)) return true;                // item-123, item--45
+    return false;
+  };
+
+  // Тестовые атрибуты — самый устойчивый якорь: разработчик держит их стабильными.
+  const stableAttr = (el) => {
+    for (const attr of ['data-testid', 'data-test', 'data-cy', 'data-qa']) {
+      const value = el.getAttribute && el.getAttribute(attr);
+      if (value && value.trim()) {
+        return '[' + attr + '="' + value.trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]';
+      }
+    }
+    return null;
+  };
+
   const cssPath = (el) => {
     if (!el || el.nodeType !== 1) return null;
-    if (el.id) return '#' + CSS.escape(el.id);
+    const ownAttr = stableAttr(el);
+    if (ownAttr) return el.tagName.toLowerCase() + ownAttr;
+    if (el.id && !looksGenerated(el.id)) return '#' + CSS.escape(el.id);
     const parts = [];
     let node = el;
     while (node && node.nodeType === 1 && parts.length < 6) {
@@ -23,11 +49,16 @@ JS_UTILS = r"""
         parts.unshift('html');
         break;
       }
-      let part = node.tagName.toLowerCase();
-      if (node.id) {
+      const anchor = stableAttr(node);
+      if (anchor) {
+        parts.unshift(node.tagName.toLowerCase() + anchor);
+        break;
+      }
+      if (node.id && !looksGenerated(node.id)) {
         parts.unshift('#' + CSS.escape(node.id));
         break;
       }
+      let part = node.tagName.toLowerCase();
       const parent = node.parentElement;
       if (parent) {
         const twins = Array.from(parent.children).filter((c) => c.tagName === node.tagName);

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from webscope.models import Finding, ScanResult, Severity
+from webscope.webapp.alerts import build_alert_text
 from webscope.webapp.app import create_app, normalize_url
 from webscope.webapp.scheduler import CrawlOutcome, Monitor, ScanOptions
 from webscope.webapp.storage import Storage
@@ -23,6 +25,9 @@ def _finding(rule: str = "content/image-alt", severity: Severity = Severity.SERI
         url="https://site.com/",
         selector="main > img",
         snippet="<img src='/logo.png'>",
+        help_url="https://www.w3.org/WAI/WCAG22/Understanding/non-text-content.html",
+        source="webscope.content",
+        details={"evidence": "001_content_image_alt.png"},
     )
 
 
@@ -139,6 +144,62 @@ def test_monitor_notifies_only_about_new_findings(tmp_path: Path) -> None:
     storage.close()
 
 
+def test_monitor_notifies_about_worsened_severity(tmp_path: Path) -> None:
+    """Новых находок нет, но старая стала серьёзнее — алерт всё равно уходит."""
+    storage = Storage(tmp_path / "db.sqlite")
+    site = storage.add_site("https://site.com/")
+    sent: list[str] = []
+
+    def notifier(**kwargs):
+        diff = kwargs["diff"]
+        sent.append(f"{len(diff.new_findings)} new / {len(diff.worsened_findings)} worsened")
+        return ["email"]
+
+    monitor = Monitor(
+        storage,
+        ScanOptions(),
+        scanner_func=lambda url, options: CrawlOutcome(_result([_finding(severity=Severity.MODERATE)])),
+        notifier=notifier,
+    )
+    monitor.run_site(site)
+    assert sent == []  # первый прогон — сравнивать не с чем
+
+    # та же находка, но серьёзнее (moderate → critical): новых нет, стало хуже
+    worsened = Monitor(
+        storage,
+        ScanOptions(),
+        scanner_func=lambda url, options: CrawlOutcome(_result([_finding(severity=Severity.CRITICAL)])),
+        notifier=notifier,
+    )
+    worsened.run_site(site)
+    assert sent == ["0 new / 1 worsened"]
+    storage.close()
+
+
+def test_alert_text_mentions_worsened_findings() -> None:
+    """Алерт рассказывает не только о новых, но и об ухудшившихся проблемах."""
+    from webscope.history import DiffEntry, DiffReport
+
+    diff = DiffReport(
+        url="https://site.com/",
+        score_before=90,
+        score_after=60,
+        changed_findings=[
+            DiffEntry(
+                kind="changed",
+                rule="a11y/color-contrast",
+                title="Низкий контраст текста",
+                url="https://site.com/",
+                severity_before="moderate",
+                severity_after="critical",
+            )
+        ],
+    )
+    text = build_alert_text("https://site.com/", diff)
+    assert "Ухудшилось" in text
+    assert "moderate → critical" in text
+
+
 def test_monitor_records_failure(tmp_path: Path) -> None:
     storage = Storage(tmp_path / "db.sqlite")
     site = storage.add_site("https://site.com/")
@@ -250,6 +311,66 @@ def test_history_page(client: TestClient) -> None:
     assert "История проверок" in response.text
 
 
+# --- кабинет управления ---
+
+
+def test_settings_page_shows_current_values(client: TestClient) -> None:
+    site_id = _create_site(client)
+    storage: Storage = client.app.state.storage
+    storage.update_site(site_id, email="owner@example.com", schedule="weekly")
+
+    response = client.get(f"/sites/{site_id}/settings")
+    assert response.status_code == 200
+    assert "owner@example.com" in response.text
+    assert 'value="weekly" selected' in response.text
+
+
+def test_settings_save_updates_site(client: TestClient) -> None:
+    site_id = _create_site(client)
+    storage: Storage = client.app.state.storage
+
+    response = client.post(
+        f"/sites/{site_id}/settings",
+        data={"email": " new@example.com ", "telegram_chat": "-100123", "schedule": "daily"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "saved=1" in response.headers["location"]
+
+    site = storage.get_site(site_id)
+    assert site.email == "new@example.com"  # пробелы обрезаны
+    assert site.telegram_chat == "-100123"
+    assert site.schedule == "daily"
+    assert site.next_run_at is not None  # дата следующего запуска пересчитана
+
+
+def test_settings_clear_email(client: TestClient) -> None:
+    site_id = _create_site(client)
+    storage: Storage = client.app.state.storage
+    storage.update_site(site_id, email="owner@example.com")
+
+    client.post(f"/sites/{site_id}/settings", data={"email": "", "schedule": "off"})
+    assert storage.get_site(site_id).email is None
+
+
+def test_delete_site_removes_history(client: TestClient) -> None:
+    site_id = _create_site(client)
+    storage: Storage = client.app.state.storage
+    run = storage.start_run(site_id)
+    storage.finish_run(run.id, _result([_finding()]))
+
+    response = client.post(f"/sites/{site_id}/delete", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+    assert storage.get_site(site_id) is None
+    assert storage.findings_of(run.id) == []  # каскад унёс прогоны и находки
+
+
+def test_settings_unknown_site_404(client: TestClient) -> None:
+    assert client.get("/sites/999/settings").status_code == 404
+    assert client.post("/sites/999/delete").status_code == 404
+
+
 def test_normalize_url() -> None:
     assert normalize_url("example.com") == "https://example.com"
     assert normalize_url("http://example.com/x") == "http://example.com/x"
@@ -260,3 +381,141 @@ def test_normalize_url() -> None:
         normalize_url("")
     with pytest.raises(ValueError):
         normalize_url("это не адрес")
+
+
+# --- миграция и новые колонки находок ---
+
+
+_OLD_SCHEMA = """
+CREATE TABLE sites (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    url             TEXT NOT NULL UNIQUE,
+    email           TEXT,
+    telegram_chat   TEXT,
+    schedule        TEXT NOT NULL DEFAULT 'off',
+    interval_days   INTEGER NOT NULL DEFAULT 7,
+    next_run_at     TEXT,
+    created_at      TEXT NOT NULL
+);
+CREATE TABLE runs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id       INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    started_at    TEXT NOT NULL,
+    finished_at   TEXT,
+    status        TEXT NOT NULL DEFAULT 'running',
+    score         INTEGER,
+    pages_scanned INTEGER NOT NULL DEFAULT 0,
+    duration_ms   INTEGER NOT NULL DEFAULT 0,
+    error         TEXT,
+    raw           TEXT
+);
+CREATE TABLE findings (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id    INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    rule      TEXT NOT NULL,
+    severity  TEXT NOT NULL,
+    title     TEXT,
+    message   TEXT,
+    url       TEXT,
+    selector  TEXT,
+    snippet   TEXT
+);
+"""
+
+
+def test_storage_migrates_old_schema(tmp_path: Path) -> None:
+    """Старая БД без колонок source/help_url/details дозаполняется и продолжает работать."""
+    db = tmp_path / "old.sqlite"
+    connection = sqlite3.connect(db)
+    connection.executescript(_OLD_SCHEMA)
+    connection.execute("INSERT INTO sites (url, created_at) VALUES ('https://site.com/', '2026-10-01T00:00:00+00:00')")
+    connection.execute(
+        "INSERT INTO runs (site_id, started_at, status, score) VALUES (1, '2026-10-01T00:00:00+00:00', 'ok', 92)"
+    )
+    connection.execute(
+        "INSERT INTO findings (run_id, rule, severity, title) VALUES (1, 'content/image-alt', 'serious', 'Изображение без alt')"
+    )
+    connection.commit()
+    connection.close()
+
+    storage = Storage(db)
+    # старая находка читается, новые колонки пустые
+    legacy = storage.findings_of(1)
+    assert len(legacy) == 1
+    assert legacy[0].details == {}
+    assert legacy[0].help_url is None
+
+    # новые прогоны пишут и читают новые колонки
+    run = storage.start_run(1)
+    storage.finish_run(run.id, _result([_finding()]))
+    stored = storage.findings_as_models(run.id)
+    assert stored[0].help_url == "https://www.w3.org/WAI/WCAG22/Understanding/non-text-content.html"
+    assert stored[0].source == "webscope.content"
+    assert stored[0].details == {"evidence": "001_content_image_alt.png"}
+    storage.close()
+
+
+# --- загрузка локальных файлов ---
+
+
+def test_upload_uses_request_host(tmp_path: Path) -> None:
+    """Адрес залитых файлов строится по host:port запроса, а не из env."""
+    app = create_app(
+        db_path=tmp_path / "db.sqlite",
+        scanner_func=lambda url, options: CrawlOutcome(_result([])),
+        notifier=lambda **kwargs: [],
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/upload",
+            files=[("files", ("index.html", b"<html><title>x</title></html>", "text/html"))],
+            data={"paths": "index.html"},
+        )
+        assert response.status_code == 200
+        assert response.json()["url"].startswith("http://testserver/__local/")
+
+
+def test_local_upload_scan_allows_private(tmp_path: Path) -> None:
+    """Loopback разрешён только для своих загруженных файлов (/__local/), чужие адреса — нет."""
+    captured: list[ScanOptions] = []
+
+    def scanner(url: str, options: ScanOptions) -> CrawlOutcome:
+        captured.append(options)
+        return CrawlOutcome(_result([]))
+
+    app = create_app(db_path=tmp_path / "db.sqlite", scanner_func=scanner, notifier=lambda **kwargs: [])
+    monitor: Monitor = app.state.monitor
+
+    monitor.scanner_func("http://127.0.0.1:8000/__local/abc/index.html", ScanOptions())
+    monitor.scanner_func("http://127.0.0.1:9200/", ScanOptions())
+    assert captured[0].allow_private is True
+    assert captured[1].allow_private is False
+
+
+# --- шапка сайта ---
+
+
+def test_site_page_crosses_out_previous_score(client: TestClient) -> None:
+    site_id = _create_site(client)
+    storage: Storage = client.app.state.storage
+
+    first = storage.start_run(site_id)
+    storage.finish_run(first.id, _result([_finding()]))  # 92
+    second = storage.start_run(site_id)
+    storage.finish_run(second.id, _result([_finding(severity=Severity.CRITICAL)]))  # ниже
+
+    response = client.get(f"/sites/{site_id}")
+    assert response.status_code == 200
+    assert 'class="score-prev"' in response.text
+    assert "92" in response.text  # прошлый балл виден «заклеенным»
+
+
+def test_site_page_links_to_help(client: TestClient) -> None:
+    site_id = _create_site(client)
+    storage: Storage = client.app.state.storage
+    run = storage.start_run(site_id)
+    storage.finish_run(run.id, _result([_finding()]))
+
+    response = client.get(f"/sites/{site_id}")
+    assert "Подробнее о проверке" in response.text
+    assert "w3.org" in response.text

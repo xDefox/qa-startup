@@ -9,4 +9,6 @@ dist/
 evidence/
 *.json
 *.sarif
+*.db
+*.sqlite
 pitch/

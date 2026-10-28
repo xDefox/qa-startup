@@ -52,12 +52,22 @@ CREATE TABLE IF NOT EXISTS findings (
     message   TEXT,
     url       TEXT,
     selector  TEXT,
-    snippet   TEXT
+    snippet   TEXT,
+    source    TEXT,
+    help_url  TEXT,
+    details   TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_runs_site ON runs(site_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_findings_run ON findings(run_id);
 """
+
+# Колонки, добавленные после первой публичной схемы: дозаполняем существующие базы.
+_MIGRATIONS = (
+    ("source", "TEXT"),
+    ("help_url", "TEXT"),
+    ("details", "TEXT"),
+)
 
 
 def utcnow() -> datetime:
@@ -136,6 +146,9 @@ class Finding:
     url: str = ""
     selector: str | None = None
     snippet: str | None = None
+    source: str = ""
+    help_url: str | None = None
+    details: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -148,6 +161,9 @@ class Finding:
             "url": self.url,
             "selector": self.selector,
             "snippet": self.snippet,
+            "source": self.source,
+            "help_url": self.help_url,
+            "details": self.details,
         }
 
 
@@ -170,6 +186,9 @@ class Storage:
         connection = sqlite3.connect(str(self.path), check_same_thread=False, timeout=30)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
+        if str(self.path) != ":memory:":
+            # WAL: планировщик и веб-хендлеры работают параллельно, лок-ошибок будет меньше.
+            connection.execute("PRAGMA journal_mode = WAL")
         return connection
 
     @contextmanager
@@ -186,7 +205,15 @@ class Storage:
     def init_db(self) -> None:
         with self._conn() as connection:
             connection.executescript(SCHEMA)
+            self._migrate(connection)
             connection.commit()
+
+    def _migrate(self, connection: sqlite3.Connection) -> None:
+        """Дозаполняет схему старых баз новыми колонками (безопасно для существующих данных)."""
+        existing = {row["name"] for row in connection.execute("PRAGMA table_info(findings)")}
+        for name, decl in _MIGRATIONS:
+            if name not in existing:
+                connection.execute(f"ALTER TABLE findings ADD COLUMN {name} {decl}")
 
     def close(self) -> None:
         if self._shared is not None:
@@ -242,6 +269,13 @@ class Storage:
             )
             connection.commit()
 
+    def delete_site(self, site_id: int) -> bool:
+        """Удаляет сайт вместе с прогонами и находками (каскад по FK)."""
+        with self._conn() as connection:
+            cursor = connection.execute("DELETE FROM sites WHERE id = ?", (site_id,))
+            connection.commit()
+            return cursor.rowcount > 0
+
     # --- прогоны ---
 
     def start_run(self, site_id: int) -> Run:
@@ -271,8 +305,9 @@ class Storage:
                 ),
             )
             connection.executemany(
-                "INSERT INTO findings (run_id, rule, severity, title, message, url, selector, snippet)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO findings (run_id, rule, severity, title, message, url, selector, snippet,"
+                " source, help_url, details)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     (
                         run_id,
@@ -283,6 +318,9 @@ class Storage:
                         finding.url,
                         finding.selector,
                         finding.snippet,
+                        finding.source,
+                        finding.help_url,
+                        json.dumps(finding.details, ensure_ascii=False) if finding.details else None,
                     )
                     for finding in result.findings
                 ],
@@ -349,20 +387,7 @@ class Storage:
     def findings_of(self, run_id: int) -> list[Finding]:
         with self._conn() as connection:
             rows = connection.execute("SELECT * FROM findings WHERE run_id = ? ORDER BY id", (run_id,)).fetchall()
-        return [
-            Finding(
-                id=row["id"],
-                run_id=row["run_id"],
-                rule=row["rule"],
-                severity=row["severity"],
-                title=row["title"] or "",
-                message=row["message"] or "",
-                url=row["url"] or "",
-                selector=row["selector"],
-                snippet=row["snippet"],
-            )
-            for row in rows
-        ]
+        return [_finding_from_row(row) for row in rows]
 
     def findings_as_models(self, run_id: int) -> list[ScanFinding]:
         """Находки прогона в виде моделей движка — чтобы переиспользовать scoring."""
@@ -381,6 +406,9 @@ class Storage:
                     url=row.url,
                     selector=row.selector,
                     snippet=row.snippet,
+                    help_url=row.help_url,
+                    source=row.source or "webscope",
+                    details=row.details,
                 )
             )
         return result
@@ -454,6 +482,32 @@ class Storage:
 
     def mark_scheduled(self, site_id: int, next_run_at: str) -> None:
         self.update_site(site_id, next_run_at=next_run_at)
+
+
+def _finding_from_row(row: sqlite3.Row) -> Finding:
+    details: dict = {}
+    # колонки добавлены миграцией: у старых БД их может не быть в результате
+    keys = row.keys()
+    raw_details = row["details"] if "details" in keys else None
+    if raw_details:
+        try:
+            details = json.loads(raw_details)
+        except json.JSONDecodeError:
+            details = {}
+    return Finding(
+        id=row["id"],
+        run_id=row["run_id"],
+        rule=row["rule"],
+        severity=row["severity"],
+        title=row["title"] or "",
+        message=row["message"] or "",
+        url=row["url"] or "",
+        selector=row["selector"],
+        snippet=row["snippet"],
+        source=(row["source"] or "") if "source" in keys else "",
+        help_url=row["help_url"] if "help_url" in keys else None,
+        details=details,
+    )
 
 
 def _site_from_row(row: sqlite3.Row) -> Site:

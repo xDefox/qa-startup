@@ -12,13 +12,16 @@ import os
 import tempfile
 import uuid
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from .. import __version__
 from ..models import Severity
 from ..report import render_plain
 from ..scoring import plain_impact, score_label, top_actions
@@ -67,6 +70,10 @@ def _problem_view(group: dict) -> dict:
     rep = group.get("representative")
     details = getattr(rep, "details", None) or {}
     source = details.get("location") or details.get("location_url") or details.get("resource") or ""
+    if not source:
+        checker = getattr(rep, "source", "") or ""
+        # внутренние пометки вида «webscope.forms» пользователю не интересны
+        source = "" if checker.startswith("webscope") else checker
     return {
         "meaning": group["meaning"],
         "fix": group["fix"],
@@ -78,6 +85,7 @@ def _problem_view(group: dict) -> dict:
         "snippet": getattr(rep, "snippet", None) or "",
         "message": getattr(rep, "message", None) or "",
         "source": source,
+        "help_url": getattr(rep, "help_url", None) or "",
     }
 
 
@@ -161,10 +169,24 @@ def create_app(
         scan_options.allow_private = True
 
     storage = Storage(db_path)
+
+    base_scanner = scanner_func or default_scanner
+
+    def scanner_with_local(url: str, options: ScanOptions):
+        """Проверка залитых через веб локальных файлов.
+
+        Загруженные файлы раздаются самим приложением по /__local/ — сканировать
+        свой же сервер по loopback можно, чужие loopback-адреса остаются под SSRF-защитой.
+        """
+        parsed = urlparse(url)
+        if parsed.hostname in ("127.0.0.1", "localhost") and parsed.path.startswith("/__local/"):
+            options = replace(options, allow_private=True)
+        return base_scanner(url, options)
+
     monitor = Monitor(
         storage,
         scan_options,
-        scanner_func=scanner_func or default_scanner,
+        scanner_func=scanner_with_local,
         notifier=notifier or notify,
     )
     scheduler = Scheduler(monitor, storage, check_interval=check_interval)
@@ -194,7 +216,7 @@ def create_app(
         await scheduler.stop()
         storage.close()
 
-    app = FastAPI(title="webscope", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="webscope", version=__version__, lifespan=lifespan)
     app.state.storage = storage
     app.state.monitor = monitor
     app.state.scheduler = scheduler
@@ -298,6 +320,51 @@ def create_app(
             },
         )
 
+    @app.get("/sites/{site_id}/settings", response_class=HTMLResponse)
+    def site_settings(request: Request, site_id: int, saved: bool = False):
+        site = storage.get_site(site_id)
+        if site is None:
+            raise HTTPException(status_code=404, detail="Сайт не найден")
+        return templates.TemplateResponse(
+            request,
+            "settings.html",
+            {
+                "site": site,
+                "schedules": _SCHEDULE_LABELS,
+                "saved": saved,
+            },
+        )
+
+    @app.post("/sites/{site_id}/settings")
+    def site_settings_save(
+        site_id: int,
+        email: str = Form(""),
+        telegram_chat: str = Form(""),
+        schedule: str = Form("off"),
+    ):
+        site = storage.get_site(site_id)
+        if site is None:
+            raise HTTPException(status_code=404, detail="Сайт не найден")
+        schedule = schedule if schedule in _SCHEDULE_LABELS else "off"
+        storage.update_site(
+            site.id,
+            email=email.strip() or None,
+            telegram_chat=telegram_chat.strip() or None,
+            schedule=schedule,
+        )
+        # расписание могло измениться — пересчитываем дату следующего запуска
+        # по свежей строке из БД, а не по устаревшему объекту
+        updated = storage.get_site(site.id)
+        if updated is not None:
+            monitor.schedule_next(updated)
+        return RedirectResponse(url=f"/sites/{site.id}/settings?saved=1", status_code=303)
+
+    @app.post("/sites/{site_id}/delete")
+    def site_delete(site_id: int):
+        if not storage.delete_site(site_id):
+            raise HTTPException(status_code=404, detail="Сайт не найден")
+        return RedirectResponse(url="/", status_code=303)
+
     # --- API ---
 
     @app.get("/healthz")
@@ -352,7 +419,12 @@ def create_app(
         return JSONResponse({"status": "started", "site_id": site_id, "run_id": run.id}, status_code=202)
 
     @app.post("/upload")
-    async def upload_files(files: list[UploadFile] = File(...), paths: list[str] = Form(...), background_tasks: BackgroundTasks = None):
+    async def upload_files(
+        request: Request,
+        files: list[UploadFile] = File(...),
+        paths: list[str] = Form(...),
+        background_tasks: BackgroundTasks = None,
+    ):
         if not files:
             raise HTTPException(status_code=400, detail="Нет файлов")
         job_id = uuid.uuid4().hex
@@ -378,7 +450,10 @@ def create_app(
                 htmls = list(base.rglob("*.html"))
                 index = htmls[0] if htmls else (base / "index.html")
         rel_idx = index.relative_to(base)
-        url = f"http://127.0.0.1:{os.environ.get('WEBSCOPE_PORT','8001')}/__local/{job_id}/{rel_idx.as_posix()}"
+        # Адрес берём из реального запроса (host:port), а не из env — файлы
+        # раздаёт это же приложение, и сканер должен ходить туда же.
+        origin = str(request.base_url).rstrip("/")
+        url = f"{origin}/__local/{job_id}/{rel_idx.as_posix()}"
         try:
             normalized = normalize_url(url)
         except ValueError:
@@ -399,8 +474,8 @@ def create_app(
 
     try:
         app.mount("/__local", StaticFiles(directory=str(_LOCAL_DIR), html=True), name="local_static")
-    except Exception:
-        pass
+    except (OSError, RuntimeError) as exc:  # каталог раздачи не создался — локальная загрузка будет недоступна
+        LOGGER.warning("не удалось смонтировать /__local: %s", exc)
 
     return app
 

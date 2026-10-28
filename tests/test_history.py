@@ -68,6 +68,51 @@ def test_diff_detects_severity_change() -> None:
     assert diff.changed_findings[0].severity_after == "critical"
 
 
+def test_diff_selector_shift_is_not_new_and_fixed() -> None:
+    """Сдвиг селектора (например, из-за нового блока выше) — не новая и не «исправленная» проблема."""
+    old = _snapshot([_finding("content/image-alt", Severity.SERIOUS, selector="main > img")])
+    new = _snapshot([_finding("content/image-alt", Severity.SERIOUS, selector="main > div > img")])
+    diff = diff_snapshots(old, new)
+    assert diff.new_findings == []
+    assert diff.fixed_findings == []
+    assert diff.changed_findings == []
+
+
+def test_diff_severity_change_via_element_match() -> None:
+    """Смена серьёзности распознаётся даже при сдвинутом селекторе."""
+    old = _snapshot([_finding("content/image-alt", Severity.MODERATE, selector="main > img")])
+    new = _snapshot([_finding("content/image-alt", Severity.CRITICAL, selector="main > div > img")])
+    diff = diff_snapshots(old, new)
+    assert diff.new_findings == []
+    assert diff.fixed_findings == []
+    assert len(diff.changed_findings) == 1
+    assert diff.changed_findings[0].severity_before == "moderate"
+    assert diff.changed_findings[0].severity_after == "critical"
+
+
+def test_worsened_findings_flags_only_upgrades() -> None:
+    """«Ухудшение» — только рост серьёзности; улучшение к нему не относится."""
+    worse = diff_snapshots(
+        _snapshot([_finding("content/image-alt", Severity.MODERATE)]),
+        _snapshot([_finding("content/image-alt", Severity.CRITICAL)]),
+    )
+    assert [entry.rule for entry in worse.worsened_findings] == ["content/image-alt"]
+
+    better = diff_snapshots(
+        _snapshot([_finding("content/image-alt", Severity.CRITICAL)]),
+        _snapshot([_finding("content/image-alt", Severity.MODERATE)]),
+    )
+    assert better.worsened_findings == []
+
+
+def test_slug_unique_for_long_similar_urls() -> None:
+    """URL с одинаковым длинным началом не должны попадать в один каталог истории."""
+    from webscope.history import _slug
+
+    prefix = "https://site.com/search?" + "&".join(f"q={index}" for index in range(30))
+    assert _slug(prefix + "&page=1") != _slug(prefix + "&page=2")
+
+
 def test_history_trend_and_listing(tmp_path: Path) -> None:
     save_snapshot(_snapshot([], "2026-10-20T10:00:00+00:00"), tmp_path)
     save_snapshot(_snapshot([_finding("content/image-alt", Severity.SERIOUS)], "2026-10-21T10:00:00+00:00"), tmp_path)

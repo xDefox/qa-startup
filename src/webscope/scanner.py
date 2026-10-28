@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
+from . import __version__
 from .archetype import detect_archetype
 from .checks import DEFAULT_CHECKS, REGISTRY
 from .checks.js import JS_UTILS
@@ -30,7 +31,8 @@ _CHROMIUM_CANDIDATES = (
 )
 
 DEFAULT_UA = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 webscope/0.1"
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    f" webscope/{__version__}"
 )
 
 

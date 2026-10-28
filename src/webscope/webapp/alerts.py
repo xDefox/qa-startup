@@ -48,6 +48,12 @@ def build_alert_text(site_url: str, diff: DiffReport) -> str:
     else:
         lines.append("Новых проблем нет")
 
+    worsened = diff.worsened_findings
+    if worsened:
+        lines.append(f"Ухудшилось (старые проблемы стали серьёзнее): {len(worsened)}")
+        for entry in worsened[:10]:
+            lines.append(f"• {entry.title}: {entry.severity_before} → {entry.severity_after} — {entry.url}")
+
     if diff.fixed_findings:
         lines.append(f"Исправлено: {len(diff.fixed_findings)}")
 
@@ -111,7 +117,10 @@ def notify(
     telegram_chat: str | None = None,
 ) -> list[str]:
     """Рассылает алерт по настроенным каналам. Возвращает список сработавших каналов."""
-    subject = f"Проверка сайта {site_url}: {len(diff.new_findings)} новых проблем"
+    parts = [f"{len(diff.new_findings)} новых проблем"]
+    if diff.worsened_findings:
+        parts.append(f"ухудшилось: {len(diff.worsened_findings)}")
+    subject = f"Проверка сайта {site_url}: " + ", ".join(parts)
     text = build_alert_text(site_url, diff)
 
     sent: list[str] = []

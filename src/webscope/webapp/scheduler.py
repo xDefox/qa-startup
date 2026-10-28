@@ -117,7 +117,9 @@ class Monitor:
 
         stored = self.storage.finish_run(run.id, outcome.result)
         diff = self.storage.diff_with_previous(stored)
-        if diff is not None and diff.new_findings:
+        # алертим и о новых проблемах, и о том, что старые стали серьёзнее:
+        # регрессия без новых находок иначе остаётся незамеченной
+        if diff is not None and (diff.new_findings or diff.worsened_findings):
             sent = self.notifier(
                 site_url=site.url,
                 diff=diff,

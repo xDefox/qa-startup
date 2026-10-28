@@ -31,7 +31,12 @@
     </div>
     <div style="flex: 0 0 auto; text-align: right;">
       {% if view %}
-      <div class="score">{{ view.score }}<small>/100</small></div>
+      <div class="score">
+        {% if view.diff and view.diff.score_before != view.diff.score_after %}
+        <s class="score-prev" title="Оценка предыдущей проверки: {{ view.diff.score_before }}">{{ view.diff.score_before }}</s>
+        {% endif %}
+        {{ view.score }}<small>/100</small>
+      </div>
       <div class="muted small">{{ view.score_label }}</div>
       {% endif %}
     </div>
@@ -42,6 +47,9 @@
     </form>
     <div class="actions">
       <a class="pill" href="/sites/{{ site.id }}/history">История проверок</a>
+    </div>
+    <div class="actions">
+      <a class="pill" href="/sites/{{ site.id }}/settings">Настройки</a>
     </div>
   </div>
 </div>
@@ -120,6 +128,9 @@
         {% endif %}
         {% if item.source %}
         <div class="where">Источник/ресурс: <code>{{ item.source }}</code></div>
+        {% endif %}
+        {% if item.help_url %}
+        <div class="where"><a href="{{ item.help_url }}" rel="noopener">Подробнее о проверке</a></div>
         {% endif %}
         {% if item.snippet %}<pre class="snippet">{{ item.snippet }}</pre>{% endif %}
       </div>

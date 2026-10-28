@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ site.url }} — настройки{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h1>Настройки сайта</h1>
+  <p class="muted small"><a href="/sites/{{ site.id }}">← к отчёту</a> · {{ site.url }}</p>
+
+  {% if saved %}
+  <div class="flash">Настройки сохранены.</div>
+  {% endif %}
+
+  <form method="post" action="/sites/{{ site.id }}/settings">
+    <div class="row">
+      <div class="field" style="flex: 1 1 240px;">
+        <label for="email">Куда присылать отчёты</label>
+        <input id="email" type="email" name="email" value="{{ site.email or '' }}"
+               placeholder="you@example.com" autocomplete="email" spellcheck="false">
+      </div>
+      <div class="field" style="flex: 1 1 240px;">
+        <label for="telegram_chat">Telegram: id чата или @канал</label>
+        <input id="telegram_chat" type="text" name="telegram_chat" value="{{ site.telegram_chat or '' }}"
+               placeholder="-1001234567890" spellcheck="false">
+      </div>
+    </div>
+    <div class="field">
+      <label for="schedule">Как часто проверять</label>
+      <select id="schedule" name="schedule">
+        {% for value, label in schedules.items() %}
+        <option value="{{ value }}" {% if site.schedule == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="actions">
+      <button type="submit">Сохранить</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Удаление сайта</h2>
+  <p class="muted small">
+    Сайт, все прогоны и история проверок будут удалены безвозвратно.
+    Проверки по расписанию прекратятся.
+  </p>
+  <form method="post" action="/sites/{{ site.id }}/delete"
+        onsubmit="return confirm('Удалить {{ site.url }} вместе с историей проверок?');">
+    <div class="actions">
+      <button type="submit" class="danger">Удалить сайт и историю</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

@@ -108,15 +108,37 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _load_baseline(path: Path | None) -> set[tuple[str, str]]:
-    """Читает baseline: список пар (rule, selector), которые считаются известными."""
+def _snippet_key(snippet: str | None) -> str:
+    """Нормализованный ключ фрагмента: тот же, что в history._element_key."""
+    return "".join((snippet or "").split())[:80].lower()
+
+
+def _load_baseline(path: Path | None) -> tuple[set[tuple[str, str]], set[tuple[str, str]]]:
+    """Читает baseline: известные пары (rule, selector) и (rule, snippet-key).
+
+    Селектор может сдвинуться между версиями разметки, поэтому тот же известный
+    дефект дополнительно распознаётся по нормализованному фрагменту элемента.
+    """
     if path is None:
-        return set()
+        return set(), set()
     data = json.loads(path.read_text(encoding="utf-8"))
-    known: set[tuple[str, str]] = set()
+    known_pairs: set[tuple[str, str]] = set()
+    known_snippets: set[tuple[str, str]] = set()
     for item in data.get("findings", []):
-        known.add((item.get("rule", ""), item.get("selector") or ""))
-    return known
+        rule = item.get("rule", "")
+        known_pairs.add((rule, item.get("selector") or ""))
+        snippet = _snippet_key(item.get("snippet"))
+        if snippet:
+            known_snippets.add((rule, snippet))
+    return known_pairs, known_snippets
+
+
+def _is_known(finding, baseline: tuple[set[tuple[str, str]], set[tuple[str, str]]]) -> bool:
+    pairs, snippets = baseline
+    if (finding.rule, finding.selector or "") in pairs:
+        return True
+    snippet = _snippet_key(finding.snippet)
+    return bool(snippet) and (finding.rule, snippet) in snippets
 
 
 def _severity_threshold(name: str) -> int:
@@ -150,8 +172,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
         return EXIT_ERROR
 
     baseline = _load_baseline(args.baseline)
-    if baseline:
-        result.findings = sort_findings([f for f in result.findings if (f.rule, f.selector or "") not in baseline])
+    if args.baseline is not None:
+        result.findings = sort_findings([f for f in result.findings if not _is_known(f, baseline)])
 
     if args.fix_prompt:
         output = build_fix_prompt(result)

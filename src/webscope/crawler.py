@@ -16,7 +16,9 @@ from urllib.robotparser import RobotFileParser
 
 import httpx
 
-USER_AGENT = "webscope/0.1 (+https://github.com/webscope/webscope)"
+from . import __version__
+
+USER_AGENT = f"webscope/{__version__} (+https://github.com/webscope/webscope)"
 
 _NON_HTML_SUFFIXES = (
     ".pdf",
