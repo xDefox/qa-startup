@@ -87,3 +87,66 @@ def test_dedupe_keeps_axe_rule_without_own_equivalent() -> None:
         source="webscope.a11y",
     )
     assert _dedupe_findings([axe]) == [axe]
+
+
+def test_validate_target_dns_failure_is_human_readable() -> None:
+    # хост, который не резолвится, — сообщение должно быть про домен, а не про сокет
+    with pytest.raises(ScanError) as excinfo:
+        validate_target("https://this-host-does-not-exist-xyzqwe.invalid/")
+    assert "домен не найден" in str(excinfo.value)
+    assert "this-host-does-not-exist-xyzqwe.invalid" in str(excinfo.value)
+
+
+def test_diagnose_navigation_error_dns() -> None:
+    from playwright.sync_api import Error as PlaywrightError
+
+    from webscope.diagnostics import diagnose_navigation_error
+
+    exc = PlaywrightError("page.goto: net::ERR_NAME_NOT_RESOLVED at https://x.com/")
+    message = diagnose_navigation_error("https://x.com/", exc)
+    assert "домен не найден" in message
+
+
+def test_diagnose_navigation_error_timeout() -> None:
+    from playwright.sync_api import Error as PlaywrightError
+
+    from webscope.diagnostics import diagnose_navigation_error
+
+    exc = PlaywrightError("Timeout 30000ms exceeded.")
+    message = diagnose_navigation_error("https://slow.com/", exc, timeout_ms=30000)
+    assert "не загрузилась за 30 с" in message
+
+
+def test_diagnose_navigation_error_certificate() -> None:
+    from playwright.sync_api import Error as PlaywrightError
+
+    from webscope.diagnostics import diagnose_navigation_error
+
+    exc = PlaywrightError("page.goto: net::ERR_CERT_AUTHORITY_INVALID at https://x.com/")
+    message = diagnose_navigation_error("https://x.com/", exc)
+    assert "сертификат" in message.lower()
+
+
+def test_diagnose_navigation_error_connection_refused() -> None:
+    from playwright.sync_api import Error as PlaywrightError
+
+    from webscope.diagnostics import diagnose_navigation_error
+
+    exc = PlaywrightError("page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:9/")
+    message = diagnose_navigation_error("http://127.0.0.1:9/", exc)
+    assert "соединение" in message.lower()
+
+
+def test_diagnose_http_error_known_statuses() -> None:
+    from webscope.diagnostics import diagnose_http_error
+
+    assert "не найдена" in diagnose_http_error("https://x.com/missing", 404)
+    assert "HTTP 404" in diagnose_http_error("https://x.com/missing", 404)
+    assert "ошибка на сервере" in diagnose_http_error("https://x.com/", 500)
+
+
+def test_diagnose_http_error_unknown_status() -> None:
+    from webscope.diagnostics import diagnose_http_error
+
+    message = diagnose_http_error("https://x.com/", 418)
+    assert "HTTP 418" in message

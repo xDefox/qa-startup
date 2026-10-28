@@ -78,9 +78,17 @@ class PageTarget:
     url: str
     template: str
     depth: int
+    title: str = ""
+    description: str = ""
 
     def to_dict(self) -> dict:
-        return {"url": self.url, "template": self.template, "depth": self.depth}
+        return {
+            "url": self.url,
+            "template": self.template,
+            "depth": self.depth,
+            "title": self.title,
+            "description": self.description,
+        }
 
 
 @dataclass
@@ -106,12 +114,15 @@ class CrawlResult:
 
 
 class _LinkParser(HTMLParser):
-    """Достаёт из HTML ссылки (a[href]) и ссылку на sitemap."""
+    """Достаёт из HTML ссылки, title, meta description и ссылку на sitemap."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.hrefs: list[str] = []
         self.sitemaps: list[str] = []
+        self.title = ""
+        self.description = ""
+        self._in_title = False
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = {key: (value or "") for key, value in attrs}
@@ -119,6 +130,18 @@ class _LinkParser(HTMLParser):
             self.hrefs.append(attributes["href"])
         elif tag == "link" and "sitemap" in attributes.get("rel", "").lower() and attributes.get("href"):
             self.sitemaps.append(attributes["href"])
+        elif tag == "title":
+            self._in_title = True
+        elif tag == "meta" and attributes.get("name", "").lower() == "description":
+            self.description = attributes.get("content", "")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "title":
+            self._in_title = False
+
+    def handle_data(self, data: str) -> None:
+        if self._in_title:
+            self.title += data
 
 
 def template_key(url: str) -> str:
@@ -151,17 +174,28 @@ def is_html_candidate(url: str) -> bool:
 
 def extract_links(html: str, base_url: str) -> tuple[list[str], list[str]]:
     """Возвращает (ссылки, sitemap-ссылки) в абсолютном виде."""
+    links, sitemaps, _title, _description = parse_page(html, base_url)
+    return links, sitemaps
+
+
+def squash_ws(text: str) -> str:
+    """Схлопывает все пробельные символы (включая переводы строк) в один пробел."""
+    return " ".join(text.split())
+
+
+def parse_page(html: str, base_url: str) -> tuple[list[str], list[str], str, str]:
+    """Возвращает (ссылки, sitemap-ссылки, title, description) из HTML страницы."""
     parser = _LinkParser()
     try:
         parser.feed(html)
     except Exception:  # noqa: BLE001 - битый HTML не должен ронять обход
-        return [], []
+        return [], [], "", ""
     links = []
     for href in parser.hrefs:
         absolute = urljoin(base_url, href)
         links.append(absolute)
     sitemaps = [urljoin(base_url, href) for href in parser.sitemaps]
-    return links, sitemaps
+    return links, sitemaps, squash_ws(parser.title), squash_ws(parser.description)
 
 
 def _origin(url: str) -> str:
@@ -252,7 +286,7 @@ def crawl(
             result.skipped.append({"url": root_url, "reason": f"не удалось загрузить: {exc}"})
             homepage_html = ""
 
-        _, sitemap_links = extract_links(homepage_html, root_url)
+        _, sitemap_links, _, _ = parse_page(homepage_html, root_url)
         for sitemap_link in sitemap_links[:3]:
             try:
                 link_response = client.get(sitemap_link)
@@ -295,12 +329,20 @@ def crawl(
             else:
                 html = homepage_html
 
-            visited[url] = PageTarget(url=url, template=template_key(url), depth=depth)
+            # title/description из сырых HTML — для проверки дублей по шаблонам
+            _links, _sitemaps, page_title, page_description = parse_page(html, url)
+            visited[url] = PageTarget(
+                url=url,
+                template=template_key(url),
+                depth=depth,
+                title=page_title,
+                description=page_description,
+            )
 
             if depth >= max_depth:
                 continue
 
-            links, _ = extract_links(html, url)
+            links = _links
             for link in links:
                 parsed = urlparse(link)
                 if parsed.scheme not in {"http", "https"}:

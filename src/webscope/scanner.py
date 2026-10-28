@@ -18,8 +18,9 @@ from .archetype import detect_archetype
 from .checks import DEFAULT_CHECKS, REGISTRY
 from .checks.js import JS_UTILS
 from .context import ScanContext
-from .crawler import CrawlResult, crawl, representative_pages
-from .models import Finding, ScanResult, sort_findings
+from .crawler import CrawlResult, PageTarget, crawl, representative_pages, squash_ws
+from .diagnostics import diagnose_http_error, diagnose_navigation_error
+from .models import Finding, ScanResult, Severity, sort_findings
 from .pages import page_notes
 
 # Системные Chromium-ы — фолбэк, если playwright install chromium не выполнен.
@@ -60,7 +61,10 @@ def validate_target(url: str, allow_private: bool = False) -> str:
         try:
             infos = socket.getaddrinfo(host, None)
         except socket.gaierror as exc:
-            raise ScanError(f"Не удалось разрешить хост {host}: {exc}") from exc
+            raise ScanError(
+                f"Не удалось открыть {url}: домен не найден. "
+                "Проверьте адрес на опечатку; возможно, DNS-запись ещё не создана."
+            ) from exc
         for info in infos:
             address = ipaddress.ip_address(info[4][0])
             if (
@@ -224,9 +228,12 @@ def _scan_page(
     page.on("response", on_response)
 
     try:
-        response = page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        try:
+            response = page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        except PlaywrightError as exc:
+            raise ScanError(diagnose_navigation_error(url, exc, timeout_ms=timeout_ms)) from exc
         if response is not None and response.status >= 400:
-            raise ScanError(f"Целевая страница вернула HTTP {response.status}")
+            raise ScanError(diagnose_http_error(url, response.status))
         try:
             page.wait_for_load_state("networkidle", timeout=min(5000, timeout_ms))
         except PlaywrightError:
@@ -267,6 +274,59 @@ def _resolve_checks(checks: Sequence[str] | None) -> list[str]:
     if unknown:
         raise ScanError(f"Неизвестные проверки: {', '.join(unknown)}. Доступны: {', '.join(sorted(REGISTRY))}")
     return selected
+
+
+def _meta_key(value: str) -> str:
+    """Нормализует title/description для сравнения: регистр и пробелы не важны."""
+    return squash_ws(value).lower()
+
+
+def _duplicate_meta_findings(crawl_result: CrawlResult) -> list[Finding]:
+    """Ищет одинаковые title/description у страниц одного шаблона.
+
+    Каталог из 200 товаров, у всех заголовок «Товар» — поиск и вкладки не
+    различают страницы. Сравниваем только внутри шаблона: у главной и карточки
+    разные шаблоны, их одинаковые заголовки — не проблема.
+    """
+    findings: list[Finding] = []
+    for template, urls in sorted(crawl_result.templates.items()):
+        pages = [page for page in crawl_result.pages if page.url in urls]
+        for field_name, rule, severity in (
+            ("title", "content/duplicate-title", Severity.MODERATE),
+            ("description", "content/duplicate-description", Severity.MINOR),
+        ):
+            groups: dict[str, list[PageTarget]] = {}
+            for page in pages:
+                value = getattr(page, field_name, "") or ""
+                if _meta_key(value):
+                    groups.setdefault(_meta_key(value), []).append(page)
+            for group in groups.values():
+                if len(group) < 2:
+                    continue
+                sorted_group = sorted(group, key=lambda p: p.url)
+                sample = sorted_group[0]
+                display = getattr(sample, field_name, "").strip()
+                findings.append(
+                    Finding(
+                        rule=rule,
+                        severity=severity,
+                        title=f"Одинаковый {field_name} у {len(group)} страниц шаблона",
+                        message=(
+                            f"Страницы одного шаблона ({template}) имеют одинаковый "
+                            f"{field_name} «{display}» — поисковики и вкладки не различают их."
+                        ),
+                        url=sample.url,
+                        source="webscope.crawler",
+                        details={
+                            "template": template,
+                            "field": field_name,
+                            "value": display,
+                            "count": len(group),
+                            "examples": [p.url for p in sorted_group[:5]],
+                        },
+                    )
+                )
+    return findings
 
 
 def scan(
@@ -390,6 +450,8 @@ def scan_site(
             browser.close()
 
     duration_ms = int((time.monotonic() - started) * 1000)
+    # Дубли title/description по шаблонам — проверка уровня сайта, а не страницы
+    findings.extend(_duplicate_meta_findings(crawl_result))
     result = ScanResult(
         url=root_url,
         final_url=final_url,

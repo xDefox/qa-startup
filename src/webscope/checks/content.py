@@ -45,6 +45,16 @@ COLLECT = r"""
     return el ? (el.getAttribute('content') || '') : null;
   };
 
+  // Open Graph и Twitter Card — как ссылка выглядит при репосте в мессенджер/соцсеть.
+  const og = (prop) => {
+    const el = doc.querySelector('meta[property="' + prop + '"]');
+    return el ? (el.getAttribute('content') || '').trim() : null;
+  };
+  const twitter = (name) => {
+    const el = doc.querySelector('meta[name="' + name + '"]');
+    return el ? (el.getAttribute('content') || '').trim() : null;
+  };
+
   return {
     lang: doc.documentElement.getAttribute('lang'),
     title: doc.title || '',
@@ -53,6 +63,12 @@ COLLECT = r"""
     charset: doc.characterSet || '',
     hasCharsetMeta: !!doc.querySelector('meta[charset]'),
     protocol: location.protocol,
+    ogTitle: og('og:title'),
+    ogDescription: og('og:description'),
+    ogImage: og('og:image'),
+    ogUrl: og('og:url'),
+    twitterCard: twitter('twitter:card'),
+    twitterImage: twitter('twitter:image'),
     headings,
     images,
     iframes,
@@ -62,6 +78,39 @@ COLLECT = r"""
   };
 }
 """
+
+
+def _check_social_card(data: dict, add) -> None:
+    """Проверяет, как ссылка будет выглядеть при репосте (og-теги).
+
+    Когда владелец или клиент копирует ссылку в Telegram/WhatsApp/VK, мессенджер
+    читает Open Graph. Без og:title страница выглядит как голый имя вкладки, без
+    og:image — как пустая серая карточка. Проверяем только og:title и og:image:
+    они напрямую видны при репосте. og:description мессенджеры часто берут из
+    первого абзаца самой страницы, поэтому его отсутствие не считаем находкой.
+    """
+    og_title = data.get("ogTitle")
+    og_image = data.get("ogImage")
+
+    if not og_title:
+        add(
+            "content/missing-og-title",
+            Severity.MINOR,
+            "Нет og:title — ссылка при репосте без заголовка",
+            "Мессенджер и соцсеть не найдут заголовка для карточки и покажут "
+            "пустое имя вкладки вместо понятного названия страницы.",
+            help_url="https://ogp.me/#optional",
+        )
+
+    if not og_image:
+        add(
+            "content/missing-og-image",
+            Severity.MODERATE,
+            "Нет og:image — ссылка при репосте без картинки",
+            "При репосте в мессенджер или соцсеть карточка будет без изображения: "
+            "серый пустой прямоугольник вместо обложки, которую клиенты замечают в ленте.",
+            help_url="https://ogp.me/#optional",
+        )
 
 
 def run(page: object, ctx: ScanContext) -> list[Finding]:
@@ -107,6 +156,8 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
             "Нет meta description",
             "Сниппет в поисковой выдаче будет генерироваться автоматически.",
         )
+
+    _check_social_card(data, add)
 
     if not (data.get("viewport") or "").strip():
         add(

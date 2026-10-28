@@ -44,6 +44,24 @@ WIDE_HTML = """
 <body><div style="width: 2000px; height: 50px; background: #ccc;">широкий блок</div></body></html>
 """
 
+# Страница без og-тегов: при репосте карточка будет пустой.
+NO_OG_HTML = """
+<html lang="ru"><head><title>Без соцкарточки</title>
+<meta name="description" content="описание">
+<meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body><h1>Заголовок</h1></body></html>
+"""
+
+# Страница с корректной соцкарточкой.
+FULL_OG_HTML = """
+<html lang="ru"><head><title>Соцкарточка</title>
+<meta name="description" content="описание">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="Заголовок для репоста">
+<meta property="og:image" content="https://example.com/cover.png"></head>
+<body><h1>Заголовок</h1></body></html>
+"""
+
 
 @pytest.fixture(scope="module")
 def browser():
@@ -108,3 +126,44 @@ def test_viewport_detects_overflow(browser) -> None:
     assert "viewport/horizontal-overflow" in rules
     overflow = next(f for f in findings if f.rule == "viewport/horizontal-overflow")
     assert overflow.severity.value == "serious"
+
+
+def test_content_flags_missing_social_card(browser) -> None:
+    context, ctx = _context(NO_OG_HTML, browser)
+    try:
+        findings = content.run(context.pages[0], ctx)
+    finally:
+        context.close()
+
+    rules = _rules(findings)
+    assert "content/missing-og-title" in rules
+    assert "content/missing-og-image" in rules
+
+
+def test_content_accepts_full_social_card(browser) -> None:
+    context, ctx = _context(FULL_OG_HTML, browser)
+    try:
+        findings = content.run(context.pages[0], ctx)
+    finally:
+        context.close()
+
+    rules = _rules(findings)
+    assert "content/missing-og-title" not in rules
+    assert "content/missing-og-image" not in rules
+
+
+def test_checks_are_deterministic(browser) -> None:
+    """Дважды одна и та же страница → бинарно идентичные находки и балл.
+
+    Защищает центральное обещание продукта: повторный скан не выдумывает
+    новых проблем и не теряет старые, иначе история и алерты бессмысленны.
+    """
+    context, ctx = _context(BROKEN_HTML, browser)
+    try:
+        page = context.pages[0]
+        first = content.run(page, ctx)
+        second = content.run(page, ctx)
+    finally:
+        context.close()
+
+    assert [f.to_dict() for f in first] == [f.to_dict() for f in second]
