@@ -9,11 +9,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import tempfile
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from ..models import Severity
@@ -26,6 +29,8 @@ from .storage import Run, Site, Storage
 LOGGER = logging.getLogger("webscope.webapp")
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+_LOCAL_DIR = Path(tempfile.gettempdir()) / "webscope-local"
+_LOCAL_DIR.mkdir(parents=True, exist_ok=True)
 
 BLOCKER_RULE = "interaction/button-blocked"
 
@@ -51,7 +56,8 @@ def normalize_url(url: str) -> str:
         raise ValueError("Укажите адрес сайта")
     if not cleaned.startswith(("http://", "https://")):
         cleaned = f"https://{cleaned}"
-    if "." not in cleaned.split("//", 1)[1].split("/")[0]:
+    host = cleaned.split("//", 1)[1].split("/")[0].split(":")[0]
+    if "." not in host and host not in ("localhost",):
         raise ValueError("Похоже, это не адрес сайта")
     return cleaned
 
@@ -345,6 +351,42 @@ def create_app(
         run = trigger(site, background_tasks)
         return JSONResponse({"status": "started", "site_id": site_id, "run_id": run.id}, status_code=202)
 
+    @app.post("/upload")
+    async def upload_files(files: list[UploadFile] = File(...), paths: list[str] = Form(...), background_tasks: BackgroundTasks = None):
+        if not files:
+            raise HTTPException(status_code=400, detail="Нет файлов")
+        job_id = uuid.uuid4().hex
+        base = _LOCAL_DIR / job_id
+        base.mkdir(parents=True, exist_ok=True)
+        for f, p in zip(files, paths):
+            rel = Path(p)
+            # защита от выхода за пределы
+            safe = Path(*[part for part in rel.parts if part not in ("..", ".", "")])
+            if not safe.parts:
+                safe = Path(f.filename or "index.html")
+            dest = base / safe
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            content = await f.read()
+            dest.write_bytes(content)
+        # выбираем стартовый файл
+        index = base / "index.html"
+        if not index.exists():
+            candidates = list(base.rglob("index.html"))
+            if candidates:
+                index = candidates[0]
+            else:
+                htmls = list(base.rglob("*.html"))
+                index = htmls[0] if htmls else (base / "index.html")
+        rel_idx = index.relative_to(base)
+        url = f"http://127.0.0.1:{os.environ.get('WEBSCOPE_PORT','8001')}/__local/{job_id}/{rel_idx.as_posix()}"
+        try:
+            normalized = normalize_url(url)
+        except ValueError:
+            normalized = url
+        site = storage.add_site(normalized, email=None, telegram_chat=None, schedule="off")
+        trigger(site, background_tasks)
+        return {"url": normalized, "site_id": site.id}
+
     @app.get("/api/sites/{site_id}/report.txt", response_class=PlainTextResponse)
     def api_report_text(site_id: int):
         site = storage.get_site(site_id)
@@ -354,6 +396,11 @@ def create_app(
         if last is None:
             raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
         return render_plain(_result_from_run(storage, last))
+
+    try:
+        app.mount("/__local", StaticFiles(directory=str(_LOCAL_DIR), html=True), name="local_static")
+    except Exception:
+        pass
 
     return app
 

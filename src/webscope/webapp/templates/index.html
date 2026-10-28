@@ -15,8 +15,23 @@
   </p>
   <form method="post" action="/sites">
     <div class="field">
-      <label for="url">Адрес вашего сайта</label>
-      <input id="url" type="text" name="url" placeholder="example.com" required inputmode="url" autocomplete="url">
+      <label for="url">Адрес вашего сайта или локальный файл/папка</label>
+      <div class="row" style="align-items: center;">
+        <div style="flex: 3 1 280px;">
+          <input id="url" type="text" name="url" placeholder="example.com или выберите файл/папку" inputmode="url" autocomplete="url">
+        </div>
+        <div class="actions">
+          <button type="submit">Проверить сайт</button>
+        </div>
+        <div class="actions">
+          <label class="btn-like secondary" for="local-file">Выбрать файл</label>
+          <input id="local-file" type="file" accept=".html,.htm" hidden>
+        </div>
+        <div class="actions">
+          <label class="btn-like secondary" for="local-dir">Выбрать папку</label>
+          <input id="local-dir" type="file" webkitdirectory directory multiple hidden>
+        </div>
+      </div>
     </div>
     <div class="row">
       <div class="field">
@@ -31,11 +46,28 @@
           {% endfor %}
         </select>
       </div>
-      <div class="actions">
-        <button type="submit">Проверить сайт</button>
-      </div>
     </div>
   </form>
+  <script>
+    (function(){
+      const form = document.querySelector('.hero form');
+      const urlInput = document.getElementById('url');
+      const fileInput = document.getElementById('local-file');
+      const dirInput = document.getElementById('local-dir');
+      async function upload(files){
+        if(!files || !files.length) return;
+        const fd = new FormData();
+        for(let i=0;i<files.length;i++){ fd.append('files', files[i]); fd.append('paths', files[i].webkitRelativePath || files[i].name); }
+        try {
+          const res = await fetch('/upload', {method:'POST', body: fd});
+          const data = await res.json();
+          if(data && data.url){ urlInput.value = data.url; form.submit(); }
+        } catch(e){}
+      }
+      fileInput?.addEventListener('change', e=>upload(e.target.files));
+      dirInput?.addEventListener('change', e=>upload(e.target.files));
+    })();
+  </script>
 </div>
 
 <div class="card">
@@ -50,12 +82,12 @@
 <div class="card">
   <h2>Ваши сайты</h2>
   {% if sites %}
-  <ul class="site-list">
+  <div class="site-rows">
     {% for item in sites %}
-    <li>
-      <div>
-        <a href="/sites/{{ item.site.id }}">{{ item.site.url }}</a>
-        <div class="muted small">
+    <a class="site-row" href="/sites/{{ item.site.id }}">
+      <div class="site-row-main">
+        <div class="site-row-url">{{ item.site.url }}</div>
+        <div class="site-row-meta muted small">
           {% if item.run and item.run.status == 'ok' %}
             последняя проверка: {{ item.run.finished_at[:16].replace('T', ' ') }}
           {% elif item.run %}
@@ -66,11 +98,13 @@
         </div>
       </div>
       {% if item.run and item.run.status == 'ok' %}
-      <div class="site-score">{{ item.run.score }}/100</div>
+      <div class="site-row-score">{{ item.run.score }}/100</div>
+      {% else %}
+      <div class="site-row-arrow muted">→</div>
       {% endif %}
-    </li>
+    </a>
     {% endfor %}
-  </ul>
+  </div>
   {% else %}
   <p class="muted">Пока ни одного сайта. Вставьте адрес выше — и первая проверка начнётся сразу.</p>
   {% endif %}
