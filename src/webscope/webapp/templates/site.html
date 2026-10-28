@@ -3,8 +3,9 @@
 {% block content %}
 
 {% if pending %}
-<div class="flash" id="pending">
-  Идёт проверка сайта… это занимает до минуты. Страница обновится сама.
+<div class="scan-progress" id="scan-progress" role="status" aria-live="polite">
+  <span class="scan-spinner" aria-hidden="true"></span>
+  <span class="scan-progress-text">Идёт проверка сайта… это занимает до минуты. Страница обновится сама.</span>
 </div>
 {% endif %}
 
@@ -42,7 +43,7 @@
     </div>
   </div>
   <div class="row" style="margin-top: 18px;">
-    <form method="post" action="/sites/{{ site.id }}/scan" class="actions">
+    <form method="post" action="/sites/{{ site.id }}/scan" class="actions scan-form">
       <button type="submit">Проверить ещё раз</button>
     </form>
     <div class="actions">
@@ -144,7 +145,7 @@
 <div class="card">
   <h2>Отчёта пока нет</h2>
   <p class="muted">Запустите первую проверку — она начнётся сразу.</p>
-  <form method="post" action="/sites/{{ site.id }}/scan">
+  <form method="post" action="/sites/{{ site.id }}/scan" class="scan-form">
     <button type="submit">Проверить сайт</button>
   </form>
 </div>
@@ -153,8 +154,46 @@
 {% endblock %}
 
 {% block scripts %}
-{% if pending %}
 <script>
+  // «Проверить ещё раз» → показываем спиннер сразу, не перезагружая страницу.
+  (function () {
+    const form = document.querySelector('form.scan-form');
+    if (!form) return;
+    form.addEventListener('submit', async (event) => {
+      // Без preventDefault кнопка ушла бы обычным POST со сменой страницы
+      // и спиннер мигнул бы на долю секунды.
+      event.preventDefault();
+      showScanProgress();
+      try {
+        await fetch(form.action, { method: 'POST', credentials: 'same-origin' });
+        // Проверка уже в работе — поллинг статуса подхватит её ниже.
+        setTimeout(check, 1000);
+      } catch (error) {
+        // Сеть мертва — откатываемся на обычную отправку, чтобы пользователь не завис.
+        form.submit();
+      }
+    });
+  })();
+
+  function showScanProgress() {
+    if (document.getElementById('scan-progress')) return;
+    const box = document.createElement('div');
+    box.className = 'scan-progress';
+    box.id = 'scan-progress';
+    box.setAttribute('role', 'status');
+    box.setAttribute('aria-live', 'polite');
+    const spinner = document.createElement('span');
+    spinner.className = 'scan-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    const text = document.createElement('span');
+    text.className = 'scan-progress-text';
+    text.textContent = 'Идёт проверка сайта… это занимает до минуты. Страница обновится сама.';
+    box.append(spinner, text);
+    const card = document.querySelector('main .card');
+    if (card) card.parentNode.insertBefore(box, card);
+    else document.querySelector('main').prepend(box);
+  }
+
   // Ждём окончания проверки и обновляем страницу.
   const check = async () => {
     try {
@@ -165,7 +204,8 @@
     } catch (error) { /* молча пробуем ещё раз */ }
     setTimeout(check, 3000);
   };
+  {% if pending %}
   setTimeout(check, 3000);
+  {% endif %}
 </script>
-{% endif %}
 {% endblock %}
