@@ -197,3 +197,36 @@ def test_diagnose_http_error_unknown_status() -> None:
 
     message = diagnose_http_error("https://x.com/", 418)
     assert "HTTP 418" in message
+
+
+def test_dedupe_drops_axe_frame_title_duplicate() -> None:
+    """Регресс: axe frame-title и наш content/frame-title — один iframe.
+
+    В _AXE_EQUIVALENTS стояла опечатка content/iframe-title, поэтому дедуп не
+    срабатывал и iframe без title попадал в отчёт дважды (varkacoffee.by).
+    """
+    from webscope.models import Finding, Severity
+    from webscope.scanner import _dedupe_findings
+
+    own = Finding(
+        rule="content/frame-title",
+        severity=Severity.MODERATE,
+        title="iframe без заголовка",
+        message="",
+        url="https://example.com/",
+        selector="iframe",
+        snippet='<iframe src="https://yandex.ru/map-widget/v1/"></iframe>',
+        source="webscope.content",
+    )
+    axe = Finding(
+        rule="frame-title",
+        severity=Severity.SERIOUS,
+        title="Frames must have an accessible name",
+        message="",
+        url="https://example.com/",
+        selector="iframe",
+        snippet='<iframe src="https://yandex.ru/map-widget/v1/"></iframe>',
+        source="webscope.a11y",
+    )
+
+    assert [f.rule for f in _dedupe_findings([own, axe])] == ["content/frame-title"]

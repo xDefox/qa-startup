@@ -225,7 +225,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
 
     for iframe in data.get("iframes") or []:
         add(
-            "content/iframe-title",
+            "content/frame-title",
             Severity.MODERATE,
             "iframe без заголовка",
             "У <iframe> нет title или aria-label — невозможно понять, что внутри.",

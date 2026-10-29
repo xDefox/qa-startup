@@ -149,7 +149,9 @@ _AXE_EQUIVALENTS = {
     "image-alt": ["content/image-alt"],
     "button-name": ["content/empty-button-name", "forms/submit-without-accessible-name"],
     "link-name": ["content/empty-link-name"],
-    "frame-title": ["content/iframe-title"],
+    # У axe правило называется frame-title, у нас — content/frame-title.
+    # Опечатка (content/iframe-title) ломала дедуп: один iframe в отчёте дважды.
+    "frame-title": ["content/frame-title"],
     "heading-order": ["content/heading-order"],
     "duplicate-id": ["content/duplicate-id"],
     "html-has-lang": ["content/missing-lang"],

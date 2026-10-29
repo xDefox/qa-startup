@@ -172,7 +172,7 @@ def test_content_findings(browser) -> None:
     assert "content/empty-link-name" in rules
     assert "content/empty-button-name" in rules
     assert "content/duplicate-id" in rules
-    assert "content/iframe-title" in rules
+    assert "content/frame-title" in rules
     assert "content/missing-charset" in rules
     assert "content/missing-lang" not in rules
 

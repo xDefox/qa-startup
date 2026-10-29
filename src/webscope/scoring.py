@@ -106,7 +106,7 @@ PLAIN_IMPACT: dict[str, tuple[str, str]] = {
         "Картинка без описания не читается вслух и не находится поиском по картинкам.",
         'Опишите картинку в alt (для декоративных — alt="" и role="presentation").',
     ),
-    "content/iframe-title": (
+    "content/frame-title": (
         "Встроенный блок (видео, карта, виджет) не подписан — неясно, что он делает.",
         "Добавьте title или aria-label к iframe.",
     ),

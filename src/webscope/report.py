@@ -30,7 +30,7 @@ ACCEPTANCE: dict[str, str] = {
     "content/multiple-h1": "На странице остался один <h1>.",
     "content/heading-order": "Уровни заголовков идут без пропусков (h2 -> h3, не h2 -> h4).",
     "content/image-alt": 'У изображения непустой alt (или alt="" с role="presentation" для декоративного).',
-    "content/iframe-title": "У iframe есть непустой title.",
+    "content/frame-title": "У iframe есть непустой title.",
     "content/empty-link-name": "У ссылки есть осмысленный текст или aria-label.",
     "content/empty-button-name": "У кнопки есть текст или aria-label.",
     "content/duplicate-id": "id на странице уникальны.",
