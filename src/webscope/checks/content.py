@@ -33,8 +33,12 @@ COLLECT = r"""
     .filter((a) => u.visible(a) && u.accessibleName(a) === '')
     .map((a) => pick(a, { href: a.getAttribute('href') || '' }));
 
+  // Один дефект — одна находка: <a> (даже с role="button") уже пойман выше
+  // как ссылка, кнопки внутри <form> — их ловит forms/submit-without-accessible-name.
   const emptyButtons = Array.from(doc.querySelectorAll('button, [role="button"]'))
     .filter((b) => u.visible(b) && u.accessibleName(b) === '')
+    .filter((b) => !(b.tagName === 'A' && b.hasAttribute('href')))
+    .filter((b) => !b.closest('form'))
     .map((b) => pick(b));
 
   const ids = Array.from(doc.querySelectorAll('[id]')).map((e) => e.id).filter(Boolean);

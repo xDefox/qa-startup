@@ -143,17 +143,24 @@ def _capture_evidence(page, findings: list[Finding], ctx: ScanContext) -> None:
 
 # Правила axe, которые дублируют наши собственные проверки. Для таких пар
 # оставляем нашу находку: у неё понятное сообщение и критерий приёмки для агента.
+# Значение — список: одна axe-права может закрываться разными нашими правилами
+# (пустая кнопка ловится в контенте, а кнопка формы — в forms).
 _AXE_EQUIVALENTS = {
-    "image-alt": "content/image-alt",
-    "button-name": "content/empty-button-name",
-    "link-name": "content/empty-link-name",
-    "frame-title": "content/iframe-title",
-    "heading-order": "content/heading-order",
-    "duplicate-id": "content/duplicate-id",
-    "html-has-lang": "content/missing-lang",
-    "document-title": "content/missing-title",
-    "label": "forms/control-without-label",
+    "image-alt": ["content/image-alt"],
+    "button-name": ["content/empty-button-name", "forms/submit-without-accessible-name"],
+    "link-name": ["content/empty-link-name"],
+    "frame-title": ["content/iframe-title"],
+    "heading-order": ["content/heading-order"],
+    "duplicate-id": ["content/duplicate-id"],
+    "html-has-lang": ["content/missing-lang"],
+    "document-title": ["content/missing-title"],
+    "page-has-heading-one": ["content/no-h1"],
+    "label": ["forms/control-without-label"],
 }
+
+# Правила уровня документа: на странице ровно один экземпляр, элемента нет,
+# сниппет пуст. Для них дубль с axe сопоставляется по URL страницы.
+_DOCUMENT_OWN_RULES = {"content/missing-lang", "content/missing-title", "content/no-h1"}
 
 
 def _snippet_key(snippet: str | None) -> str:
@@ -166,18 +173,33 @@ def _snippet_key(snippet: str | None) -> str:
 def _dedupe_findings(findings: list[Finding]) -> list[Finding]:
     """Убирает дубли: одна и та же проблема, найденная двумя источниками."""
     own: dict[str, set[str]] = {}
+    # Документные проверки без сниппета (lang, title, h1) нельзя сопоставлять
+    # по HTML — для них якорь страницы это сам URL.
+    own_urls: dict[str, set[str]] = {}
     for finding in findings:
         if finding.source == "webscope.a11y":
             continue
-        own.setdefault(finding.rule, set()).add(_snippet_key(finding.snippet))
+        key = _snippet_key(finding.snippet)
+        if key:
+            own.setdefault(finding.rule, set()).add(key)
+        elif finding.rule in _DOCUMENT_OWN_RULES:
+            own_urls.setdefault(finding.rule, set()).add(finding.url or "")
 
     result: list[Finding] = []
     for finding in findings:
-        if finding.source == "webscope.a11y":
-            equivalent = _AXE_EQUIVALENTS.get(finding.rule)
-            if equivalent and _snippet_key(finding.snippet) in own.get(equivalent, set()):
-                continue  # тот же элемент уже пойман нашим правилом
-        result.append(finding)
+        if finding.source != "webscope.a11y":
+            result.append(finding)
+            continue
+        # axe-находка — дубль, если наше правило уже поймало тот же элемент
+        # (а для проверок уровня документа — ту же страницу).
+        key = _snippet_key(finding.snippet)
+        url = finding.url or ""
+        duplicated = any(
+            key in own.get(equivalent, set()) or url in own_urls.get(equivalent, set())
+            for equivalent in _AXE_EQUIVALENTS.get(finding.rule, [])
+        )
+        if not duplicated:
+            result.append(finding)
     return result
 
 

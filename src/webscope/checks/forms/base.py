@@ -37,7 +37,12 @@ COLLECT = r"""
       };
     });
 
-  const buttons = Array.from(document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]'))
+  // Кнопки именно форм: <a role="button"> и <div role="button"> — это контент
+  // (их ловят content/empty-link-name и content/empty-button-name), а здесь
+  // только настоящие элементы управления внутри <form>.
+  const buttons = Array.from(document.querySelectorAll('button, input[type="submit"], input[type="button"]'))
+    .filter((b) => u.visible(b))  // скрытые (display:none слайды) — не мешают пользователю
+    .filter((b) => b.closest('form'))
     .map((b) => ({
       tag: b.tagName.toLowerCase(),
       type: (b.getAttribute('type') || '').toLowerCase(),

@@ -73,6 +73,53 @@ def test_dedupe_drops_axe_duplicates() -> None:
     assert rules == ["content/image-alt", "content/missing-title"]
 
 
+def test_dedupe_drops_axe_document_duplicates_by_url() -> None:
+    """Проверки уровня документа без сниппета сопоставляются по URL страницы.
+
+    Регресс-тест: html-has-lang (сниппет <html>) и наш content/missing-lang
+    (сниппета нет) на varkacoffee.by давали 20+20 — один дефект дважды.
+    """
+    from webscope.models import Finding, Severity
+    from webscope.scanner import _dedupe_findings
+
+    own = Finding(
+        rule="content/missing-lang",
+        severity=Severity.SERIOUS,
+        title="Нет атрибута lang",
+        message="",
+        url="https://example.com/menu",
+        source="webscope.content",
+    )
+    axe = Finding(
+        rule="html-has-lang",
+        severity=Severity.CRITICAL,
+        title="html element must have a lang",
+        message="",
+        url="https://example.com/menu",
+        selector="html",
+        snippet="<html>",
+        source="webscope.a11y",
+    )
+    other_page = Finding(
+        rule="html-has-lang",
+        severity=Severity.CRITICAL,
+        title="html element must have a lang",
+        message="",
+        url="https://example.com/about",
+        selector="html",
+        snippet="<html>",
+        source="webscope.a11y",
+    )
+
+    deduped = _dedupe_findings([own, axe, other_page])
+    rules = [(f.rule, f.url) for f in deduped]
+    # Дубль на той же странице убран, другая страница axe — осталась.
+    assert rules == [
+        ("content/missing-lang", "https://example.com/menu"),
+        ("html-has-lang", "https://example.com/about"),
+    ]
+
+
 def test_dedupe_keeps_axe_rule_without_own_equivalent() -> None:
     from webscope.models import Finding, Severity
     from webscope.scanner import _dedupe_findings
