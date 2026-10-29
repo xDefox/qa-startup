@@ -38,7 +38,9 @@ HTML = """<!doctype html>
 @pytest.fixture()
 def local_site(tmp_path: Path):
     (tmp_path / "index.html").write_text(HTML, encoding="utf-8")
-    (tmp_path / "frame.html").write_text("<!doctype html><html lang='ru'><title>frame</title><h1>f</h1></html>", encoding="utf-8")
+    (tmp_path / "frame.html").write_text(
+        "<!doctype html><html lang='ru'><title>frame</title><h1>f</h1></html>", encoding="utf-8"
+    )
     handler = partial(SimpleHTTPRequestHandler, directory=str(tmp_path))
     handler.log_message = lambda *args, **kwargs: None  # type: ignore[method-assign]
     with socket.socket() as sock:

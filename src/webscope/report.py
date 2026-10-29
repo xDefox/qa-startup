@@ -394,9 +394,7 @@ def render_plain(result: ScanResult) -> str:
     if external_groups:
         lines.append(f"ЗАМЕЧАНИЯ СКАНИРОВАНИЯ, НЕ ДЕФЕКТЫ САЙТА ({len(external_groups)} правил)")
         total = sum(group["count"] for group in external_groups)
-        lines.append(
-            f"  Это ошибки и блокировки на чужих доменах (счётчики, карты, реклама, SDK) — {total} шт."
-        )
+        lines.append(f"  Это ошибки и блокировки на чужих доменах (счётчики, карты, реклама, SDK) — {total} шт.")
         lines.append("  Исправлять на своём сайте нечего; на балл они не влияют.")
         for group in external_groups:
             rep = group.get("representative")

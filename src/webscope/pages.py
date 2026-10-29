@@ -50,7 +50,16 @@ def redirect_note(requested: str | None, final: str | None) -> str | None:
 
 
 _ASSET_SUFFIXES = (
-    ".html", ".htm", ".xhtml", ".asp", ".aspx", ".php", ".jsp", ".md", ".txt", ".xml",
+    ".html",
+    ".htm",
+    ".xhtml",
+    ".asp",
+    ".aspx",
+    ".php",
+    ".jsp",
+    ".md",
+    ".txt",
+    ".xml",
 )
 
 
