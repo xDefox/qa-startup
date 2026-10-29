@@ -87,6 +87,8 @@ def render_text(result: ScanResult) -> str:
         + f"critical={summary['critical']} serious={summary['serious']} "
         + f"moderate={summary['moderate']} minor={summary['minor']} total={summary['total']}"
     )
+    if summary.get("external"):
+        lines.append(f"в виджетах: {summary['external']} (чужие домены — не дефект сайта)")
 
     if not result.findings:
         lines.append("")
@@ -272,9 +274,10 @@ WCAG и не являются юридическим заключением о �
 
 def render_plain(result: ScanResult) -> str:
     """Отчёт для владельца сайта: без терминов, с баллом и планом действий."""
-    from .scoring import compute_score, group_by_rule, plain_impact, score_label, top_actions
+    from .scoring import compute_score, group_by_rule, is_site_defect, plain_impact, score_label, top_actions
 
     score = compute_score(result.findings)
+    own = [finding for finding in result.findings if is_site_defect(finding)]
     lines: list[str] = []
 
     fu = result.final_url or result.url
@@ -287,11 +290,11 @@ def render_plain(result: ScanResult) -> str:
         lines.append(f"Примечание: {note}")
     lines.append("")
 
-    if not result.findings:
+    if not own:
         lines.append("Серьёзных проблем не найдено. Сайт в порядке.")
         return "\n".join(lines)
 
-    actions = top_actions(result.findings, limit=3)
+    actions = top_actions(own, limit=3)
     if actions:
         lines.append("ЧТО СДЕЛАТЬ В ПЕРВУЮ ОЧЕРЕДЬ")
         for index, finding in enumerate(actions, start=1):
@@ -302,7 +305,7 @@ def render_plain(result: ScanResult) -> str:
                 lines.append(f"     Страница: {finding.url}")
         lines.append("")
 
-    blockers = group_by_rule([f for f in result.findings if f.rule == "interaction/button-blocked"])
+    blockers = group_by_rule([f for f in own if f.rule == "interaction/button-blocked"])
     if blockers:
         lines.append("БЛОКИРУЕТ КЛИКИ — нельзя нажать кнопку/ссылку (критично)")
         for group in blockers:
@@ -344,7 +347,7 @@ def render_plain(result: ScanResult) -> str:
         items = group_by_rule(
             [
                 finding
-                for finding in result.findings
+                for finding in own
                 if finding.severity.value == key and finding.rule != "interaction/button-blocked"
             ]
         )
@@ -385,6 +388,24 @@ def render_plain(result: ScanResult) -> str:
                     loc = rep.details.get("location") or rep.details.get("location_url") or rep.details.get("resource")
                     if loc and loc not in str(rep.message):
                         lines.append(f"    Источник/ресурс: {loc}")
+        lines.append("")
+
+    external_groups = group_by_rule([f for f in result.findings if not is_site_defect(f)])
+    if external_groups:
+        lines.append(f"ЗАМЕЧАНИЯ СКАНИРОВАНИЯ, НЕ ДЕФЕКТЫ САЙТА ({len(external_groups)} правил)")
+        total = sum(group["count"] for group in external_groups)
+        lines.append(
+            f"  Это ошибки и блокировки на чужих доменах (счётчики, карты, реклама, SDK) — {total} шт."
+        )
+        lines.append("  Исправлять на своём сайте нечего; на балл они не влияют.")
+        for group in external_groups:
+            rep = group.get("representative")
+            host = ""
+            details = getattr(rep, "details", None) or {}
+            source = details.get("location_url") or details.get("resource") or details.get("location") or ""
+            if source:
+                host = source.split("//", 1)[-1].split("/", 1)[0]
+            lines.append(f"  • {group['title']}: {group['count']}" + (f" (например, {host})" if host else ""))
         lines.append("")
 
     lines.append(

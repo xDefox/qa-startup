@@ -302,6 +302,12 @@ _AXE_IMPACT: dict[str, tuple[str, str]] = {
 }
 
 
+def is_site_defect(finding: Finding) -> bool:
+    """Дефект самого сайта? Ошибки чужих виджетов (трекеры, карты, SDK) — нет."""
+    owner = (finding.details or {}).get("owner")
+    return owner in (None, "", "site")
+
+
 def compute_score(findings: list[Finding]) -> int:
     """Итоговый балл «здоровья» сайта: 0–100.
 
@@ -309,11 +315,12 @@ def compute_score(findings: list[Finding]) -> int:
     дефект повторяется на 30 страницах каталога, это одна проблема, а не тридцать.
     Иначе балл скачет в зависимости от размера сайта и перестаёт быть понятным.
     """
-    if not findings:
+    own = [finding for finding in findings if is_site_defect(finding)]
+    if not own:
         return 100
 
     worst: dict[str, Severity] = {}
-    for finding in findings:
+    for finding in own:
         current = worst.get(finding.rule)
         if current is None or finding.severity.rank < current.rank:
             worst[finding.rule] = finding.severity

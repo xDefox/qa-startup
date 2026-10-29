@@ -2,14 +2,23 @@
 
 Это самый «честный» сигнал о поломках: если фронтенд падает с TypeError — это
 видно в консоли, но часто не видно ни в одном отчёте.
+
+Но в консоль пишут и чужие виджеты: карты, счётчики, SDK рекламы. Их ошибки —
+не дефект проверяемого сайта, поэтому находки с чужого домена помечаются
+``details.owner != "site"`` и не считаются проблемами сайта в отчёте и балле.
 """
 
 from __future__ import annotations
 
 from ..context import ScanContext
 from ..models import Finding, Severity
+from ..origins import resource_owner
 
 _MAX_PER_KIND = 10
+
+
+def _owner(resource_url: str | None, page_url: str) -> str:
+    return resource_owner(resource_url or "", page_url)
 
 
 def run(page: object, ctx: ScanContext) -> list[Finding]:
@@ -26,10 +35,12 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
 
     for message in errors[:_MAX_PER_KIND]:
         text = message.get("text", "") or ""
-        loc = message.get("location", "") or ""
-        details = {"location": loc}
-        if loc:
-            details["location_url"] = loc
+        location_url = message.get("location_url") or ""
+        owner = _owner(location_url, url)
+        details: dict[str, object] = {"location": location_url or message.get("location", "") or ""}
+        if location_url:
+            details["location_url"] = location_url
+        details["owner"] = owner
         findings.append(
             Finding(
                 rule="console/error",
@@ -59,6 +70,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
         res_url = request.get("url", "") or ""
         method = request.get("method", "GET") or "GET"
         failure = request.get("failure")
+        owner = _owner(res_url, url)
         if status is None:
             severity, title = Severity.MODERATE, "Сетевой запрос не завершился"
             msg = f"{method} {res_url}"
@@ -78,7 +90,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
                 message=msg,
                 url=url,
                 source="webscope.console",
-                details={"status": status, "resource": res_url},
+                details={"status": status, "resource": res_url, "owner": owner},
             )
         )
 

@@ -92,10 +92,20 @@ class ScanResult:
 
     @property
     def summary(self) -> dict[str, int]:
+        """Счётчики по серьёзности. ``external`` — находки в чужих виджетах.
+
+        Ошибки сторонних доменов (счётчики, карты, реклама) не дефект сайта:
+        они считаются отдельно и не входят в ``total`` проблем сайта.
+        """
         counts = {severity.value: 0 for severity in Severity}
+        external = 0
         for finding in self.findings:
+            if (finding.details or {}).get("owner") not in (None, "", "site"):
+                external += 1
+                continue
             counts[finding.severity.value] += 1
-        counts["total"] = len(self.findings)
+        counts["total"] = sum(counts[severity.value] for severity in Severity)
+        counts["external"] = external
         return counts
 
     @property

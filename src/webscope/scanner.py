@@ -219,11 +219,13 @@ def _scan_page(
     failed_requests: list[dict] = []
 
     def on_console(message) -> None:
-        try:
-            location = str(message.location)
-        except Exception:  # noqa: BLE001
-            location = ""
-        console_messages.append({"type": message.type, "text": message.text, "location": location})
+        # message.location — объект Playwright; str() от него даёт Python-repr
+        # вида "{'url': ...}", поэтому URL берём из атрибута.
+        location = getattr(message, "location", None) or {}
+        location_url = location.get("url", "") if isinstance(location, dict) else ""
+        console_messages.append(
+            {"type": message.type, "text": message.text, "location": location_url, "location_url": location_url}
+        )
 
     def on_request_failed(request) -> None:
         failure = getattr(request, "failure", None)

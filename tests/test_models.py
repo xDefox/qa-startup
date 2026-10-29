@@ -31,7 +31,24 @@ def test_summary_counts_findings() -> None:
         ],
     )
     summary = result.summary
-    assert summary == {"critical": 1, "serious": 0, "moderate": 0, "minor": 2, "total": 3}
+    assert summary == {"critical": 1, "serious": 0, "moderate": 0, "minor": 2, "total": 3, "external": 0}
+
+
+def test_summary_splits_external_widget_findings() -> None:
+    """Ошибки чужих доменов — не проблемы сайта: отдельный счётчик, не в total."""
+    own = _finding("a", Severity.SERIOUS)
+    external = Finding(
+        rule="console/failed-request",
+        severity=Severity.SERIOUS,
+        title="Ресурс не загрузился",
+        message="",
+        url="https://example.com",
+        details={"resource": "https://mdd.yandex.net/", "owner": "third-party"},
+    )
+    summary = ScanResult(url="https://example.com", findings=[own, external]).summary
+    assert summary["serious"] == 1
+    assert summary["total"] == 1
+    assert summary["external"] == 1
 
 
 def test_sort_findings_by_severity_then_rule() -> None:
