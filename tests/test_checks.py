@@ -85,6 +85,13 @@ BLOCKED_HTML = """
     <a id="hidden-slide" href="#hidden" style="background-image:url(/under.jpg)"></a>
     <div class="over"></div>
   </div>
+
+  <div style="position: relative; width: 300px; height: 120px; margin-top: 40px;">
+    <div class="tn-bg" style="position: absolute; inset: 0; z-index: 1;
+         background-image: url(/photo.jpg);"></div>
+    <a id="tilda-wrapper" class="tn-atom" href="#menu"
+       style="position: absolute; inset: 0; z-index: 2; background: none;"></a>
+  </div>
 </body>
 </html>
 """
@@ -198,6 +205,9 @@ def test_interaction_flags_only_real_blockers(browser) -> None:
     # Ложные срабатывания — не должны найтись.
     assert not any("#same-href" in s for s in selectors), f"FP: сквозная ссылка: {selectors}"
     assert not any("#hidden-slide" in s for s in selectors), f"FP: невидимый слайд: {selectors}"
+    # Tilda: прозрачная интерактивная обёртка поверх фоновой картинки — клик
+    # доезжает до ссылки, это не перекрытие (FP с varkacoffee.by).
+    assert not any("#tilda-wrapper" in s for s in selectors), f"FP: прозрачная обёртка Tilda: {selectors}"
 
 
 def test_content_accepts_names_from_content(browser) -> None:

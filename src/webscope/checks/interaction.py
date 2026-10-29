@@ -30,6 +30,23 @@ COLLECT = r"""
     && outer.right >= inner.right - 2 && outer.bottom >= inner.bottom - 2
   );
 
+  // Прозрачная интерактивная обёртка (Tilda: <a class="tn-atom"> с нулевым
+  // фоном поверх фоновой картинки-«атома») — клик доезжает до ссылки:
+  // элементFromPoint её и возвращает. Это не перекрытие.
+  const wrapperTransparent = (hit) => {
+    const s = getComputedStyle(hit);
+    const m = (s.backgroundColor || '').match(/rgba?\(([^)]+)\)/);
+    let alpha = 1;
+    if (m) {
+      const parts = m[1].split(',');
+      alpha = parts.length > 3 ? parseFloat(parts[3]) : 1;
+    }
+    return alpha < 0.05 && (!s.backgroundImage || s.backgroundImage === 'none');
+  };
+
+  const interactive = (node) => node && node.matches
+    && node.matches('a[href], button, [role="button"], input[type="submit"], input[type="button"]');
+
   const sameHrefReachable = (hit, target) => {
     if (!target) return false;
     // Блокер сам ссылка с той же целью.
@@ -73,6 +90,9 @@ COLLECT = r"""
       if (topEl && topEl !== el && !el.contains(topEl)) {
         if (sameHrefReachable(topEl, el.href || '')) {
           // Клик доходит до ссылки с той же целью — кнопка работает.
+          blocked = false;
+        } else if (interactive(topEl) && wrapperTransparent(topEl)) {
+          // Клик получает сама интерактивная обёртка — кнопка работает.
           blocked = false;
         } else if (opaque(topEl) && covers(topEl.getBoundingClientRect(), rect)) {
           // Элемент целиком скрыт непрозрачным слоем (неактивный слайд,
