@@ -146,7 +146,10 @@ def _capture_evidence(page, findings: list[Finding], ctx: ScanContext) -> None:
 # Значение — список: одна axe-права может закрываться разными нашими правилами
 # (пустая кнопка ловится в контенте, а кнопка формы — в forms).
 _AXE_EQUIVALENTS = {
-    "image-alt": ["content/image-alt"],
+    # Ссылка/картинка внутри ссылки: axe image-alt и link-name ловят тот же
+    # дефект, что наш content/empty-link-name — один <a><img без alt></a> давал
+    # три находки. Оставляем нашу (у неё понятная формулировка про ссылку).
+    "image-alt": ["content/image-alt", "content/empty-link-name"],
     "button-name": ["content/empty-button-name", "forms/submit-without-accessible-name"],
     "link-name": ["content/empty-link-name"],
     # У axe правило называется frame-title, у нас — content/frame-title.

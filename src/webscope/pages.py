@@ -49,9 +49,34 @@ def redirect_note(requested: str | None, final: str | None) -> str | None:
     return None
 
 
+_ASSET_SUFFIXES = (
+    ".html", ".htm", ".xhtml", ".asp", ".aspx", ".php", ".jsp", ".md", ".txt", ".xml",
+)
+
+
+def not_a_page_note(final: str | None) -> str | None:
+    """Адрес выглядит как файл, а не как страница сайта.
+
+    Сканер всё равно строит отчёт, но владельцу важно понимать, почему балл
+    низкий: у текстового/скачанного файла не бывает ни title, ни заголовков.
+    """
+    if not final:
+        return None
+    path = (urlparse(final).path or "").lower()
+    if path.endswith(_ASSET_SUFFIXES):
+        return (
+            "Проверен файл, а не страница сайта: у него нет title, структуры и меню, "
+            "поэтому часть находок — ожидаемые. Для оценки сайта укажите адрес его страницы."
+        )
+    return None
+
+
 def page_notes(requested: str | None, final: str | None) -> list[str]:
     """Все пояснения о том, что реально было проверено."""
     notes: list[str] = []
+    not_page = not_a_page_note(final)
+    if not_page:
+        notes.append(not_page)
     redirected = redirect_note(requested, final)
     if redirected:
         notes.append(redirected)
