@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from urllib.parse import urlparse
 
+import httpx
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
@@ -19,10 +20,10 @@ from .archetype import detect_archetype
 from .checks import DEFAULT_CHECKS, REGISTRY
 from .checks.js import JS_UTILS
 from .context import ScanContext
-from .crawler import CrawlResult, PageTarget, crawl, representative_pages, squash_ws
+from .crawler import CrawlResult, PageTarget, crawl, fetch_robots, representative_pages, squash_ws
 from .diagnostics import diagnose_http_error, diagnose_navigation_error
 from .models import AuthCredentials, Finding, ScanResult, Severity, sort_findings
-from .netguard import is_forbidden_address, url_targets_private_network
+from .netguard import GuardedTransport, is_forbidden_address, url_targets_private_network
 from .pages import page_notes
 
 # Системные Chromium-ы — фолбэк, если playwright install chromium не выполнен.
@@ -86,6 +87,43 @@ class TimeBudget:
         if self._deadline is None:
             return None
         return max(0.0, self._deadline - time.monotonic())
+
+
+def robots_block_reason(
+    url: str,
+    *,
+    allow_private: bool,
+    user_agent: str,
+    headers: dict[str, str] | None = None,
+) -> str | None:
+    """Почему robots.txt запрещает обход страницы (None — можно сканировать).
+
+    Одиночный ``scan`` robots.txt не смотрел вовсе: ``webscope scan`` проходил
+    по странице, которую владелец закрыл от роботов, хотя ``crawl`` это правило
+    уважает — движок противоречил сам себе. Ошибки сети и 404 означают
+    «robots.txt нет», а не «запрещено».
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    try:
+        with httpx.Client(
+            timeout=httpx.Timeout(5.0, connect=3.0),
+            follow_redirects=True,
+            headers={"User-Agent": user_agent, **(headers or {})},
+            transport=GuardedTransport(allow_private=allow_private),
+        ) as client:
+            parser = fetch_robots(client, origin)
+    except httpx.HTTPError:
+        return None
+    if parser is None or parser.can_fetch(user_agent, url):
+        return None
+    return (
+        f"robots.txt запрещает обход: страница {url} закрыта от роботов. "
+        "Сканируйте только сайты, на которые у вас есть право проверки, "
+        "или запустите с --ignore-robots."
+    )
 
 
 def _timeout_finding(url: str, scanned: int, total: int, seconds: float | None) -> Finding:
@@ -627,13 +665,24 @@ def scan(
     allow_private: bool = False,
     user_agent: str = DEFAULT_UA,
     auth: AuthCredentials | None = None,
+    respect_robots: bool = True,
 ) -> ScanResult:
     """Сканирует одну страницу и возвращает результат.
 
     ``auth`` — вход на защищённый сайт: ``basic`` шлёт заголовок на каждый
     запрос, ``form`` сначала входит через форму (сессия живёт в контексте).
+    ``respect_robots`` — уважать ли robots.txt (как в обходе сайта).
     """
     validate_target(url, allow_private=allow_private)
+    if respect_robots:
+        blocked = robots_block_reason(
+            url,
+            allow_private=allow_private,
+            user_agent=user_agent,
+            headers=_basic_auth_headers(auth),
+        )
+        if blocked is not None:
+            raise ScanError(blocked)
     selected = _resolve_checks(checks)
     started = time.monotonic()
 

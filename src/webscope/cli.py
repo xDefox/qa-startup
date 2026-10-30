@@ -74,6 +74,9 @@ def build_parser() -> argparse.ArgumentParser:
     scan_cmd.add_argument("--timeout", type=int, default=30000, help="Таймаут загрузки страницы, мс")
     scan_cmd.add_argument("--max-link-checks", type=int, default=20, help="Сколько внутренних ссылок проверять")
     scan_cmd.add_argument("--allow-private", action="store_true", help="Разрешить локальные адреса (для своих стендов)")
+    scan_cmd.add_argument(
+        "--ignore-robots", action="store_true", help="Игнорировать robots.txt (только для своих стендов)"
+    )
     scan_cmd.add_argument("--headed", action="store_true", help="Показывать браузер (по умолчанию headless)")
     scan_cmd.add_argument("--fix-prompt", action="store_true", help="Вместо отчёта вывести ТЗ для coding-агента")
     add_auth_arguments(scan_cmd)
@@ -202,6 +205,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
             max_link_checks=args.max_link_checks,
             allow_private=args.allow_private,
             auth=_auth_from_args(args),
+            respect_robots=not args.ignore_robots,
         )
     except ScanError as exc:
         print(f"webscope: ошибка — {exc}", file=sys.stderr)

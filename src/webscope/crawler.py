@@ -204,7 +204,7 @@ def _origin(url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
-def _fetch_robots(client: httpx.Client, origin: str) -> RobotFileParser | None:
+def fetch_robots(client: httpx.Client, origin: str) -> RobotFileParser | None:
     parser = RobotFileParser()
     parser.set_url(f"{origin}/robots.txt")
     try:
@@ -280,7 +280,7 @@ def crawl(
         headers=merged_headers,
         transport=transport,
     ) as client:
-        robots = _fetch_robots(client, origin) if respect_robots else None
+        robots = fetch_robots(client, origin) if respect_robots else None
         result.robots_checked = robots is not None
 
         seeds: list[str] = []
