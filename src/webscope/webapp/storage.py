@@ -434,11 +434,17 @@ class Storage:
         return runs[0] if runs else None
 
     def latest_ok_run(self, site_id: int) -> Run | None:
-        """Последний успешный прогон — на нём строится отчёт."""
-        for run in self.list_runs(site_id, limit=20):
-            if run.status == "ok":
-                return run
-        return None
+        """Последний успешный прогон — на нём строится отчёт.
+
+        Запрос идёт по всей истории, а не по последним 20 строкам: после череды
+        неудачных прогонов (сайт лежал) отчёт исчезал из интерфейса, хотя он есть.
+        """
+        with self._conn() as connection:
+            row = connection.execute(
+                "SELECT * FROM runs WHERE site_id = ? AND status = 'ok' ORDER BY id DESC LIMIT 1",
+                (site_id,),
+            ).fetchone()
+        return _run_from_row(row) if row else None
 
     def count_running(self) -> int:
         """Сколько прогонов выполняется прямо сейчас (для ограничения нагрузки)."""
