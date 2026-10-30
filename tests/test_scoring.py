@@ -55,3 +55,22 @@ def test_top_actions_prefers_severity() -> None:
 def test_score_label() -> None:
     assert score_label(95) == "отлично"
     assert score_label(10) == "критично плохо"
+
+
+def test_diagnostic_findings_do_not_affect_score() -> None:
+    """«Проверена не вся ссылка» — сообщение сканера, а не дефект сайта.
+
+    Регресс: чистая страница с одним links/limit-reached получала 99 из 100.
+    """
+    findings = [_finding("links/limit-reached", Severity.MINOR)]
+    assert compute_score(findings) == 100
+    assert top_actions(findings) == []
+
+
+def test_diagnostic_findings_do_not_hide_real_problems() -> None:
+    findings = [
+        _finding("links/limit-reached", Severity.MINOR),
+        _finding("content/image-alt", Severity.SERIOUS),
+    ]
+    assert compute_score(findings) == 92
+    assert [finding.rule for finding in top_actions(findings)] == ["content/image-alt"]
