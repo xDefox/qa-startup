@@ -263,6 +263,13 @@ def cmd_serve(args: argparse.Namespace) -> int:
     )
 
     print(f"webscope: веб-интерфейс на http://{args.host}:{args.port}", file=sys.stderr)
+    if not os.environ.get("WEBSCOPE_AUTH_PASSWORD"):
+        print(
+            "webscope: ВНИМАНИЕ — вход не настроен, кабинет открыт всем, кто дотянется до порта. "
+            "Задайте WEBSCOPE_AUTH_PASSWORD (и при необходимости WEBSCOPE_AUTH_USER), "
+            "чтобы закрыть интерфейс паролем.",
+            file=sys.stderr,
+        )
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     return EXIT_OK
 

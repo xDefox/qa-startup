@@ -27,6 +27,20 @@ from ..models import Severity
 from ..report import render_html, render_json, render_junit, render_plain, render_sarif
 from ..scoring import plain_impact, score_label, top_actions
 from .alerts import notify
+from .auth import (
+    COOKIE_NAME,
+    SAFE_METHODS,
+    apply_headers,
+    auth_configured,
+    check_credentials,
+    cookie_kwargs,
+    csrf_safe,
+    is_authenticated,
+    is_public_path,
+    login_page,
+    session_token,
+    unauthorized_response,
+)
 from .scheduler import Monitor, ScanOptions, Scheduler, default_scanner
 from .storage import Run, Site, Storage
 
@@ -256,6 +270,7 @@ def create_app(
     )
     scheduler = Scheduler(monitor, storage, check_interval=check_interval)
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    templates.env.globals["auth_enabled"] = auth_configured()
     tasks: set[asyncio.Task] = set()
 
     def trigger(site: Site, background_tasks: BackgroundTasks | None = None) -> Run:
@@ -281,32 +296,54 @@ def create_app(
         await scheduler.stop()
         storage.close()
 
-    app = FastAPI(title="webscope", version=__version__, lifespan=lifespan)
+    app = FastAPI(title="webscope", version=__version__, lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.storage = storage
     app.state.monitor = monitor
     app.state.scheduler = scheduler
 
-    # --- авторизация разработчика ---
+    @app.middleware("http")
+    async def guard(request: Request, call_next):
+        """Вход и CSRF для всех маршрутов, кроме публичных.
+
+        Пока ``WEBSCOPE_AUTH_PASSWORD`` не задан, приложение работает как демо
+        (и `webscope serve` об этом предупреждает). Как только пароль задан,
+        без cookie не открывается ничего: ни страницы, ни API, ни отчёты.
+        """
+        if auth_configured() and not is_public_path(request.url.path):
+            if request.method not in SAFE_METHODS and not csrf_safe(request):
+                return PlainTextResponse("Запрос с чужого Origin отклонён", status_code=403)
+            if not is_authenticated(request):
+                return apply_headers(unauthorized_response(request))
+        response = await call_next(request)
+        return apply_headers(response)
+
+    # --- вход в интерфейс ---
     @app.get("/auth/login", response_class=HTMLResponse)
-    def auth_login_form(request: Request):
-        return templates.TemplateResponse(request, "auth.html", {"error": None})
+    def auth_login_form(request: Request, next: str = "/"):
+        if not auth_configured():
+            return RedirectResponse(url="/", status_code=303)
+        return login_page(request, templates)
 
     @app.post("/auth/login")
     def auth_login(
         request: Request,
         username: str = Form(""),
         password: str = Form(""),
+        next: str = Form("/"),
     ):
-        if username == "dev" and password == os.environ.get("WEBSCOPE_DEV_PASS", "dev"):
-            response = RedirectResponse(url="/sites", status_code=303)
-            response.set_cookie(key="webscope_session", value="auth", httponly=True)
+        if not auth_configured():
+            return RedirectResponse(url="/", status_code=303)
+        if check_credentials(username, password):
+            target = next if next.startswith("/") and not next.startswith("//") else "/"
+            response = RedirectResponse(url=target, status_code=303)
+            response.set_cookie(value=session_token(), **cookie_kwargs(request))
             return response
-        return templates.TemplateResponse(request, "auth.html", {"error": "Неверные данные"})
+        return login_page(request, templates, error="Неверные логин или пароль")
 
     @app.get("/auth/logout")
     def auth_logout():
         response = RedirectResponse(url="/", status_code=303)
-        response.delete_cookie("webscope_session")
+        response.delete_cookie(key=COOKIE_NAME)
         return response
 
     # --- страницы ---
@@ -642,6 +679,7 @@ def create_app(
         if last is None:
             raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
         from fastapi.responses import PlainTextResponse
+
         return PlainTextResponse(render_junit(_result_from_run(storage, last)), media_type="application/xml")
 
     try:

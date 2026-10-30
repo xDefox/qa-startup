@@ -80,8 +80,15 @@
   .top .logo a { color: var(--ink); text-decoration: none; }
   .top .logo a:hover { color: var(--ink); }
   .top .logo span { color: var(--accent); }
-  .top .theme-toggle {
+  .top-actions {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .top-actions .pill { font-size: 13px; }
+  .top .theme-toggle {
+    margin-left: 0;
     background: var(--card);
     color: var(--muted);
     border: 1px solid var(--line);
@@ -422,9 +429,14 @@
 <body>
 <header class="top">
   <div class="logo"><a href="/">webscope<span>.</span></a></div>
-  <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Сменить тему">
-    <span class="theme-icon" aria-hidden="true"></span>
-  </button>
+  <div class="top-actions">
+    {% if auth_enabled %}
+    <a class="pill" href="/auth/logout">Выйти</a>
+    {% endif %}
+    <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Сменить тему">
+      <span class="theme-icon" aria-hidden="true"></span>
+    </button>
+  </div>
 </header>
 <main>
   {% block content %}{% endblock %}
