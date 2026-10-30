@@ -21,8 +21,8 @@ from fastapi.testclient import TestClient
 from webscope.cli import _auth_from_args, build_parser
 from webscope.crawler import crawl
 from webscope.models import AuthCredentials, ScanResult
-from webscope.scanner import ScanError, scan, scan_site
-from webscope.webapp.app import create_app
+from webscope.scanner import ScanError, _absolute_login_url, scan, scan_site
+from webscope.webapp.app import _auth_fields, create_app
 from webscope.webapp.scheduler import CrawlOutcome, Monitor, ScanOptions
 from webscope.webapp.storage import Storage
 
@@ -41,6 +41,7 @@ FORM_PAGE = """<!doctype html>
   <form method="post" action="/login">
     <label>Логин <input type="text" name="user"></label>
     <label>Пароль <input type="password" name="password"></label>
+    <button type="button">Показать пароль</button>
     <button type="submit">Войти</button>
   </form>
 </body></html>"""
@@ -150,6 +151,24 @@ def form_server():
 def test_auth_credentials_rejects_unknown_kind() -> None:
     with pytest.raises(ValueError, match="Неизвестный тип авторизации"):
         AuthCredentials(kind="oauth", login="admin")
+
+
+def test_absolute_login_url_adds_missing_scheme() -> None:
+    """Адрес входа без схемы не должен ронять навигацию Playwright."""
+    assert _absolute_login_url(" auth.vstu.by/login ") == "https://auth.vstu.by/login"
+    assert _absolute_login_url("http://127.0.0.1:8000/wp-login.php") == "http://127.0.0.1:8000/wp-login.php"
+    assert _absolute_login_url("https://site.com/login") == "https://site.com/login"
+
+
+def test_auth_fields_adds_scheme_to_login_url() -> None:
+    fields = _auth_fields(
+        enabled="1",
+        kind="form",
+        login=LOGIN,
+        password=PASSWORD,
+        login_url="auth.site.com/login",
+    )
+    assert fields["auth_login_url"] == "https://auth.site.com/login"
 
 
 def test_storage_saves_auth_and_builds_credentials(tmp_path: Path) -> None:
@@ -336,7 +355,7 @@ def test_create_site_with_auth_stores_credentials(web) -> None:
     site = storage.list_sites()[0]
     assert site.has_auth
     assert site.auth_credentials() == AuthCredentials(
-        kind="form", login=LOGIN, password=PASSWORD, login_url="example.com/wp-admin"
+        kind="form", login=LOGIN, password=PASSWORD, login_url="https://example.com/wp-admin"
     )
 
 
@@ -362,6 +381,39 @@ def test_create_site_without_checkbox_stores_nothing(web) -> None:
     site = storage.list_sites()[0]
     assert not site.has_auth
     assert site.auth_credentials() is None
+
+
+def test_create_site_auth_updates_existing_site(web) -> None:
+    """Повторное оформление того же URL с галочкой дописывает креды в сайт.
+
+    Регресс: add_site существующую строку не трогает — из-за этого логин
+    и пароль молча терялись при повторной проверке уже известного сайта.
+    """
+    client, storage = web
+    client.post("/sites", data={"url": "example.com"}, follow_redirects=False)
+
+    response = client.post(
+        "/sites",
+        data={
+            "url": "example.com",
+            "auth_enabled": "1",
+            "auth_kind": "form",
+            "auth_login": LOGIN,
+            "auth_password": PASSWORD,
+            "auth_login_url": "example.com/wp-admin",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    site = storage.list_sites()[0]
+    assert site.has_auth
+    assert site.auth_credentials() == AuthCredentials(
+        kind="form", login=LOGIN, password=PASSWORD, login_url="https://example.com/wp-admin"
+    )
+
+    # перепроверка без галочки настроенный вход не чистит
+    client.post("/sites", data={"url": "example.com"}, follow_redirects=False)
+    assert storage.get_site(site.id).has_auth
 
 
 def test_settings_page_shows_auth_without_password(web) -> None:
@@ -504,3 +556,39 @@ def test_scan_site_form_login_flows_cookies(form_server: str) -> None:
     assert result.pages_scanned == 1
     assert result.title == "Личный кабинет"
     assert not crawl_result.skipped
+
+
+@pytest.mark.browser
+def test_scan_form_login_via_login_url_with_scheme(form_server: str) -> None:
+    """Явный адрес входа со схемой ведёт на страницу логина и входит."""
+    result = scan(
+        f"{form_server}/",
+        allow_private=True,
+        auth=AuthCredentials(kind="form", login=LOGIN, password=PASSWORD, login_url=f"{form_server}/login"),
+        timeout_ms=10_000,
+    )
+    assert result.title == "Личный кабинет"
+
+
+@pytest.mark.browser
+def test_scan_basic_auth_on_form_site_reports_login_page(form_server: str) -> None:
+    """Guard: сервер игнорирует basic и отдаёт форму входа — это ошибка, а не «ok»."""
+    with pytest.raises(ScanError, match="страницу входа вместо сайта"):
+        scan(
+            f"{form_server}/",
+            allow_private=True,
+            auth=AuthCredentials(kind="basic", login=LOGIN, password=PASSWORD),
+            timeout_ms=10_000,
+        )
+
+
+@pytest.mark.browser
+def test_scan_site_auth_failing_guard_fails_run(form_server: str) -> None:
+    """Каждая страница — логин: ни одной не просканировано, прогон падает."""
+    with pytest.raises(ScanError, match="страницу входа вместо сайта"):
+        scan_site(
+            f"{form_server}/",
+            allow_private=True,
+            auth=AuthCredentials(kind="basic", login=LOGIN, password=PASSWORD),
+            timeout_ms=10_000,
+        )

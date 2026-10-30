@@ -207,11 +207,14 @@ def _auth_fields(
         return {"auth_kind": None, "auth_login": None, "auth_password": None, "auth_login_url": None}
     if kind not in ("basic", "form"):
         kind = "basic"
+    login_url = login_url.strip()
+    if login_url and not login_url.startswith(("http://", "https://")):
+        login_url = f"https://{login_url}"  # пользователь часто пишет домен без схемы
     return {
         "auth_kind": kind,
         "auth_login": login,
         "auth_password": password or (previous_password or ""),
-        "auth_login_url": (login_url.strip() or None) if kind == "form" else None,
+        "auth_login_url": (login_url or None) if kind == "form" else None,
     }
 
 
@@ -340,19 +343,26 @@ def create_app(
                 status_code=400,
             )
 
+        auth = _auth_fields(
+            enabled=auth_enabled,
+            kind=auth_kind,
+            login=auth_login,
+            password=auth_password,
+            login_url=auth_login_url,
+        )
         site = storage.add_site(
             normalized,
             email=email.strip() or None,
             telegram_chat=telegram_chat.strip() or None,
             schedule=schedule if schedule in _SCHEDULE_LABELS else "off",
-            **_auth_fields(
-                enabled=auth_enabled,
-                kind=auth_kind,
-                login=auth_login,
-                password=auth_password,
-                login_url=auth_login_url,
-            ),
+            **auth,
         )
+        if auth["auth_kind"] is not None:
+            # URL мог быть уже известен, а add_site существующую строку не трогает:
+            # форма с галочкой — источник актуальных кредов, дописываем их.
+            # Галочка выключена — вход не трогаем, чтобы перепроверка без неё
+            # не чистила настроенные ранее креды.
+            storage.update_site(site.id, **auth)
         trigger(site, background_tasks)
         return RedirectResponse(url=f"/sites/{site.id}", status_code=303)
 

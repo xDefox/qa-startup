@@ -99,6 +99,17 @@ _USERNAME_INPUT = (
     'input[autocomplete="username"]:visible, input[name*="user" i]:visible, '
     'input[name*="login" i]:visible'
 )
+# Кнопка отправки: только реально сабмитящие. Прочие кнопки в форме («показать
+# пароль», «назад») бывают раньше в DOM и клик по ним ничего не отправляет.
+_SUBMIT_INPUT = 'button[type="submit"], input[type="submit"], button:not([type])'
+
+
+def _absolute_login_url(target: str) -> str:
+    """Адрес страницы входа: добавляет https://, если схема не указана."""
+    cleaned = target.strip()
+    if not cleaned.startswith(("http://", "https://")):
+        cleaned = f"https://{cleaned}"
+    return cleaned
 
 
 def _basic_auth_headers(auth: AuthCredentials | None) -> dict[str, str] | None:
@@ -107,6 +118,29 @@ def _basic_auth_headers(auth: AuthCredentials | None) -> dict[str, str] | None:
         return None
     token = base64.b64encode(f"{auth.login}:{auth.password}".encode()).decode()
     return {"Authorization": f"Basic {token}"}
+
+
+def _login_page_error(page, auth: AuthCredentials | None, url: str) -> ScanError | None:
+    """Страница входа вместо сайта — авторизация не подтвердилась.
+
+    Авторизация настроена, а на отсканированной странице видимое поле пароля —
+    сайт нас не пропустил: сервер игнорирует basic или сессия входа не
+    выставилась. Без этой проверки форма входа сканируется как обычная
+    страница — отчёт с мусором и статусом «ok».
+    """
+    if auth is None:
+        return None
+    try:
+        visible = page.locator(_PASSWORD_INPUT).count() > 0
+    except PlaywrightError:
+        return None
+    if not visible:
+        return None
+    if auth.kind == "basic":
+        hint = "сервер не защищает basic-паролем — в настройках сайта выберите тип «Форма входа»"
+    else:
+        hint = "вход не подтвердился — проверьте логин и пароль"
+    return ScanError(f"{url} открыл страницу входа вместо сайта: {hint}.")
 
 
 def _form_login(page, auth: AuthCredentials, *, start_url: str, timeout_ms: int) -> None:
@@ -118,7 +152,7 @@ def _form_login(page, auth: AuthCredentials, *, start_url: str, timeout_ms: int)
     спрятала форма. Неудача — поле осталось: кидаем ScanError с понятным
     текстом, он попадает в отчёт прогона.
     """
-    target = (auth.login_url or "").strip() or start_url
+    target = _absolute_login_url(auth.login_url) if (auth.login_url or "").strip() else start_url
     try:
         response = page.goto(target, wait_until="domcontentloaded", timeout=timeout_ms)
     except PlaywrightError as exc:
@@ -143,7 +177,9 @@ def _form_login(page, auth: AuthCredentials, *, start_url: str, timeout_ms: int)
         users.first.fill(auth.login)
     password_input.fill(auth.password)
 
-    buttons = scope.locator('button[type="submit"], input[type="submit"], button')
+    # Только реально сабмитящие кнопки: «показать пароль» (type=button) в DOM
+    # стоит раньше и клик по ним форму не отправляет.
+    buttons = scope.locator(_SUBMIT_INPUT)
     try:
         if buttons.count() > 0:
             buttons.first.click()
@@ -152,14 +188,22 @@ def _form_login(page, auth: AuthCredentials, *, start_url: str, timeout_ms: int)
     except PlaywrightError as exc:
         raise ScanError(f"Не удалось войти: не смогли отправить форму на {target} ({exc}).") from exc
 
-    # Ждём успеха: поле пароля исчезло. Если оно осталось — вход не принят.
+    # Ждём успеха: поле пароля исчезло и СТОЯЛО так два контрольных замера.
+    # Один замер ненадёжен: во время перезагрузки страница пуста, а кнопка
+    # «показать пароль» снимает type=password — был бы ложный «уход» без входа.
     deadline = time.monotonic() + min(10.0, max(3.0, timeout_ms / 1000))
+    gone_streak = 0
     while time.monotonic() < deadline:
         try:
-            if page.locator(_PASSWORD_INPUT).count() == 0:
-                return
+            settled = page.evaluate("document.readyState") in ("interactive", "complete")
+            if settled and page.locator(_PASSWORD_INPUT).count() == 0:
+                gone_streak += 1
+                if gone_streak >= 2:
+                    return
+            else:
+                gone_streak = 0
         except PlaywrightError:
-            pass  # страница перезагружается — проверим ещё раз
+            gone_streak = 0  # страница перезагружается — проверим ещё раз
         page.wait_for_timeout(250)
     raise ScanError(
         f"Не удалось войти на {target}: после отправки формы страница входа осталась — проверьте логин и пароль."
@@ -504,6 +548,9 @@ def scan(
                 evidence_dir=evidence_dir,
                 max_link_checks=max_link_checks,
             )
+            login_error = _login_page_error(page, auth, ctx.final_url or url)
+            if login_error is not None:
+                raise login_error
         finally:
             context.close()
             browser.close()
@@ -604,6 +651,10 @@ def scan_site(
                     )
                 except ScanError as exc:
                     crawl_result.skipped.append({"url": target.url, "reason": str(exc)})
+                    continue
+                login_error = _login_page_error(page, auth, ctx.final_url or target.url)
+                if login_error is not None:
+                    crawl_result.skipped.append({"url": target.url, "reason": str(login_error)})
                     continue
                 findings.extend(page_findings)
                 scanned += 1
