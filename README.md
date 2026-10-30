@@ -128,6 +128,10 @@ HttpOnly-cookie, пароль в ней не хранится.
 - отчёт на человеческом языке: оценка 0–100, «почему это важно», «что делать»;
 - история проверок: прошлый балл показывается «заклеенным» рядом с текущим,
   таблица находок с источником и ссылкой на документацию правила;
+- **«Скачать отчёт»** одной строкой кнопок: HTML (прочитать в браузере),
+  JSON (интеграции), TXT (терминал или письмо), JUnit XML (CI: Jenkins,
+  GitLab, pytest) и SARIF (GitHub Code Scanning). Файл приходит вложением
+  с именем вида `webscope-example.com-2026-10-30.json`;
 - **кабинет управления** (`/sites/{id}/settings`): email/Telegram для отчётов,
   расписание, удаление сайта с историей;
 - автоматические проверки по расписанию (день / неделя / месяц);
@@ -135,7 +139,8 @@ HttpOnly-cookie, пароль в ней не хранится.
   серьёзнее — на email (`SMTP_*`) и в Telegram (`TELEGRAM_BOT_TOKEN`).
 
 API (JSON) для интеграций: `/api/sites`, `/api/sites/{id}`, `/api/sites/{id}/runs`,
-`/api/sites/{id}/report.txt`, `POST /api/sites/{id}/scan`.
+`/api/sites/{id}/report.{html,json,txt,xml,sarif}` (`?download=1` — отдать файлом
+с `Content-Disposition: attachment`), `POST /api/sites/{id}/scan`.
 
 ## Проверки
 

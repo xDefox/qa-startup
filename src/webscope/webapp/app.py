@@ -7,9 +7,9 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
+import re
 import shutil
 import tempfile
 import uuid
@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -59,6 +59,31 @@ MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024
 MAX_UPLOAD_TOTAL_BYTES = 50 * 1024 * 1024
 # Сколько последних загрузок храним (остальные удаляются при новой загрузке).
 MAX_UPLOAD_JOBS = 50
+
+# Форматы отчёта: расширение в URL, MIME-тип и подпись для кнопки «скачать».
+REPORT_MEDIA_TYPES = {
+    "html": "text/html; charset=utf-8",
+    "json": "application/json",
+    "txt": "text/plain; charset=utf-8",
+    "xml": "application/xml",
+    "sarif": "application/sarif+json",
+}
+
+REPORT_RENDERERS = {
+    "html": render_html,
+    "json": render_json,
+    "txt": render_plain,
+    "xml": render_junit,
+    "sarif": render_sarif,
+}
+
+DOWNLOAD_FORMATS = (
+    {"ext": "html", "label": "HTML", "hint": "Открыть в браузере и сохранить"},
+    {"ext": "json", "label": "JSON", "hint": "Для интеграций и своего дашборда"},
+    {"ext": "txt", "label": "TXT", "hint": "Прочитать в терминале или письмом"},
+    {"ext": "xml", "label": "JUnit", "hint": "Для CI: Jenkins, GitLab, pytest"},
+    {"ext": "sarif", "label": "SARIF", "hint": "Для GitHub Code Scanning"},
+)
 
 BLOCKER_RULE = "interaction/button-blocked"
 
@@ -125,6 +150,21 @@ def normalize_url(url: str) -> str:
     if not ("." in host or host == "localhost" or ":" in host):
         raise ValueError("Похоже, это не адрес сайта")
     return cleaned
+
+
+def download_filename(site: Site, run: Run, ext: str) -> str:
+    """Имя файла отчёта: ASCII, без слэшей, двоеточий и юникода.
+
+    Имя уходит в заголовок ``Content-Disposition``; unicode-домены, порты
+    и IPv6 в нём превращаются в дефисы, иначе браузер сохранит файл
+    с странным именем или откажется его скачивать.
+    """
+    host = urlsplit(site.url).hostname or "site"
+    safe_host = re.sub(r"[^A-Za-z0-9.-]+", "-", host).strip("-.") or "site"
+    day = (run.started_at or "")[:10]
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) is None:
+        day = "report"
+    return f"webscope-{safe_host}-{day}.{ext}"
 
 
 def _prune_local_uploads(keep: int = MAX_UPLOAD_JOBS) -> None:
@@ -543,6 +583,7 @@ def create_app(
                 "pending": pending,
                 "last_error": last_error,
                 "schedule_label": _SCHEDULE_LABELS.get(site.schedule, site.schedule),
+                "download_formats": DOWNLOAD_FORMATS,
             },
         )
 
@@ -756,57 +797,44 @@ def create_app(
         trigger(site, background_tasks)
         return {"url": normalized, "site_id": site.id}
 
-    @app.get("/api/sites/{site_id}/report.txt", response_class=PlainTextResponse)
-    def api_report_text(site_id: int):
+    def report_payload(site_id: int, fmt: str) -> tuple[Site, Run, str]:
+        """Готовый отчёт: сайт, прогон и содержимое в нужном формате."""
         site = storage.get_site(site_id)
         if site is None:
             raise HTTPException(status_code=404, detail="Сайт не найден")
         last = storage.latest_ok_run(site.id)
         if last is None:
             raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
-        return render_plain(_result_from_run(storage, last))
+        return site, last, REPORT_RENDERERS[fmt](_result_from_run(storage, last))
+
+    def report_response(site_id: int, fmt: str, download: bool) -> Response:
+        """Отчёт для просмотра в браузере или файлом на скачивание."""
+        site, run, payload = report_payload(site_id, fmt)
+        headers: dict[str, str] = {}
+        if download:
+            headers["Content-Disposition"] = f'attachment; filename="{download_filename(site, run, fmt)}"'
+            headers["Cache-Control"] = "no-store"
+        return Response(content=payload, media_type=REPORT_MEDIA_TYPES[fmt], headers=headers)
+
+    @app.get("/api/sites/{site_id}/report.txt")
+    def api_report_text(site_id: int, download: bool = False):
+        return report_response(site_id, "txt", download)
 
     @app.get("/api/sites/{site_id}/report.json")
-    def api_report_json(site_id: int):
-        site = storage.get_site(site_id)
-        if site is None:
-            raise HTTPException(status_code=404, detail="Сайт не найден")
-        last = storage.latest_ok_run(site.id)
-        if last is None:
-            raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
-        return JSONResponse(render_json(_result_from_run(storage, last)))
+    def api_report_json(site_id: int, download: bool = False):
+        return report_response(site_id, "json", download)
 
-    @app.get("/api/sites/{site_id}/report.html", response_class=HTMLResponse)
-    def api_report_html(site_id: int):
-        site = storage.get_site(site_id)
-        if site is None:
-            raise HTTPException(status_code=404, detail="Сайт не найден")
-        last = storage.latest_ok_run(site.id)
-        if last is None:
-            raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
-        return render_html(_result_from_run(storage, last))
+    @app.get("/api/sites/{site_id}/report.html")
+    def api_report_html(site_id: int, download: bool = False):
+        return report_response(site_id, "html", download)
 
     @app.get("/api/sites/{site_id}/report.sarif")
-    def api_report_sarif(site_id: int):
-        site = storage.get_site(site_id)
-        if site is None:
-            raise HTTPException(status_code=404, detail="Сайт не найден")
-        last = storage.latest_ok_run(site.id)
-        if last is None:
-            raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
-        return JSONResponse(json.loads(render_sarif(_result_from_run(storage, last))))
+    def api_report_sarif(site_id: int, download: bool = False):
+        return report_response(site_id, "sarif", download)
 
     @app.get("/api/sites/{site_id}/report.xml")
-    def api_report_junit(site_id: int):
-        site = storage.get_site(site_id)
-        if site is None:
-            raise HTTPException(status_code=404, detail="Сайт не найден")
-        last = storage.latest_ok_run(site.id)
-        if last is None:
-            raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
-        from fastapi.responses import PlainTextResponse
-
-        return PlainTextResponse(render_junit(_result_from_run(storage, last)), media_type="application/xml")
+    def api_report_junit(site_id: int, download: bool = False):
+        return report_response(site_id, "xml", download)
 
     try:
         app.mount("/__local", _SandboxedLocalFiles(directory=str(_LOCAL_DIR), html=True), name="local_static")

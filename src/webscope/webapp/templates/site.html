@@ -53,6 +53,14 @@
       <a class="pill" href="/sites/{{ site.id }}/settings">Настройки</a>
     </div>
   </div>
+  {% if view %}
+  <div class="row download-row" aria-label="Скачать отчёт">
+    <span class="muted small">Скачать отчёт:</span>
+    {% for item in download_formats %}
+    <a class="pill" href="/api/sites/{{ site.id }}/report.{{ item.ext }}?download=1" download title="{{ item.hint }}" aria-label="Скачать отчёт в формате {{ item.label }}">{{ item.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
 </div>
 
 {% if view %}

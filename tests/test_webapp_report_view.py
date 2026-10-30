@@ -106,3 +106,61 @@ def test_all_report_formats_are_served(client) -> None:
         response = test_client.get(f"/api/sites/{site.id}/report.{fmt}")
         assert response.status_code == 200, fmt
     assert "runs" in test_client.get(f"/api/sites/{site.id}/report.sarif").json()
+
+
+@pytest.mark.parametrize("fmt", ["html", "json", "txt", "xml", "sarif"])
+def test_report_download_is_a_file(client, fmt: str) -> None:
+    """Кнопка «скачать» отдаёт файл, а не открывает отчёт в браузере."""
+    test_client, site = client
+    response = test_client.get(f"/api/sites/{site.id}/report.{fmt}?download=1")
+    assert response.status_code == 200
+    disposition = response.headers["content-disposition"]
+    assert disposition.startswith("attachment;")
+    assert 'filename="webscope-example.com-' in disposition
+    assert disposition.rstrip('"').endswith(f".{fmt}")
+    assert "no-store" in response.headers["cache-control"]
+
+
+@pytest.mark.parametrize("fmt", ["html", "json", "txt", "xml", "sarif"])
+def test_report_without_download_stays_inline(client, fmt: str) -> None:
+    """Обычный адрес по-прежнему показывает отчёт, ничего не навязывая скачивать."""
+    test_client, site = client
+    response = test_client.get(f"/api/sites/{site.id}/report.{fmt}")
+    assert response.status_code == 200
+    assert "content-disposition" not in response.headers
+
+
+def test_download_is_available_from_site_page(client) -> None:
+    test_client, site = client
+    page = test_client.get(f"/sites/{site.id}")
+    assert page.status_code == 200
+    assert "Скачать отчёт" in page.text
+    for fmt in ("html", "json", "txt", "xml", "sarif"):
+        assert f"/api/sites/{site.id}/report.{fmt}?download=1" in page.text
+
+
+def test_download_filename_is_ascii_and_safe(tmp_path: Path) -> None:
+    """Unicode-домены, порты и IPv6 не должны ломать имя файла."""
+    from webscope.webapp.app import download_filename
+    from webscope.webapp.storage import Storage
+
+    storage = Storage(tmp_path / "names.db")
+    site = storage.add_site("https://пример.рф:8443/")
+    run = storage.start_run(site.id)
+    for ext in ("html", "json", "txt", "xml", "sarif"):
+        name = download_filename(site, run, ext)
+        assert name.isascii()
+        assert name == f"webscope-site-{run.started_at[:10]}.{ext}"
+        assert ":" not in name and "/" not in name
+    storage.close()
+
+
+def test_download_filename_keeps_regular_host(tmp_path: Path) -> None:
+    from webscope.webapp.app import download_filename
+    from webscope.webapp.storage import Storage
+
+    storage = Storage(tmp_path / "plain.db")
+    site = storage.add_site("https://example.com/")
+    run = storage.start_run(site.id)
+    assert download_filename(site, run, "json") == f"webscope-example.com-{run.started_at[:10]}.json"
+    storage.close()

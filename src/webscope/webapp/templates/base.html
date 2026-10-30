@@ -179,6 +179,11 @@
   .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
   .row > * { flex: 1 1 180px; }
   .row > .actions { flex: 0 0 auto; }
+  /* Строка «скачать отчёт»: кнопки-форматы одной строкой, без растягивания. */
+  .download-row { margin-top: 16px; gap: 8px; align-items: center; }
+  .download-row > * { flex: 0 0 auto; }
+  .download-row .pill { border: 1px solid var(--line); background: transparent; }
+  .download-row .pill:hover { background: var(--bg); }
   .check-row {
     display: inline-flex;
     align-items: center;
