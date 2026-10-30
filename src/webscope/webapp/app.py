@@ -15,6 +15,7 @@ import tempfile
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -165,6 +166,16 @@ def download_filename(site: Site, run: Run, ext: str) -> str:
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) is None:
         day = "report"
     return f"webscope-{safe_host}-{day}.{ext}"
+
+
+def human_date(value: str | None) -> str | None:
+    """Дата прогона по-человечески: 2026-10-30T09:15:00+00:00 → 30.10.2026."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).strftime("%d.%m.%Y")
+    except ValueError:
+        return None
 
 
 def _prune_local_uploads(keep: int = MAX_UPLOAD_JOBS) -> None:
@@ -584,6 +595,8 @@ def create_app(
                 "last_error": last_error,
                 "schedule_label": _SCHEDULE_LABELS.get(site.schedule, site.schedule),
                 "download_formats": DOWNLOAD_FORMATS,
+                "download_sample": download_filename(site, last, "json") if last else None,
+                "download_date": human_date(last.started_at) if last else None,
             },
         )
 

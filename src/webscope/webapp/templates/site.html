@@ -123,20 +123,18 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 10h18"></path><path d="M9 10v10"></path></svg>
         </button>
       </span>
-      <details class="download-menu" id="download-menu">
-        <summary class="view-btn download-btn" title="Сохранить отчёт" aria-label="Сохранить отчёт">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
-        </summary>
-        <div class="download-menu-list" aria-label="Формат отчёта">
-          <div class="download-menu-title">Сохранить отчёт</div>
-          {% for item in download_formats %}
-          <a class="download-menu-item" href="/api/sites/{{ site.id }}/report.{{ item.ext }}?download=1" download>
-            <span class="download-ext">{{ item.label }}</span>
-            <span class="download-hint">{{ item.hint }}</span>
-          </a>
-          {% endfor %}
-        </div>
-      </details>
+      <button type="button" class="view-btn download-btn" id="download-open"
+              aria-label="Сохранить отчёт" title="Сохранить отчёт"
+              aria-haspopup="dialog" aria-controls="download-modal"
+              data-fallback="/api/sites/{{ site.id }}/report.html?download=1">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
+      </button>
+      <noscript>
+        <span class="muted small">Скачать:</span>
+        {% for item in download_formats %}
+        <a class="pill" href="/api/sites/{{ site.id }}/report.{{ item.ext }}?download=1" download>{{ item.label }}</a>
+        {% endfor %}
+      </noscript>
     </div>
 
     {% set columns = [
@@ -212,6 +210,33 @@
     {% endfor %}
     </div>
   </div>
+
+  <dialog class="download-modal" id="download-modal" aria-labelledby="download-modal-title">
+    <div class="download-modal-inner">
+      <div class="download-modal-head">
+        <div>
+          <h2 id="download-modal-title">Сохранить отчёт</h2>
+          <p class="muted small">{{ site.url }}{% if download_date %} · проверка от {{ download_date }}{% endif %}</p>
+        </div>
+        <button type="button" class="download-modal-close" data-download-close aria-label="Закрыть">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12"></path><path d="m18 6-12 12"></path></svg>
+        </button>
+      </div>
+      <p class="muted small">Тот же отчёт файлом — выберите формат.</p>
+      <div class="download-options">
+        {% for item in download_formats %}
+        <a class="download-option" href="/api/sites/{{ site.id }}/report.{{ item.ext }}?download=1" download>
+          <span class="download-option-top">
+            <span class="download-ext">{{ item.label }}</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
+          </span>
+          <span class="download-hint">{{ item.hint }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% if download_sample %}<p class="download-modal-foot">Имя файла: <code>{{ download_sample }}</code> — расширение зависит от формата.</p>{% endif %}
+    </div>
+  </dialog>
 {% elif not pending %}
 <div class="card">
   <h2>Отчёта пока нет</h2>
@@ -246,25 +271,31 @@
     });
   })();
 
-  // Меню форматов: элемент details умеет открываться сам, но не закрывается
-  // по клику мимо и по Esc — добавляем, иначе меню висит поверх отчёта.
+  // Модалка «Сохранить отчёт»: нативный dialog даёт ловушку фокуса,
+  // закрытие по Esc и инертный фон — без библиотек и без наезда на таблицу.
   (function () {
-    const menu = document.getElementById('download-menu');
-    if (!menu) return;
-    document.addEventListener('click', function (event) {
-      if (menu.open && !menu.contains(event.target)) menu.open = false;
+    const modal = document.getElementById('download-modal');
+    const opener = document.getElementById('download-open');
+    if (!modal || !opener) return;
+    if (typeof modal.showModal !== 'function') {
+      // Браузер без поддержки dialog: кнопка ведёт прямо на HTML-отчёт.
+      opener.addEventListener('click', function () {
+        window.location.href = opener.dataset.fallback;
+      });
+      return;
+    }
+    opener.addEventListener('click', function () { modal.showModal(); });
+    modal.querySelectorAll('[data-download-close]').forEach(function (btn) {
+      btn.addEventListener('click', function () { modal.close(); });
     });
-    document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape' && menu.open) {
-        menu.open = false;
-        const summary = menu.querySelector('summary');
-        if (summary) summary.focus();
-      }
+    // Подложка: клик мимо окна приходит на сам элемент dialog.
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal) modal.close();
     });
-    // Ссылка уводит на скачивание — меню не должно оставаться раскрытым
+    // Скачивание начинается — окно закрываем, чтобы оно не висело
     // при возврате «назад» из кеша браузера.
-    menu.querySelectorAll('a').forEach(function (link) {
-      link.addEventListener('click', function () { menu.open = false; });
+    modal.querySelectorAll('a[download]').forEach(function (link) {
+      link.addEventListener('click', function () { modal.close(); });
     });
   })();
 
