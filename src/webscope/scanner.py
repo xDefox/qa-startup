@@ -43,6 +43,67 @@ class ScanError(RuntimeError):
     """Ошибка, из-за которой сканирование невозможно."""
 
 
+# Общий лимит времени на прогон: таймаут страницы не спасает от «сайт медленный
+# целиком» — 30 страниц по 20 секунд это десять минут, и всё это время воркер
+# занят, а в интерфейсе висит «идёт проверка».
+DEFAULT_SCAN_TIMEOUT = 600.0
+
+
+def scan_timeout_seconds() -> float | None:
+    """Лимит времени прогона из ``WEBSCOPE_SCAN_TIMEOUT`` (0 — без лимита)."""
+    raw = (os.environ.get("WEBSCOPE_SCAN_TIMEOUT") or "").strip()
+    if not raw:
+        return DEFAULT_SCAN_TIMEOUT
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_SCAN_TIMEOUT
+    return value if value > 0 else None
+
+
+class TimeBudget:
+    """Сколько времени осталось на прогон.
+
+    Проверка бюджета идёт между страницами: убить уже запущенный браузерный
+    вызов нельзя, зато можно не начинать следующую страницу, если лимит вышел.
+    """
+
+    def __init__(self, seconds: float | None) -> None:
+        self.seconds = seconds
+        self._deadline = time.monotonic() + seconds if seconds and seconds > 0 else None
+
+    @property
+    def limited(self) -> bool:
+        """Задан ли общий лимит."""
+        return self._deadline is not None
+
+    def expired(self) -> bool:
+        """Вышел ли бюджет."""
+        return self._deadline is not None and time.monotonic() >= self._deadline
+
+    def remaining(self) -> float | None:
+        """Сколько секунд осталось (None — лимита нет)."""
+        if self._deadline is None:
+            return None
+        return max(0.0, self._deadline - time.monotonic())
+
+
+def _timeout_finding(url: str, scanned: int, total: int, seconds: float | None) -> Finding:
+    """Отчёт неполный из-за лимита времени — это про сканер, а не про сайт."""
+    limit = f"{seconds:.0f} с" if seconds else "лимит времени"
+    return Finding(
+        rule="scan/timeout",
+        severity=Severity.MINOR,
+        title="Проверка остановлена по лимиту времени",
+        message=(
+            f"Проверено {scanned} из {total} шаблонов: прогон вышел за {limit}. "
+            "Отчёт неполный — увеличьте WEBSCOPE_SCAN_TIMEOUT или уменьшите число страниц."
+        ),
+        url=url,
+        source="webscope.scanner",
+    )
+
+
 def validate_target(url: str, allow_private: bool = False) -> str:
     """Проверяет, что цель сканирования безопасна.
 
@@ -634,6 +695,7 @@ def scan_site(
     allow_private: bool = False,
     user_agent: str = DEFAULT_UA,
     auth: AuthCredentials | None = None,
+    time_budget_s: float | None = None,
 ) -> tuple[ScanResult, CrawlResult]:
     """Обходит сайт и сканирует по одной странице каждого шаблона.
 
@@ -648,6 +710,9 @@ def scan_site(
     validate_target(root_url, allow_private=allow_private)
     selected = _resolve_checks(checks)
     started = time.monotonic()
+    if time_budget_s is None:
+        time_budget_s = scan_timeout_seconds()
+    budget = TimeBudget(time_budget_s)
 
     auth_headers = _basic_auth_headers(auth)
     session_cookies: list[dict] | None = None
@@ -679,6 +744,7 @@ def scan_site(
     title = ""
     final_url = root_url
     scanned = 0
+    timed_out = False
 
     with sync_playwright() as playwright:
         browser = _launch_chromium(playwright, headless)
@@ -695,6 +761,9 @@ def scan_site(
         page = context.new_page()
         try:
             for target in targets:
+                if budget.expired():
+                    timed_out = True
+                    break
                 try:
                     page_findings, ctx = _scan_page(
                         page,
@@ -723,11 +792,22 @@ def scan_site(
             context.close()
             browser.close()
 
+    # Лимит времени вышел до первой страницы — отчёта нет вовсе, и «оценка 100»
+    # здесь была бы ложью: проверить не успели ничего.
+    if timed_out and scanned == 0:
+        raise ScanError(
+            f"Проверка вышла за лимит времени ({time_budget_s:.0f} с) до первой страницы — "
+            "увеличьте WEBSCOPE_SCAN_TIMEOUT или уменьшите число страниц"
+        )
+
     # Ни одна страница не открылась (например, сервер отверг учётные данные) —
     # это ошибка прогона, а не отчёт с нулём проблем и оценкой 100.
     if scanned == 0:
         reason = crawl_result.skipped[-1]["reason"] if crawl_result.skipped else "причина неизвестна"
         raise ScanError(f"Не удалось открыть ни одной страницы — {reason}")
+
+    if timed_out:
+        findings.append(_timeout_finding(root_url, scanned, len(targets), time_budget_s))
 
     duration_ms = int((time.monotonic() - started) * 1000)
     # Дубли title/description по шаблонам — проверка уровня сайта, а не страницы

@@ -38,6 +38,8 @@ class ScanOptions:
     max_link_checks: int = 10
     allow_private: bool = False
     checks: list[str] | None = None
+    # общий лимит времени прогона, секунд; None — взять из WEBSCOPE_SCAN_TIMEOUT
+    timeout_s: float | None = None
     # вход на защищённый сайт: подставляется из настроек сайта перед прогоном
     auth: AuthCredentials | None = None
 
@@ -66,6 +68,7 @@ def default_scanner(url: str, options: ScanOptions) -> CrawlOutcome:
         allow_private=allow_private,
         checks=options.checks,
         auth=options.auth,
+        time_budget_s=options.timeout_s,
     )
     return CrawlOutcome(
         result=result,

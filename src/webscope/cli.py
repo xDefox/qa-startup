@@ -112,6 +112,12 @@ def build_parser() -> argparse.ArgumentParser:
     crawl_cmd.add_argument("--fail-on", choices=("critical", "serious", "moderate", "minor", "none"), default="none")
     crawl_cmd.add_argument("--timeout", type=int, default=30000, help="Таймаут загрузки страницы, мс")
     crawl_cmd.add_argument("--allow-private", action="store_true", help="Разрешить локальные адреса")
+    crawl_cmd.add_argument(
+        "--time-budget",
+        type=float,
+        default=None,
+        help="Общий лимит времени прогона, секунд (0 — без лимита; по умолчанию WEBSCOPE_SCAN_TIMEOUT или 600)",
+    )
     add_auth_arguments(crawl_cmd)
 
     diff_cmd = sub.add_parser("diff", help="Сравнить два снимка (прошлый и текущий)")
@@ -305,6 +311,7 @@ def cmd_crawl(args: argparse.Namespace) -> int:
             timeout_ms=args.timeout,
             allow_private=args.allow_private,
             auth=_auth_from_args(args),
+            time_budget_s=args.time_budget,
         )
     except ScanError as exc:
         print(f"webscope: ошибка — {exc}", file=sys.stderr)

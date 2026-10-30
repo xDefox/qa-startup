@@ -230,3 +230,82 @@ def test_dedupe_drops_axe_frame_title_duplicate() -> None:
     )
 
     assert [f.rule for f in _dedupe_findings([own, axe])] == ["content/frame-title"]
+
+
+# --- бюджет времени прогона ---
+
+
+def test_time_budget_is_unlimited_when_not_set() -> None:
+    from webscope.scanner import TimeBudget
+
+    budget = TimeBudget(None)
+    assert budget.limited is False
+    assert budget.expired() is False
+    assert budget.remaining() is None
+
+
+def test_time_budget_zero_means_no_limit() -> None:
+    from webscope.scanner import TimeBudget
+
+    assert TimeBudget(0).limited is False
+
+
+def test_time_budget_expires() -> None:
+    import time
+
+    from webscope.scanner import TimeBudget
+
+    budget = TimeBudget(0.02)
+    assert budget.limited is True
+    assert budget.expired() is False
+    time.sleep(0.05)
+    assert budget.expired() is True
+    assert budget.remaining() == 0.0
+
+
+def test_time_budget_counts_down() -> None:
+    from webscope.scanner import TimeBudget
+
+    budget = TimeBudget(30)
+    remaining = budget.remaining()
+    assert remaining is not None
+    assert 0 < remaining <= 30
+
+
+def test_scan_timeout_comes_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from webscope.scanner import DEFAULT_SCAN_TIMEOUT, scan_timeout_seconds
+
+    monkeypatch.delenv("WEBSCOPE_SCAN_TIMEOUT", raising=False)
+    assert scan_timeout_seconds() == DEFAULT_SCAN_TIMEOUT
+    monkeypatch.setenv("WEBSCOPE_SCAN_TIMEOUT", "120")
+    assert scan_timeout_seconds() == 120
+    monkeypatch.setenv("WEBSCOPE_SCAN_TIMEOUT", "0")
+    assert scan_timeout_seconds() is None
+    monkeypatch.setenv("WEBSCOPE_SCAN_TIMEOUT", "-5")
+    assert scan_timeout_seconds() is None
+    # мусор в переменной не должен отключать защиту от «вечного» прогона
+    monkeypatch.setenv("WEBSCOPE_SCAN_TIMEOUT", "abc")
+    assert scan_timeout_seconds() == DEFAULT_SCAN_TIMEOUT
+
+
+def test_timeout_finding_is_diagnostic() -> None:
+    """Неполный отчёт — сообщение сканера, а не дефект сайта."""
+    from webscope.models import Severity
+    from webscope.scanner import _timeout_finding
+    from webscope.scoring import compute_score, is_diagnostic
+
+    finding = _timeout_finding("https://example.com/", 3, 10, 600)
+    assert finding.rule == "scan/timeout"
+    assert finding.severity is Severity.MINOR
+    assert "3 из 10" in finding.message
+    assert is_diagnostic(finding) is True
+    assert compute_score([finding]) == 100
+
+
+def test_scan_site_accepts_time_budget() -> None:
+    import inspect
+
+    from webscope.scanner import scan_site
+
+    parameters = inspect.signature(scan_site).parameters
+    assert parameters["time_budget_s"].default is None
