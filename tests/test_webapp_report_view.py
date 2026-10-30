@@ -68,9 +68,12 @@ def test_report_table_has_all_findings_and_three_categories(client) -> None:
     assert 'id="findings-table"' not in html
 
     # Переключатель — иконки без текста, в стиле кнопки темы.
+    # Рядом с ним такая же иконка «сохранить отчёт» (стрелка вниз).
     assert html.count('class="view-btn"') == 2
+    assert html.count('class="view-btn download-btn"') == 1
     assert "☰" not in html and "⊞" not in html
     assert 'aria-label="Списком"' in html and 'aria-label="Таблицей"' in html
+    assert 'aria-label="Сохранить отчёт"' in html
 
     # Все три категории присутствуют: мелочи, желательно и чужие виджеты.
     assert "Мелочи — на ваше усмотрение" in html
@@ -134,23 +137,40 @@ def test_download_is_available_from_site_page(client) -> None:
     test_client, site = client
     page = test_client.get(f"/sites/{site.id}")
     assert page.status_code == 200
-    assert 'class="card download-card"' in page.text
+    assert 'class="download-menu"' in page.text
     assert "Сохранить отчёт" in page.text
     for fmt in ("html", "json", "txt", "xml", "sarif"):
         assert f"/api/sites/{site.id}/report.{fmt}?download=1" in page.text
 
 
-def test_download_block_sits_after_the_report(client) -> None:
-    """Кнопки скачивания — в конце отчёта, а не рядом с «Проверить ещё раз».
+def test_download_menu_sits_next_to_view_toggle(client) -> None:
+    """Сохранение — в шапке находок, рядом с переключателем «списком/таблицей».
 
-    Сначала читают отчёт, потом сохраняют: в верхней карточке кнопки спорили
-    с главным действием страницы и отвлекали от него.
+    Один ряд иконок над находками: сначала «как показать», потом «сохранить».
+    Раньше кнопки форматов стояли в шапке страницы и спорили с «Проверить ещё раз»,
+    а отдельная карточка в конце заставляла листать весь отчёт.
     """
     test_client, site = client
     html = test_client.get(f"/sites/{site.id}").text
-    download = html.index('class="card download-card"')
-    assert download > html.index("Проверить ещё раз"), "блок скачивания должен быть ниже шапки"
-    assert download > html.index('class="findings-table"'), "и ниже таблицы находок"
+    head = html.index('class="findings-head"')
+    toggle = html.index('class="view-toggle"', head)
+    menu = html.index('class="download-menu"', head)
+    table = html.index('class="findings-table"', head)
+    assert head < toggle < menu < table, "меню форматов — в шапке, сразу за переключателем вида"
+    assert menu > html.index("Проверить ещё раз"), "и ниже шапки страницы"
+
+
+def test_download_menu_is_a_disclosure(client) -> None:
+    """Меню форматов — <details>/<summary>: раскрывается с клавиатуры без JS."""
+    test_client, site = client
+    html = test_client.get(f"/sites/{site.id}").text
+    start = html.index('class="download-menu"')
+    block = html[start : html.index("</details>", start)]
+    assert "<summary" in block
+    assert 'aria-label="Сохранить отчёт"' in block
+    assert block.count('class="download-menu-item"') == 5
+    for fmt in ("html", "json", "txt", "xml", "sarif"):
+        assert f"report.{fmt}?download=1" in block
 
 
 def test_download_block_hidden_without_report(client) -> None:
@@ -160,7 +180,7 @@ def test_download_block_hidden_without_report(client) -> None:
     response = test_client.post("/sites", data={"url": "https://fresh.example.com"}, follow_redirects=False)
     new_id = int(response.headers["location"].rsplit("/", 1)[-1])
     page = test_client.get(f"/sites/{new_id}").text
-    assert 'class="card download-card"' not in page
+    assert 'class="download-menu"' not in page
     assert "report." not in page
 
 

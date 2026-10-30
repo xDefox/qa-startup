@@ -110,8 +110,8 @@
   </div>
 
   <div class="card" style="position:relative;">
-    <h2 class="findings-head">
-      <span>Все находки ({{ view.total }})</span>
+    <div class="findings-head">
+      <h2 class="findings-title">Все находки ({{ view.total }})</h2>
       {% if view.has_external %}
       <span class="muted small" style="font-weight:400;">из них в чужих виджетах: {{ view.external_total }}</span>
       {% endif %}
@@ -123,7 +123,21 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 10h18"></path><path d="M9 10v10"></path></svg>
         </button>
       </span>
-    </h2>
+      <details class="download-menu" id="download-menu">
+        <summary class="view-btn download-btn" title="Сохранить отчёт" aria-label="Сохранить отчёт">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
+        </summary>
+        <div class="download-menu-list" aria-label="Формат отчёта">
+          <div class="download-menu-title">Сохранить отчёт</div>
+          {% for item in download_formats %}
+          <a class="download-menu-item" href="/api/sites/{{ site.id }}/report.{{ item.ext }}?download=1" download>
+            <span class="download-ext">{{ item.label }}</span>
+            <span class="download-hint">{{ item.hint }}</span>
+          </a>
+          {% endfor %}
+        </div>
+      </details>
+    </div>
 
     {% set columns = [
       ('rule', 'Правило'),
@@ -198,19 +212,6 @@
     {% endfor %}
     </div>
   </div>
-
-  <div class="card download-card">
-    <h2>Сохранить отчёт</h2>
-    <p class="muted small">
-      Тот же отчёт файлом: HTML — открыть и распечатать, JSON — для интеграций,
-      TXT — отправить письмом, JUnit — для CI, SARIF — для GitHub Code Scanning.
-    </p>
-    <div class="download-row" aria-label="Сохранить отчёт">
-      {% for item in download_formats %}
-      <a class="pill" href="/api/sites/{{ site.id }}/report.{{ item.ext }}?download=1" download title="{{ item.hint }}" aria-label="Сохранить отчёт в формате {{ item.label }}">{{ item.label }}</a>
-      {% endfor %}
-    </div>
-  </div>
 {% elif not pending %}
 <div class="card">
   <h2>Отчёта пока нет</h2>
@@ -242,6 +243,28 @@
         // Сеть мертва — откатываемся на обычную отправку, чтобы пользователь не завис.
         form.submit();
       }
+    });
+  })();
+
+  // Меню форматов: элемент details умеет открываться сам, но не закрывается
+  // по клику мимо и по Esc — добавляем, иначе меню висит поверх отчёта.
+  (function () {
+    const menu = document.getElementById('download-menu');
+    if (!menu) return;
+    document.addEventListener('click', function (event) {
+      if (menu.open && !menu.contains(event.target)) menu.open = false;
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && menu.open) {
+        menu.open = false;
+        const summary = menu.querySelector('summary');
+        if (summary) summary.focus();
+      }
+    });
+    // Ссылка уводит на скачивание — меню не должно оставаться раскрытым
+    // при возврате «назад» из кеша браузера.
+    menu.querySelectorAll('a').forEach(function (link) {
+      link.addEventListener('click', function () { menu.open = false; });
     });
   })();
 

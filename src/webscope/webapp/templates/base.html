@@ -179,12 +179,47 @@
   .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
   .row > * { flex: 1 1 180px; }
   .row > .actions { flex: 0 0 auto; }
-  /* Карточка со скачиванием: кнопки-форматы одной строкой, без растягивания. */
-  .download-card h2 { margin-bottom: 6px; }
-  .download-card p { margin-top: 0; }
-  .download-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
-  .download-row .pill { border: 1px solid var(--line); background: transparent; }
-  .download-row .pill:hover { background: var(--bg); }
+  /* Кнопка-стрелка «сохранить отчёт»: тот же вид, что у переключателя списка,
+     а форматы открываются меню под ней. */
+  .download-menu { position: relative; display: inline-flex; }
+  .download-btn { cursor: pointer; }
+  .download-menu > summary { list-style: none; }
+  .download-menu > summary::-webkit-details-marker { display: none; }
+  .download-menu > summary::marker { content: ""; }
+  .download-menu[open] > summary { color: var(--ink); border-color: var(--accent); }
+  .download-menu-list {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    z-index: 30;
+    width: 290px;
+    padding: 8px;
+    display: grid;
+    gap: 2px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 14px 40px -12px rgba(15, 23, 42, 0.35);
+  }
+  .download-menu-title {
+    padding: 6px 10px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .download-menu-item {
+    display: grid;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--ink);
+  }
+  .download-menu-item:hover, .download-menu-item:focus-visible { background: var(--bg); }
+  .download-ext { font-size: 14px; font-weight: 600; }
+  .download-hint { font-size: 12px; color: var(--muted); }
   .check-row {
     display: inline-flex;
     align-items: center;
@@ -280,7 +315,8 @@
 
   /* Все находки: таблица/список. Переключатель — иконки в стиле кнопки темы:
      без текста, тот же размер, тот же радиус, то же поведение при наведении. */
-  .findings-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .findings-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .findings-head h2 { margin: 0; }
   .view-toggle { margin-left: auto; display: inline-flex; gap: 6px; }
   .view-btn {
     background: var(--card);
