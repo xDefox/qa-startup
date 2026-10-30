@@ -107,7 +107,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
                     details={"type": control.get("type")},
                 )
 
-        if not control.get("name") and control.get("tag") != "select":
+        if not control.get("name"):
             add(
                 "forms/control-without-name",
                 Severity.MODERATE,

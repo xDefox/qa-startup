@@ -128,7 +128,8 @@ def _check_internal_links(candidates: list[dict], ctx: ScanContext) -> list[Find
             error: str | None = None
             try:
                 response = client.head(link["url"])
-                if response.status_code in (405, 501):
+                # Многие CDN отвечают 403/405 на HEAD, хотя GET отдаёт страницу.
+                if response.status_code in (403, 405, 501):
                     response = client.get(link["url"])
                 status = response.status_code
             except Exception as exc:  # noqa: BLE001 - сетевые ошибки не должны ронять скан
@@ -172,7 +173,7 @@ def _check_internal_links(candidates: list[dict], ctx: ScanContext) -> list[Find
             Finding(
                 rule="links/limit-reached",
                 severity=Severity.MINOR,
-                title="Проверена не часть внутренних ссылок",
+                title="Проверена только часть внутренних ссылок",
                 message=f"Проверено {limit} из {len(candidates)} внутренних ссылок (лимит скана).",
                 url=ctx.final_url,
                 source="webscope.links",

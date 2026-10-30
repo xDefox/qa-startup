@@ -54,6 +54,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
         )
 
     for message in warnings[:_MAX_PER_KIND]:
+        warning_url = message.get("location_url") or ""
         findings.append(
             Finding(
                 rule="console/warning",
@@ -62,6 +63,9 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
                 message=message.get("text", "")[:500],
                 url=url,
                 source="webscope.console",
+                # Как и у ошибок: предупреждение из чужого SDK — не дефект сайта.
+                # Без owner такие находки попадали в балл сайта.
+                details={"owner": _owner(warning_url, url), "location": warning_url},
             )
         )
 
