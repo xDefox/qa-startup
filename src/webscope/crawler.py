@@ -209,6 +209,16 @@ def _fetch_robots(client: httpx.Client, origin: str) -> RobotFileParser | None:
     parser.set_url(f"{origin}/robots.txt")
     try:
         response = client.get(f"{origin}/robots.txt")
+        if response.status_code == 403:
+            # RFC 9309: 403 — роботу отказано в доступе, считаем «запрещено всё».
+            # У RobotFileParser disallow_all — флаг, а не метод.
+            parser.disallow_all = True
+            return parser
+        if response.status_code == 401:
+            # 401 — это не политика обхода, а требование представиться. Скрипт
+            # умеет ходить под basic/form-авторизацией, поэтому не превращаем
+            # закрытый стенд в «пустой сайт»: страница сама сообщит про 401.
+            return None
         if response.status_code >= 400:
             return None
         parser.parse(response.text.splitlines())
@@ -325,7 +335,10 @@ def crawl(
         seeds = candidates or [root_url]
 
         visited: dict[str, PageTarget] = {}
-        queue: list[tuple[str, int]] = [(seed, 0) for seed in dict.fromkeys(seeds)]
+        # depth=0 — только стартовая страница: её HTML уже загружен. URL из
+        # sitemap обязаны скачиваться сами, иначе им достаётся title главной
+        # и проверка дублей по шаблонам даёт ложные срабатывания на всём сайте.
+        queue: list[tuple[str, int]] = [(seed, 0 if seed == root_url else 1) for seed in dict.fromkeys(seeds)]
 
         while queue and len(visited) < max_pages:
             url, depth = queue.pop(0)
