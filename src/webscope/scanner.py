@@ -418,6 +418,18 @@ def _scan_page(
             }
         )
 
+    def on_page_error(error) -> None:
+        # Необработанное исключение JS: TypeError/ReferenceError, которые не
+        # попадают в console.error. Именно они ломают интерактив на клиенте.
+        console_messages.append(
+            {
+                "type": "error",
+                "text": f"Uncaught: {error}",
+                "location": "",
+                "location_url": "",
+            }
+        )
+
     def on_response(response) -> None:
         if response.status >= 400:
             failed_requests.append(
@@ -430,6 +442,7 @@ def _scan_page(
             )
 
     page.on("console", on_console)
+    page.on("pageerror", on_page_error)
     page.on("requestfailed", on_request_failed)
     page.on("response", on_response)
 
@@ -476,6 +489,7 @@ def _scan_page(
         return findings, ctx
     finally:
         page.remove_listener("console", on_console)
+        page.remove_listener("pageerror", on_page_error)
         page.remove_listener("requestfailed", on_request_failed)
         page.remove_listener("response", on_response)
 
