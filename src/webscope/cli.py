@@ -263,6 +263,12 @@ def cmd_serve(args: argparse.Namespace) -> int:
     )
 
     print(f"webscope: веб-интерфейс на http://{args.host}:{args.port}", file=sys.stderr)
+    if not os.environ.get("WEBSCOPE_AUTH_KEY"):
+        print(
+            "webscope: пароли к защищённым сайтам хранятся без шифрования. "
+            "Задайте WEBSCOPE_AUTH_KEY (Fernet-ключ), чтобы шифровать их в базе.",
+            file=sys.stderr,
+        )
     if not os.environ.get("WEBSCOPE_AUTH_PASSWORD"):
         print(
             "webscope: ВНИМАНИЕ — вход не настроен, кабинет открыт всем, кто дотянется до порта. "
