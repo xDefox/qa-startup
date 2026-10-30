@@ -134,9 +134,34 @@ def test_download_is_available_from_site_page(client) -> None:
     test_client, site = client
     page = test_client.get(f"/sites/{site.id}")
     assert page.status_code == 200
-    assert "Скачать отчёт" in page.text
+    assert 'class="card download-card"' in page.text
+    assert "Сохранить отчёт" in page.text
     for fmt in ("html", "json", "txt", "xml", "sarif"):
         assert f"/api/sites/{site.id}/report.{fmt}?download=1" in page.text
+
+
+def test_download_block_sits_after_the_report(client) -> None:
+    """Кнопки скачивания — в конце отчёта, а не рядом с «Проверить ещё раз».
+
+    Сначала читают отчёт, потом сохраняют: в верхней карточке кнопки спорили
+    с главным действием страницы и отвлекали от него.
+    """
+    test_client, site = client
+    html = test_client.get(f"/sites/{site.id}").text
+    download = html.index('class="card download-card"')
+    assert download > html.index("Проверить ещё раз"), "блок скачивания должен быть ниже шапки"
+    assert download > html.index('class="findings-table"'), "и ниже таблицы находок"
+
+
+def test_download_block_hidden_without_report(client) -> None:
+    """Нет отчёта — нечего сохранять: ни кнопок, ни обещаний."""
+
+    test_client, _site = client
+    response = test_client.post("/sites", data={"url": "https://fresh.example.com"}, follow_redirects=False)
+    new_id = int(response.headers["location"].rsplit("/", 1)[-1])
+    page = test_client.get(f"/sites/{new_id}").text
+    assert 'class="card download-card"' not in page
+    assert "report." not in page
 
 
 def test_download_filename_is_ascii_and_safe(tmp_path: Path) -> None:

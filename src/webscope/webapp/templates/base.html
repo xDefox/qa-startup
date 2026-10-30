@@ -179,9 +179,10 @@
   .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
   .row > * { flex: 1 1 180px; }
   .row > .actions { flex: 0 0 auto; }
-  /* Строка «скачать отчёт»: кнопки-форматы одной строкой, без растягивания. */
-  .download-row { margin-top: 16px; gap: 8px; align-items: center; }
-  .download-row > * { flex: 0 0 auto; }
+  /* Карточка со скачиванием: кнопки-форматы одной строкой, без растягивания. */
+  .download-card h2 { margin-bottom: 6px; }
+  .download-card p { margin-top: 0; }
+  .download-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
   .download-row .pill { border: 1px solid var(--line); background: transparent; }
   .download-row .pill:hover { background: var(--bg); }
   .check-row {
