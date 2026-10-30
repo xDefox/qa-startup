@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 from . import __version__
-from .models import Severity, sort_findings
+from .models import AuthCredentials, Severity, sort_findings
 from .report import (
     build_fix_prompt,
     render_diff,
@@ -37,6 +38,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"webscope {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    def add_auth_arguments(cmd: argparse.ArgumentParser) -> None:
+        """Флаги входа на защищённый сайт (общие для scan и crawl)."""
+        cmd.add_argument("--login", default=None, help="Логин: если задан, перед проверкой войдём на сайт")
+        cmd.add_argument(
+            "--password",
+            default=None,
+            help="Пароль (если не задан — переменная окружения WEBSCOPE_PASSWORD)",
+        )
+        cmd.add_argument(
+            "--auth",
+            choices=("basic", "form"),
+            default="basic",
+            help="basic — пароль на весь сайт, form — вход через форму на странице",
+        )
+        cmd.add_argument("--login-url", default=None, help="Адрес страницы входа (для --auth form)")
+
     scan_cmd = sub.add_parser("scan", help="Просканировать страницу")
     scan_cmd.add_argument("url", help="URL проверяемой страницы")
     scan_cmd.add_argument(
@@ -59,6 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan_cmd.add_argument("--allow-private", action="store_true", help="Разрешить локальные адреса (для своих стендов)")
     scan_cmd.add_argument("--headed", action="store_true", help="Показывать браузер (по умолчанию headless)")
     scan_cmd.add_argument("--fix-prompt", action="store_true", help="Вместо отчёта вывести ТЗ для coding-агента")
+    add_auth_arguments(scan_cmd)
 
     mcp_cmd = sub.add_parser("mcp", help="Запустить MCP-сервер (stdio)")
     mcp_cmd.add_argument("--allow-private", action="store_true", help="Разрешить локальные адреса")
@@ -94,6 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
     crawl_cmd.add_argument("--fail-on", choices=("critical", "serious", "moderate", "minor", "none"), default="none")
     crawl_cmd.add_argument("--timeout", type=int, default=30000, help="Таймаут загрузки страницы, мс")
     crawl_cmd.add_argument("--allow-private", action="store_true", help="Разрешить локальные адреса")
+    add_auth_arguments(crawl_cmd)
 
     diff_cmd = sub.add_parser("diff", help="Сравнить два снимка (прошлый и текущий)")
     diff_cmd.add_argument("old", type=Path, help="Файл старого снимка (JSON)")
@@ -147,6 +166,19 @@ def _severity_threshold(name: str) -> int:
     return Severity(name).rank
 
 
+def _auth_from_args(args: argparse.Namespace) -> AuthCredentials | None:
+    """Собирает учётные данные из флагов (None — сайт открыт, вход не нужен)."""
+    if not getattr(args, "login", None):
+        return None
+    password = args.password if args.password is not None else os.environ.get("WEBSCOPE_PASSWORD", "")
+    return AuthCredentials(
+        kind=getattr(args, "auth", "basic"),
+        login=args.login,
+        password=password,
+        login_url=getattr(args, "login_url", None),
+    )
+
+
 def cmd_scan(args: argparse.Namespace) -> int:
     url = args.url
     if not url.startswith(("http://", "https://")):
@@ -163,6 +195,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
             evidence_dir=args.evidence_dir,
             max_link_checks=args.max_link_checks,
             allow_private=args.allow_private,
+            auth=_auth_from_args(args),
         )
     except ScanError as exc:
         print(f"webscope: ошибка — {exc}", file=sys.stderr)
@@ -258,6 +291,7 @@ def cmd_crawl(args: argparse.Namespace) -> int:
             checks=checks,
             timeout_ms=args.timeout,
             allow_private=args.allow_private,
+            auth=_auth_from_args(args),
         )
     except ScanError as exc:
         print(f"webscope: ошибка — {exc}", file=sys.stderr)

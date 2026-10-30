@@ -131,6 +131,28 @@ class ScanResult:
         }
 
 
+@dataclass(frozen=True)
+class AuthCredentials:
+    """Учётные данные для доступа к защищённому сайту.
+
+    Два механизма, которые закрывает одна галочка «нужна авторизация»:
+
+    - ``basic`` — пароль на весь сайт (nginx, .htaccess, staging): логин и пароль
+      шлются заголовком ``Authorization: Basic`` на каждый запрос;
+    - ``form`` — вход через форму на странице: движок открывает страницу входа,
+      заполняет поля и отправляет форму, сессия живёт в cookies браузера.
+    """
+
+    kind: str  # "basic" | "form"
+    login: str
+    password: str = ""
+    login_url: str | None = None  # страница входа для form (если пусто — корень сайта)
+
+    def __post_init__(self) -> None:
+        if self.kind not in ("basic", "form"):
+            raise ValueError(f"Неизвестный тип авторизации: {self.kind!r} (ожидается basic или form)")
+
+
 def sort_findings(findings: list[Finding]) -> list[Finding]:
     """Сортирует находки: сначала по серьёзности, затем по правилу и странице."""
     return sorted(findings, key=lambda f: (f.severity.rank, f.rule, f.url, f.selector or ""))

@@ -15,8 +15,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from ..history import DiffReport, Snapshot, diff_snapshots
+from ..models import AuthCredentials, ScanResult, Severity
 from ..models import Finding as ScanFinding
-from ..models import ScanResult, Severity
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sites (
@@ -27,6 +27,10 @@ CREATE TABLE IF NOT EXISTS sites (
     schedule        TEXT NOT NULL DEFAULT 'off',
     interval_days   INTEGER NOT NULL DEFAULT 7,
     next_run_at     TEXT,
+    auth_kind       TEXT,
+    auth_login      TEXT,
+    auth_password   TEXT,
+    auth_login_url  TEXT,
     created_at      TEXT NOT NULL
 );
 
@@ -63,10 +67,15 @@ CREATE INDEX IF NOT EXISTS idx_findings_run ON findings(run_id);
 """
 
 # Колонки, добавленные после первой публичной схемы: дозаполняем существующие базы.
+# Формат: (таблица, колонка, тип).
 _MIGRATIONS = (
-    ("source", "TEXT"),
-    ("help_url", "TEXT"),
-    ("details", "TEXT"),
+    ("findings", "source", "TEXT"),
+    ("findings", "help_url", "TEXT"),
+    ("findings", "details", "TEXT"),
+    ("sites", "auth_kind", "TEXT"),
+    ("sites", "auth_login", "TEXT"),
+    ("sites", "auth_password", "TEXT"),
+    ("sites", "auth_login_url", "TEXT"),
 )
 
 
@@ -90,6 +99,27 @@ class Site:
     interval_days: int = 7
     next_run_at: str | None = None
     created_at: str = ""
+    # авторизация на защищённом сайте: basic — заголовок, form — вход через форму
+    auth_kind: str | None = None
+    auth_login: str | None = None
+    auth_password: str | None = None
+    auth_login_url: str | None = None
+
+    @property
+    def has_auth(self) -> bool:
+        """Настроен ли вход: есть механизм и логин."""
+        return bool(self.auth_kind and self.auth_login)
+
+    def auth_credentials(self) -> AuthCredentials | None:
+        """Учётные данные для сканера (None — сайт проверяем без входа)."""
+        if not self.has_auth:
+            return None
+        return AuthCredentials(
+            kind=self.auth_kind or "basic",
+            login=self.auth_login or "",
+            password=self.auth_password or "",
+            login_url=self.auth_login_url or None,
+        )
 
     def to_dict(self) -> dict:
         return {
@@ -101,6 +131,9 @@ class Site:
             "interval_days": self.interval_days,
             "next_run_at": self.next_run_at,
             "created_at": self.created_at,
+            # пароль наружу не отдаём — только флаг «вход настроен»
+            "has_auth": self.has_auth,
+            "auth_kind": self.auth_kind if self.has_auth else None,
         }
 
 
@@ -210,10 +243,11 @@ class Storage:
 
     def _migrate(self, connection: sqlite3.Connection) -> None:
         """Дозаполняет схему старых баз новыми колонками (безопасно для существующих данных)."""
-        existing = {row["name"] for row in connection.execute("PRAGMA table_info(findings)")}
-        for name, decl in _MIGRATIONS:
-            if name not in existing:
-                connection.execute(f"ALTER TABLE findings ADD COLUMN {name} {decl}")
+        for table in dict.fromkeys(table for table, _, _ in _MIGRATIONS):
+            existing = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
+            for mig_table, name, decl in _MIGRATIONS:
+                if mig_table == table and name not in existing:
+                    connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
     def close(self) -> None:
         if self._shared is not None:
@@ -230,6 +264,10 @@ class Storage:
         telegram_chat: str | None = None,
         schedule: str = "off",
         interval_days: int = 7,
+        auth_kind: str | None = None,
+        auth_login: str | None = None,
+        auth_password: str | None = None,
+        auth_login_url: str | None = None,
     ) -> Site:
         """Создаёт сайт. Возвращает существующий, если URL уже известен."""
         with self._conn() as connection:
@@ -237,9 +275,21 @@ class Storage:
             if existing is not None:
                 return _site_from_row(existing)
             cursor = connection.execute(
-                "INSERT INTO sites (url, email, telegram_chat, schedule, interval_days, created_at)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (url, email, telegram_chat, schedule, interval_days, now_iso()),
+                "INSERT INTO sites (url, email, telegram_chat, schedule, interval_days,"
+                " auth_kind, auth_login, auth_password, auth_login_url, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    url,
+                    email,
+                    telegram_chat,
+                    schedule,
+                    interval_days,
+                    auth_kind,
+                    auth_login,
+                    auth_password,
+                    auth_login_url,
+                    now_iso(),
+                ),
             )
             connection.commit()
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (cursor.lastrowid,)).fetchone()
@@ -256,8 +306,18 @@ class Storage:
         return [_site_from_row(row) for row in rows]
 
     def update_site(self, site_id: int, **fields) -> None:
-        """Обновляет поля сайта (email, schedule, next_run_at и т.п.)."""
-        allowed = {"email", "telegram_chat", "schedule", "interval_days", "next_run_at"}
+        """Обновляет поля сайта (email, schedule, next_run_at, авторизация и т.п.)."""
+        allowed = {
+            "email",
+            "telegram_chat",
+            "schedule",
+            "interval_days",
+            "next_run_at",
+            "auth_kind",
+            "auth_login",
+            "auth_password",
+            "auth_login_url",
+        }
         updates = {key: value for key, value in fields.items() if key in allowed}
         if not updates:
             return
@@ -511,6 +571,7 @@ def _finding_from_row(row: sqlite3.Row) -> Finding:
 
 
 def _site_from_row(row: sqlite3.Row) -> Site:
+    keys = row.keys()
     return Site(
         id=row["id"],
         url=row["url"],
@@ -520,6 +581,12 @@ def _site_from_row(row: sqlite3.Row) -> Site:
         interval_days=row["interval_days"],
         next_run_at=row["next_run_at"],
         created_at=row["created_at"],
+        # колонок авторизации может не быть в старых базах — миграция их добавит,
+        # но на случай чтения до неё проверяем по именам
+        auth_kind=row["auth_kind"] if "auth_kind" in keys else None,
+        auth_login=row["auth_login"] if "auth_login" in keys else None,
+        auth_password=row["auth_password"] if "auth_password" in keys else None,
+        auth_login_url=row["auth_login_url"] if "auth_login_url" in keys else None,
     )
 
 

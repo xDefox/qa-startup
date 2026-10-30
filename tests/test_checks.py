@@ -240,6 +240,40 @@ def test_content_accepts_names_from_content(browser) -> None:
     assert hrefs == {"#promo", "#empty", "#empty2"}, hrefs
 
 
+def test_one_defect_is_one_finding(browser) -> None:
+    """Пустой элемент без имени даёт ровно одну находку, а не две-три.
+
+    Регресс-тест на дубли с varkacoffee.by: <a role="button"> попадал и в
+    empty-link-name, и в empty-button-name, и в submit-without-accessible-name
+    (525 уникальных элементов давали 966 находок).
+    """
+    from webscope.checks import content, forms
+
+    context, ctx = _context(DUPLICATE_HTML, browser)
+    try:
+        page = context.pages[0]
+        name_findings = [
+            f
+            for f in content.run(page, ctx) + forms.run(page, ctx)
+            if f.rule
+            in {
+                "content/empty-link-name",
+                "content/empty-button-name",
+                "forms/submit-without-accessible-name",
+            }
+        ]
+    finally:
+        context.close()
+
+    # Каждый из шести пустых интерактивов — одна находка, без дублей по правилам.
+    rules_by_selector = {}
+    for f in name_findings:
+        rules_by_selector.setdefault(f.selector, []).append(f.rule)
+
+    assert len(name_findings) == 6, rules_by_selector
+    assert all(len(rules) == 1 for rules in rules_by_selector.values()), rules_by_selector
+
+
 def test_forms_findings(browser) -> None:
     context, ctx = _context(BROKEN_HTML, browser)
     try:

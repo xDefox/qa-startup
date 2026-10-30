@@ -47,6 +47,34 @@
         </select>
       </div>
     </div>
+    <label class="check-row" for="auth-enabled">
+      <input type="checkbox" id="auth-enabled" name="auth_enabled" value="1">
+      <span>Нужна авторизация</span>
+    </label>
+    <div class="auth-block" id="auth-block" hidden>
+      <p class="muted small">Сайт защищён логином и паролем — войдём перед проверкой.</p>
+      <div class="row">
+        <div class="field">
+          <label for="auth_kind">Как защищён сайт</label>
+          <select id="auth_kind" name="auth_kind">
+            <option value="basic">Пароль на весь сайт (Basic)</option>
+            <option value="form">Форма входа на странице</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="auth_login">Логин</label>
+          <input id="auth_login" type="text" name="auth_login" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="auth_password">Пароль</label>
+          <input id="auth_password" type="password" name="auth_password" autocomplete="new-password">
+        </div>
+      </div>
+      <div class="field" id="auth-login-url-field" hidden>
+        <label for="auth_login_url">Адрес страницы входа (если отличается от сайта)</label>
+        <input id="auth_login_url" type="text" name="auth_login_url" placeholder="example.com/wp-admin" spellcheck="false">
+      </div>
+    </div>
   </form>
   <script>
     (function(){
@@ -66,6 +94,19 @@
       }
       fileInput?.addEventListener('change', e=>upload(e.target.files));
       dirInput?.addEventListener('change', e=>upload(e.target.files));
+    })();
+    (function(){
+      const toggle = document.getElementById('auth-enabled');
+      const block = document.getElementById('auth-block');
+      const kind = document.getElementById('auth_kind');
+      const loginUrlField = document.getElementById('auth-login-url-field');
+      function syncAuth(){
+        block.hidden = !toggle.checked;
+        loginUrlField.hidden = !(toggle.checked && kind.value === 'form');
+      }
+      toggle.addEventListener('change', syncAuth);
+      kind.addEventListener('change', syncAuth);
+      syncAuth();
     })();
   </script>
 </div>

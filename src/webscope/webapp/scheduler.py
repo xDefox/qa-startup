@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
-from ..models import ScanResult
+from ..models import AuthCredentials, ScanResult
 from ..scanner import scan_site
 from .alerts import notify
 from .storage import Run, Site, Storage
@@ -38,6 +38,8 @@ class ScanOptions:
     max_link_checks: int = 10
     allow_private: bool = False
     checks: list[str] | None = None
+    # вход на защищённый сайт: подставляется из настроек сайта перед прогоном
+    auth: AuthCredentials | None = None
 
 
 @dataclass
@@ -63,6 +65,7 @@ def default_scanner(url: str, options: ScanOptions) -> CrawlOutcome:
         max_link_checks=options.max_link_checks,
         allow_private=allow_private,
         checks=options.checks,
+        auth=options.auth,
     )
     return CrawlOutcome(
         result=result,
@@ -109,8 +112,10 @@ class Monitor:
 
     def execute(self, site: Site, run: Run) -> Run:
         """Выполняет проверку, сохраняет результат, шлёт алерт о дельтах."""
+        # у каждого сайта свои креды — собираем свои опции, общие не трогаем
+        options = replace(self.options, auth=site.auth_credentials())
         try:
-            outcome = self.scanner_func(site.url, self.options)
+            outcome = self.scanner_func(site.url, options)
         except Exception as exc:  # noqa: BLE001 - прогон не должен ронять планировщик
             LOGGER.warning("проверка %s не удалась: %s", site.url, exc)
             return self.storage.fail_run(run.id, f"{type(exc).__name__}: {exc}")

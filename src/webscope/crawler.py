@@ -245,14 +245,19 @@ def crawl(
     respect_robots: bool = True,
     timeout: float = 15.0,
     user_agent: str = USER_AGENT,
+    headers: dict[str, str] | None = None,
 ) -> CrawlResult:
-    """Обходит сайт и возвращает список страниц, сгруппированных по шаблонам."""
+    """Обходит сайт и возвращает список страниц, сгруппированных по шаблонам.
+
+    ``headers`` — дополнительные заголовки на все запросы: авторизация
+    (``Authorization`` для basic-защиты или ``Cookie`` живой form-сессии).
+    """
     root_url, _ = urldefrag(root_url)
     origin = _origin(root_url)
     result = CrawlResult(root=root_url)
 
-    headers = {"User-Agent": user_agent}
-    with httpx.Client(timeout=timeout, follow_redirects=True, headers=headers) as client:
+    merged_headers = {"User-Agent": user_agent, **(headers or {})}
+    with httpx.Client(timeout=timeout, follow_redirects=True, headers=merged_headers) as client:
         robots = _fetch_robots(client, origin) if respect_robots else None
         result.robots_checked = robots is not None
 

@@ -31,10 +31,56 @@
         {% endfor %}
       </select>
     </div>
+    <label class="check-row" for="auth-enabled">
+      <input type="checkbox" id="auth-enabled" name="auth_enabled" value="1" {% if site.has_auth %}checked{% endif %}>
+      <span>Нужна авторизация</span>
+    </label>
+    <div class="auth-block" id="auth-block" {% if not site.has_auth %}hidden{% endif %}>
+      <p class="muted small">Сайт защищён логином и паролем — войдём перед проверкой.</p>
+      <div class="row">
+        <div class="field">
+          <label for="auth_kind">Как защищён сайт</label>
+          <select id="auth_kind" name="auth_kind">
+            <option value="basic" {% if site.auth_kind != 'form' %}selected{% endif %}>Пароль на весь сайт (Basic)</option>
+            <option value="form" {% if site.auth_kind == 'form' %}selected{% endif %}>Форма входа на странице</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="auth_login">Логин</label>
+          <input id="auth_login" type="text" name="auth_login" value="{{ site.auth_login or '' }}"
+                 autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="auth_password">Пароль</label>
+          <input id="auth_password" type="password" name="auth_password" autocomplete="new-password"
+                 placeholder="{% if site.has_auth %}оставьте пустым, чтобы не менять{% else %}пароль{% endif %}">
+        </div>
+      </div>
+      <div class="field" id="auth-login-url-field" {% if site.auth_kind != 'form' %}hidden{% endif %}>
+        <label for="auth_login_url">Адрес страницы входа (если отличается от сайта)</label>
+        <input id="auth_login_url" type="text" name="auth_login_url" value="{{ site.auth_login_url or '' }}"
+               placeholder="example.com/wp-admin" spellcheck="false">
+      </div>
+    </div>
     <div class="actions">
       <button type="submit">Сохранить</button>
     </div>
   </form>
+  <script>
+    (function(){
+      const toggle = document.getElementById('auth-enabled');
+      const block = document.getElementById('auth-block');
+      const kind = document.getElementById('auth_kind');
+      const loginUrlField = document.getElementById('auth-login-url-field');
+      function syncAuth(){
+        block.hidden = !toggle.checked;
+        loginUrlField.hidden = !(toggle.checked && kind.value === 'form');
+      }
+      toggle.addEventListener('change', syncAuth);
+      kind.addEventListener('change', syncAuth);
+      syncAuth();
+    })();
+  </script>
 </div>
 
 <div class="card">

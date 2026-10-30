@@ -44,6 +44,19 @@ SEVERITY_GROUPS = (
     (Severity.MINOR, "Мелочи — на ваше усмотрение", "minor"),
 )
 
+# Третья категория находок: ошибки на чужих доменах (счётчики, карты, реклама).
+# Показываем их отдельной группой, чтобы в таблице были видны все находки,
+# но не путались с дефектами сайта.
+EXTERNAL_TITLE = "Замечания сканирования — не дефекты сайта (чужие виджеты)"
+
+SEVERITY_LABELS = {
+    "critical": "критично",
+    "serious": "существенно",
+    "moderate": "желательно",
+    "minor": "мелочь",
+    "external": "виджет",
+}
+
 _SCHEDULE_LABELS = {
     "off": "без автоматических проверок",
     "daily": "каждый день",
@@ -74,7 +87,10 @@ def _problem_view(group: dict) -> dict:
         checker = getattr(rep, "source", "") or ""
         # внутренние пометки вида «webscope.forms» пользователю не интересны
         source = "" if checker.startswith("webscope") else checker
+    severity = getattr(rep, "severity", None)
     return {
+        "severity": getattr(severity, "value", str(severity or "")),
+        "severity_label": SEVERITY_LABELS.get(getattr(severity, "value", ""), getattr(severity, "value", "")),
         "meaning": group["meaning"],
         "fix": group["fix"],
         "url": ", ".join(group["examples"]) if group["examples"] else "",
@@ -93,15 +109,21 @@ def build_report_view(storage: Storage, run: Run) -> dict:
     """Готовит данные для страницы отчёта: группы, план действий, дифф."""
     findings = storage.findings_as_models(run.id)
     from ..pages import page_notes
-    from ..scoring import group_by_rule
+    from ..scoring import group_by_rule, is_site_defect
 
     blocker_groups = group_by_rule([f for f in findings if f.rule == BLOCKER_RULE])
     blockers = [_problem_view(group) for group in blocker_groups]
 
+    # Находки делятся на три категории, и все три обязаны быть в отчёте:
+    # 1) проблемы самого сайта (блокеры кликов входят сюда же — отдельной карточкой),
+    # 2) мелочи сайта,
+    # 3) замечания сканирования — ошибки на чужих доменах, которые не дефект сайта.
+    own = [finding for finding in findings if is_site_defect(finding)]
+    external = [finding for finding in findings if not is_site_defect(finding)]
     groups = []
     for severity, title, key in SEVERITY_GROUPS:
         items = group_by_rule(
-            [finding for finding in findings if finding.severity == severity and finding.rule != BLOCKER_RULE]
+            [finding for finding in own if finding.severity == severity and finding.rule != BLOCKER_RULE]
         )
         if not items:
             continue
@@ -111,6 +133,16 @@ def build_report_view(storage: Storage, run: Run) -> dict:
                 "key": key,
                 "count": len(items),
                 "problems": [_problem_view(group) for group in items],
+            }
+        )
+    external_items = group_by_rule(external)
+    if external_items:
+        groups.append(
+            {
+                "title": EXTERNAL_TITLE,
+                "key": "external",
+                "count": len(external_items),
+                "problems": [_problem_view(group) for group in external_items],
             }
         )
 
@@ -149,8 +181,37 @@ def build_report_view(storage: Storage, run: Run) -> dict:
         "groups": groups,
         "actions": actions,
         "diff": diff_view,
-        "total": len(findings),
+        "total": len(own),
+        "external_total": len(external),
+        "has_external": bool(external),
         "notes": page_notes(run.raw.get("url"), run.raw.get("final_url")),
+    }
+
+
+def _auth_fields(
+    *,
+    enabled: str,
+    kind: str,
+    login: str,
+    password: str,
+    login_url: str,
+    previous_password: str | None = None,
+) -> dict:
+    """Сводит поля формы «нужна авторизация» к колонкам базы.
+
+    Выключенная галочка или пустой логин чистят вход. Пустой пароль при
+    сохранении означает «не менять» — в форме он никогда не предзаполнен.
+    """
+    login = login.strip()
+    if not enabled or not login:
+        return {"auth_kind": None, "auth_login": None, "auth_password": None, "auth_login_url": None}
+    if kind not in ("basic", "form"):
+        kind = "basic"
+    return {
+        "auth_kind": kind,
+        "auth_login": login,
+        "auth_password": password or (previous_password or ""),
+        "auth_login_url": (login_url.strip() or None) if kind == "form" else None,
     }
 
 
@@ -223,18 +284,17 @@ def create_app(
 
     # --- страницы ---
 
+    def index_cards() -> list[dict]:
+        """Сайты с последним прогоном — данные главной страницы (нужны и в ошибках)."""
+        return [{"site": item, "run": storage.latest_run(item.id)} for item in storage.list_sites()]
+
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request):
-        sites = storage.list_sites()
-        cards = []
-        for site in sites:
-            last = storage.latest_run(site.id)
-            cards.append({"site": site, "run": last})
         return templates.TemplateResponse(
             request,
             "index.html",
             {
-                "sites": cards,
+                "sites": index_cards(),
                 "schedules": _SCHEDULE_LABELS,
                 "error": None,
             },
@@ -248,6 +308,11 @@ def create_app(
         email: str = Form(""),
         telegram_chat: str = Form(""),
         schedule: str = Form("off"),
+        auth_enabled: str = Form(""),
+        auth_kind: str = Form("basic"),
+        auth_login: str = Form(""),
+        auth_password: str = Form(""),
+        auth_login_url: str = Form(""),
     ):
         try:
             normalized = normalize_url(url)
@@ -256,9 +321,21 @@ def create_app(
                 request,
                 "index.html",
                 {
-                    "sites": [],
+                    "sites": index_cards(),
                     "schedules": _SCHEDULE_LABELS,
                     "error": str(exc),
+                },
+                status_code=400,
+            )
+
+        if auth_enabled and not auth_login.strip():
+            return templates.TemplateResponse(
+                request,
+                "index.html",
+                {
+                    "sites": index_cards(),
+                    "schedules": _SCHEDULE_LABELS,
+                    "error": "Включена авторизация, но не указан логин.",
                 },
                 status_code=400,
             )
@@ -268,6 +345,13 @@ def create_app(
             email=email.strip() or None,
             telegram_chat=telegram_chat.strip() or None,
             schedule=schedule if schedule in _SCHEDULE_LABELS else "off",
+            **_auth_fields(
+                enabled=auth_enabled,
+                kind=auth_kind,
+                login=auth_login,
+                password=auth_password,
+                login_url=auth_login_url,
+            ),
         )
         trigger(site, background_tasks)
         return RedirectResponse(url=f"/sites/{site.id}", status_code=303)
@@ -341,6 +425,11 @@ def create_app(
         email: str = Form(""),
         telegram_chat: str = Form(""),
         schedule: str = Form("off"),
+        auth_enabled: str = Form(""),
+        auth_kind: str = Form("basic"),
+        auth_login: str = Form(""),
+        auth_password: str = Form(""),
+        auth_login_url: str = Form(""),
     ):
         site = storage.get_site(site_id)
         if site is None:
@@ -351,6 +440,14 @@ def create_app(
             email=email.strip() or None,
             telegram_chat=telegram_chat.strip() or None,
             schedule=schedule,
+            **_auth_fields(
+                enabled=auth_enabled,
+                kind=auth_kind,
+                login=auth_login,
+                password=auth_password,
+                login_url=auth_login_url,
+                previous_password=site.auth_password,
+            ),
         )
         # расписание могло измениться — пересчитываем дату следующего запуска
         # по свежей строке из БД, а не по устаревшему объекту

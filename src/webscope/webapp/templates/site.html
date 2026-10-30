@@ -109,8 +109,64 @@
     {% endif %}
   </div>
 
-  <div class="card">
-    <h2>Все находки ({{ view.total }})</h2>
+  <div class="card" style="position:relative;">
+    <h2 class="findings-head">
+      <span>Все находки ({{ view.total }})</span>
+      {% if view.has_external %}
+      <span class="muted small" style="font-weight:400;">из них в чужих виджетах: {{ view.external_total }}</span>
+      {% endif %}
+      <span class="view-toggle" role="group" aria-label="Как показать находки">
+        <button type="button" class="view-btn" data-view="list" aria-label="Списком" title="Списком" aria-pressed="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12"></path><path d="M8 12h12"></path><path d="M8 18h12"></path><circle cx="4" cy="6" r="1"></circle><circle cx="4" cy="12" r="1"></circle><circle cx="4" cy="18" r="1"></circle></svg>
+        </button>
+        <button type="button" class="view-btn" data-view="table" aria-label="Таблицей" title="Таблицей" aria-pressed="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 10h18"></path><path d="M9 10v10"></path></svg>
+        </button>
+      </span>
+    </h2>
+
+    {% set columns = [
+      ('rule', 'Правило'),
+      ('severity', 'Серьёзность'),
+      ('title', 'Заголовок'),
+      ('pages', 'Страниц'),
+      ('count', 'Элементов'),
+      ('selector', 'Селектор'),
+      ('fix', 'Что сделать'),
+      ('url', 'Страница')
+    ] %}
+    <div class="findings-view" data-mode="table" hidden>
+      <div class="findings-table-wrap">
+      <table class="findings-table">
+        <thead>
+          <tr>
+            {% for key, label in columns %}<th class="col-{{ key }}">{{ label }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for group in view.groups %}
+          {% for item in group.problems %}
+          <tr>
+            <td class="cell-rule">{{ item.rule }}</td>
+            <td class="cell-badge"><span class="badge {{ item.severity }}">{{ item.severity_label }}</span></td>
+            <td class="cell-title">{{ item.meaning }}</td>
+            <td class="cell-num">{{ item.pages_count }}</td>
+            <td class="cell-num">{{ item.count }}</td>
+            <td class="cell-selector"><code>{{ item.selector or '—' }}</code></td>
+            <td class="cell-fix">{{ item.fix }}</td>
+            <td class="cell-url">{{ item.url }}</td>
+          </tr>
+          {% endfor %}
+          {% endfor %}
+          {% if not view.groups %}
+          <tr><td colspan="{{ columns|length }}" class="muted">Ничего не найдено.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+    <div class="findings-view" data-mode="list">
     {% for group in view.groups %}
     <div class="sev {{ group.key }}">
       <h3>{{ group.title }} ({{ group.count }})</h3>
@@ -140,6 +196,7 @@
     {% else %}
     <p class="muted">Ничего не найдено.</p>
     {% endfor %}
+    </div>
   </div>
 {% elif not pending %}
 <div class="card">
@@ -175,6 +232,24 @@
     });
   })();
 
+  function setFindingsView(mode) {
+    // Таблица и список — две панели внутри одной карточки; кнопки без текста,
+    // чтобы не спорить с темой и читаться как иконки (как переключатель темы).
+    document.querySelectorAll('.findings-view').forEach(function (panel) {
+      panel.hidden = panel.dataset.mode !== mode;
+    });
+    document.querySelectorAll('.view-btn').forEach(function (btn) {
+      btn.setAttribute('aria-pressed', btn.dataset.view === mode ? 'true' : 'false');
+    });
+    localStorage.setItem('webscope_view', mode);
+  }
+  document.querySelectorAll('.view-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () { setFindingsView(btn.dataset.view); });
+  });
+  (function () {
+    const saved = localStorage.getItem('webscope_view') || 'list';
+    setFindingsView(saved === 'table' ? 'table' : 'list');
+  })();
   function showScanProgress() {
     if (document.getElementById('scan-progress')) return;
     const box = document.createElement('div');

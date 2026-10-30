@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import ipaddress
 import os
 import socket
@@ -20,7 +21,7 @@ from .checks.js import JS_UTILS
 from .context import ScanContext
 from .crawler import CrawlResult, PageTarget, crawl, representative_pages, squash_ws
 from .diagnostics import diagnose_http_error, diagnose_navigation_error
-from .models import Finding, ScanResult, Severity, sort_findings
+from .models import AuthCredentials, Finding, ScanResult, Severity, sort_findings
 from .pages import page_notes
 
 # Системные Chromium-ы — фолбэк, если playwright install chromium не выполнен.
@@ -88,6 +89,110 @@ def _launch_chromium(playwright, headless: bool):
             if Path(candidate).exists():
                 return playwright.chromium.launch(headless=headless, executable_path=candidate)
         raise
+
+
+# --- авторизация на защищенных сайтах ---
+
+_PASSWORD_INPUT = 'input[type="password"]:visible'
+_USERNAME_INPUT = (
+    'input[type="text"]:visible, input[type="email"]:visible, input[type="tel"]:visible, '
+    'input[autocomplete="username"]:visible, input[name*="user" i]:visible, '
+    'input[name*="login" i]:visible'
+)
+
+
+def _basic_auth_headers(auth: AuthCredentials | None) -> dict[str, str] | None:
+    """Заголовок ``Authorization: Basic`` для каждого запроса (или None)."""
+    if auth is None or auth.kind != "basic":
+        return None
+    token = base64.b64encode(f"{auth.login}:{auth.password}".encode()).decode()
+    return {"Authorization": f"Basic {token}"}
+
+
+def _form_login(page, auth: AuthCredentials, *, start_url: str, timeout_ms: int) -> None:
+    """Входит через форму логина и ждёт, пока поле пароля исчезнет.
+
+    Эвристика, а не адаптер конкретной CMS: на странице ищем видимое поле
+    пароля, рядом — поле логина, отправляем ближайшую форму (кнопка submit
+    или Enter). Успех — поле пароля исчезло: редирект после входа или SPA
+    спрятала форма. Неудача — поле осталось: кидаем ScanError с понятным
+    текстом, он попадает в отчёт прогона.
+    """
+    target = (auth.login_url or "").strip() or start_url
+    try:
+        response = page.goto(target, wait_until="domcontentloaded", timeout=timeout_ms)
+    except PlaywrightError as exc:
+        raise ScanError(diagnose_navigation_error(target, exc, timeout_ms=timeout_ms)) from exc
+    if response is not None and response.status >= 400:
+        raise ScanError(diagnose_http_error(target, response.status))
+
+    passwords = page.locator(_PASSWORD_INPUT)
+    if passwords.count() == 0:
+        raise ScanError(
+            f"Не удалось войти: на {target} нет формы входа — укажите адрес страницы входа в настройках авторизации."
+        )
+    password_input = passwords.first
+
+    # Поля и кнопка — внутри формы с паролем; без <form> работаем на уровне страницы.
+    scope = page
+    forms = password_input.locator("xpath=ancestor::form")
+    if forms.count() > 0:
+        scope = forms.first
+    users = scope.locator(_USERNAME_INPUT)
+    if users.count() > 0:
+        users.first.fill(auth.login)
+    password_input.fill(auth.password)
+
+    buttons = scope.locator('button[type="submit"], input[type="submit"], button')
+    try:
+        if buttons.count() > 0:
+            buttons.first.click()
+        else:
+            password_input.press("Enter")
+    except PlaywrightError as exc:
+        raise ScanError(f"Не удалось войти: не смогли отправить форму на {target} ({exc}).") from exc
+
+    # Ждём успеха: поле пароля исчезло. Если оно осталось — вход не принят.
+    deadline = time.monotonic() + min(10.0, max(3.0, timeout_ms / 1000))
+    while time.monotonic() < deadline:
+        try:
+            if page.locator(_PASSWORD_INPUT).count() == 0:
+                return
+        except PlaywrightError:
+            pass  # страница перезагружается — проверим ещё раз
+        page.wait_for_timeout(250)
+    raise ScanError(
+        f"Не удалось войти на {target}: после отправки формы страница входа осталась — проверьте логин и пароль."
+    )
+
+
+def _form_login_cookies(
+    root_url: str,
+    auth: AuthCredentials,
+    *,
+    headless: bool,
+    user_agent: str,
+    timeout_ms: int,
+) -> list[dict]:
+    """Входит через форму в отдельной сессии и возвращает её cookies.
+
+    Cookies нужны краулеру (он ходит по сайту без браузера) и основному
+    контексту сканирования — тот получит их через ``add_cookies``.
+    """
+    with sync_playwright() as playwright:
+        browser = _launch_chromium(playwright, headless)
+        context = browser.new_context(
+            viewport={"width": 1280, "height": 800},
+            user_agent=user_agent,
+            ignore_https_errors=False,
+        )
+        try:
+            page = context.new_page()
+            _form_login(page, auth, start_url=root_url, timeout_ms=timeout_ms)
+            return context.cookies()
+        finally:
+            context.close()
+            browser.close()
 
 
 def _collect_archetype(page) -> dict:
@@ -368,8 +473,13 @@ def scan(
     max_link_checks: int = 20,
     allow_private: bool = False,
     user_agent: str = DEFAULT_UA,
+    auth: AuthCredentials | None = None,
 ) -> ScanResult:
-    """Сканирует одну страницу и возвращает результат."""
+    """Сканирует одну страницу и возвращает результат.
+
+    ``auth`` — вход на защищённый сайт: ``basic`` шлёт заголовок на каждый
+    запрос, ``form`` сначала входит через форму (сессия живёт в контексте).
+    """
     validate_target(url, allow_private=allow_private)
     selected = _resolve_checks(checks)
     started = time.monotonic()
@@ -380,9 +490,12 @@ def scan(
             viewport={"width": 1280, "height": 800},
             user_agent=user_agent,
             ignore_https_errors=False,
+            extra_http_headers=_basic_auth_headers(auth),
         )
         page = context.new_page()
         try:
+            if auth is not None and auth.kind == "form":
+                _form_login(page, auth, start_url=url, timeout_ms=timeout_ms)
             findings, ctx = _scan_page(
                 page,
                 url,
@@ -421,15 +534,35 @@ def scan_site(
     max_link_checks: int = 20,
     allow_private: bool = False,
     user_agent: str = DEFAULT_UA,
+    auth: AuthCredentials | None = None,
 ) -> tuple[ScanResult, CrawlResult]:
     """Обходит сайт и сканирует по одной странице каждого шаблона.
 
     Возвращает (результат, результат обхода). Одна страница = один шаблон:
     300 страниц каталога проверяются по одному представителю.
+
+    ``auth`` — вход на защищённый сайт. ``basic``: заголовок Authorization и
+    краулеру, и браузеру. ``form``: до обходим заходим через форму в отдельной
+    сессии и переносим её cookies в краулер и в контекст сканирования —
+    обход и проверки идут уже «под пользователем».
     """
     validate_target(root_url, allow_private=allow_private)
     selected = _resolve_checks(checks)
     started = time.monotonic()
+
+    auth_headers = _basic_auth_headers(auth)
+    session_cookies: list[dict] | None = None
+    if auth is not None and auth.kind == "form":
+        session_cookies = _form_login_cookies(
+            root_url,
+            auth,
+            headless=headless,
+            user_agent=user_agent,
+            timeout_ms=timeout_ms,
+        )
+    crawl_headers: dict[str, str] = dict(auth_headers or {})
+    if session_cookies:
+        crawl_headers["Cookie"] = "; ".join(f"{c['name']}={c['value']}" for c in session_cookies)
 
     crawl_result = crawl(
         root_url,
@@ -437,6 +570,7 @@ def scan_site(
         max_depth=max_depth,
         respect_robots=respect_robots,
         user_agent=user_agent,
+        headers=crawl_headers or None,
     )
     targets = representative_pages(crawl_result, all_pages=all_pages)
 
@@ -452,7 +586,10 @@ def scan_site(
             viewport={"width": 1280, "height": 800},
             user_agent=user_agent,
             ignore_https_errors=False,
+            extra_http_headers=auth_headers,
         )
+        if session_cookies:
+            context.add_cookies(session_cookies)
         page = context.new_page()
         try:
             for target in targets:
@@ -477,6 +614,12 @@ def scan_site(
         finally:
             context.close()
             browser.close()
+
+    # Ни одна страница не открылась (например, сервер отверг учётные данные) —
+    # это ошибка прогона, а не отчёт с нулём проблем и оценкой 100.
+    if scanned == 0:
+        reason = crawl_result.skipped[-1]["reason"] if crawl_result.skipped else "причина неизвестна"
+        raise ScanError(f"Не удалось открыть ни одной страницы — {reason}")
 
     duration_ms = int((time.monotonic() - started) * 1000)
     # Дубли title/description по шаблонам — проверка уровня сайта, а не страницы
