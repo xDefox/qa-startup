@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import tempfile
 import uuid
 from contextlib import asynccontextmanager
@@ -50,6 +51,14 @@ LOGGER = logging.getLogger("webscope.webapp")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 _LOCAL_DIR = Path(tempfile.gettempdir()) / "webscope-local"
 _LOCAL_DIR.mkdir(parents=True, exist_ok=True)
+
+# Ограничения на загрузку локальной сборки: один прогон не должен уметь
+# забить диск и не должен тянуть гигабайты в память процесса.
+MAX_UPLOAD_FILES = 300
+MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024
+MAX_UPLOAD_TOTAL_BYTES = 50 * 1024 * 1024
+# Сколько последних загрузок храним (остальные удаляются при новой загрузке).
+MAX_UPLOAD_JOBS = 50
 
 BLOCKER_RULE = "interaction/button-blocked"
 
@@ -92,6 +101,41 @@ def normalize_url(url: str) -> str:
     if "." not in host and host not in ("localhost",):
         raise ValueError("Похоже, это не адрес сайта")
     return cleaned
+
+
+def _prune_local_uploads(keep: int = MAX_UPLOAD_JOBS) -> None:
+    """Удаляет старые загруженные сборки, чтобы каталог не рос бесконечно."""
+    try:
+        jobs = sorted(
+            (path for path in _LOCAL_DIR.iterdir() if path.is_dir()),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:  # каталога нет или нет прав — загрузка всё равно важнее
+        return
+    for stale in jobs[keep:]:
+        shutil.rmtree(stale, ignore_errors=True)
+
+
+class _SandboxedLocalFiles(StaticFiles):
+    """Раздача загруженных страниц в песочнице.
+
+    Загруженный HTML исполняется на origin приложения. Без песочницы его скрипт
+    читал бы cookie и ходил в `/api` от имени пользователя. Директива CSP
+    ``sandbox`` переводит документ в уникальный opaque-origin: скрипты и стили
+    самой страницы работают (иначе проверка локальной сборки теряет смысл),
+    а доступа к cookie, localStorage и API приложения у них нет.
+    """
+
+    SANDBOX = "sandbox allow-scripts allow-forms allow-popups allow-modals"
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code < 400:
+            response.headers["Content-Security-Policy"] = self.SANDBOX
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
 
 def _problem_view(group: dict) -> dict:
@@ -290,7 +334,6 @@ def create_app(
         if request.url.path.startswith("/api/"):
             return JSONResponse({"detail": message}, status_code=429)
         return PlainTextResponse(message, status_code=429)
-
 
     def trigger(site: Site, background_tasks: BackgroundTasks | None = None) -> Run:
         """Открывает прогон и запускает проверку в фоне.
@@ -628,19 +671,40 @@ def create_app(
             return limited
         if not files:
             raise HTTPException(status_code=400, detail="Нет файлов")
+        if len(files) > MAX_UPLOAD_FILES:
+            raise HTTPException(status_code=413, detail=f"Слишком много файлов (максимум {MAX_UPLOAD_FILES})")
+        if len(paths) != len(files):
+            raise HTTPException(status_code=400, detail="Число путей не совпадает с числом файлов")
+
         job_id = uuid.uuid4().hex
         base = _LOCAL_DIR / job_id
         base.mkdir(parents=True, exist_ok=True)
-        for f, p in zip(files, paths):
-            rel = Path(p)
-            # защита от выхода за пределы
-            safe = Path(*[part for part in rel.parts if part not in ("..", ".", "")])
-            if not safe.parts:
-                safe = Path(f.filename or "index.html")
-            dest = base / safe
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            content = await f.read()
-            dest.write_bytes(content)
+        total_bytes = 0
+        try:
+            for f, raw_path in zip(files, paths):
+                # Абсолютный путь или выход за пределы каталога загрузки —
+                # отказ. Раньше фильтр выбрасывал только «..», а «/etc/passwd»
+                # оставался абсолютным и записывался мимо каталога задания.
+                relative = Path((raw_path or "").replace("\\", "/"))
+                if relative.is_absolute():
+                    raise HTTPException(status_code=400, detail="Абсолютный путь файла не допускается")
+                safe = Path(*[part for part in relative.parts if part not in ("..", ".", "")])
+                if not safe.parts:
+                    safe = Path(Path(f.filename or "index.html").name)
+                dest = (base / safe).resolve()
+                if not dest.is_relative_to(base.resolve()):
+                    raise HTTPException(status_code=400, detail="Недопустимый путь файла")
+                content = await f.read(MAX_UPLOAD_FILE_BYTES + 1)
+                total_bytes += len(content)
+                if len(content) > MAX_UPLOAD_FILE_BYTES or total_bytes > MAX_UPLOAD_TOTAL_BYTES:
+                    raise HTTPException(status_code=413, detail="Загруженные файлы слишком большие")
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(content)
+        except HTTPException:
+            shutil.rmtree(base, ignore_errors=True)
+            raise
+
+        _prune_local_uploads(keep=MAX_UPLOAD_JOBS)
         # выбираем стартовый файл
         index = base / "index.html"
         if not index.exists():
@@ -716,7 +780,7 @@ def create_app(
         return PlainTextResponse(render_junit(_result_from_run(storage, last)), media_type="application/xml")
 
     try:
-        app.mount("/__local", StaticFiles(directory=str(_LOCAL_DIR), html=True), name="local_static")
+        app.mount("/__local", _SandboxedLocalFiles(directory=str(_LOCAL_DIR), html=True), name="local_static")
     except (OSError, RuntimeError) as exc:  # каталог раздачи не создался — локальная загрузка будет недоступна
         LOGGER.warning("не удалось смонтировать /__local: %s", exc)
 
