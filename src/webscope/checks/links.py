@@ -9,8 +9,11 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse
 
+import httpx
+
 from ..context import ScanContext
 from ..models import Finding, Severity
+from ..netguard import GuardedTransport
 
 COLLECT = r"""
 () => {
@@ -99,46 +102,83 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
     return findings
 
 
+# Ошибки, которые означают «не дождались», а не «ссылки нет». httpx бросает
+# свои исключения по имени класса, тут же оказывается и socket.timeout.
+_TIMEOUT_ERRORS = frozenset(
+    {"TimeoutException", "ConnectTimeout", "ReadTimeout", "WriteTimeout", "PoolTimeout", "TimeoutError"}
+)
+
+
+def _error_rule(error: str) -> tuple[str, Severity]:
+    """Правило и серьёзность для сетевой ошибки при проверке ссылки.
+
+    Таймаут — свойство сети и терпения сканера, а не дефект страницы: чинить
+    владельцу сайта нечего, поэтому такое правило диагностическое.
+    """
+    if error in _TIMEOUT_ERRORS:
+        return "links/timeout", Severity.MINOR
+    return "links/unreachable", Severity.MODERATE
+
+
 def _check_internal_links(candidates: list[dict], ctx: ScanContext) -> list[Finding]:
-    """Проверяет HTTP-статус внутренних ссылок (с ограничением количества)."""
+    """Проверяет HTTP-статус внутренних ссылок (с ограничением количества).
+
+    Клиент один на всю проверку: соединения переиспользуются, TLS проверяется
+    (иначе «битые ссылки» на самом деле означают «наш сканер не поверил
+    сертификату»), а запросы на непубличные адреса блокируются тем же
+    транспортом, что и в краулере.
+    """
     if not candidates:
         return []
-
-    import httpx
 
     limit = max(0, ctx.max_link_checks)
     targets = candidates[:limit]
     findings: list[Finding] = []
     timeout = httpx.Timeout(8.0, connect=4.0)
+    # Один клиент (и одно соединение на хост) на все ссылки: httpx.Client
+    # потокобезопасен, а создание клиента на каждую ссылку рвало пул соединений.
+    transport = GuardedTransport(allow_private=ctx.allow_private)
+    results: list[tuple[dict, int | None, str | None]] = []
+    with httpx.Client(timeout=timeout, follow_redirects=True, transport=transport) as client:
 
-    def probe(link: dict) -> tuple[dict, int | None, str | None]:
-        status: int | None = None
-        error: str | None = None
-        try:
-            with httpx.Client(timeout=timeout, follow_redirects=True, verify=False) as client:
+        def probe(link: dict) -> tuple[dict, int | None, str | None]:
+            status: int | None = None
+            error: str | None = None
+            try:
                 response = client.head(link["url"])
-                if response.status_code in (405, 501):
+                # Многие CDN отвечают 403/405 на HEAD, хотя GET отдаёт страницу.
+                if response.status_code in (403, 405, 501):
                     response = client.get(link["url"])
                 status = response.status_code
-        except Exception as exc:  # noqa: BLE001 - сетевые ошибки не должны ронять скан
-            error = type(exc).__name__
-        return link, status, error
+            except Exception as exc:  # noqa: BLE001 - сетевые ошибки не должны ронять скан
+                error = type(exc).__name__
+            return link, status, error
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(pool.map(probe, targets))
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(probe, targets))
 
     for link, status, error in results:
         if error is not None:
+            rule, severity = _error_rule(error)
+            if rule == "links/timeout":
+                title = "Ссылка не ответила вовремя"
+                message = (
+                    "Проверка прервана по таймауту (8 с): сервер медленный или ссылка ведёт "
+                    "на внешний ресурс. Это не обязательно битая ссылка — перепроверьте вручную."
+                )
+            else:
+                title = "Ссылка недоступна"
+                message = f"Не удалось получить ответ: {error}"
             findings.append(
                 Finding(
-                    rule="links/unreachable",
-                    severity=Severity.MODERATE,
-                    title="Ссылка недоступна",
-                    message=f"Не удалось получить ответ: {error}",
+                    rule=rule,
+                    severity=severity,
+                    title=title,
+                    message=message,
                     url=ctx.final_url,
                     selector=link.get("selector"),
                     source="webscope.links",
-                    details={"href": link["url"]},
+                    details={"href": link["url"], "error": error},
                 )
             )
             continue
@@ -161,7 +201,7 @@ def _check_internal_links(candidates: list[dict], ctx: ScanContext) -> list[Find
             Finding(
                 rule="links/limit-reached",
                 severity=Severity.MINOR,
-                title="Проверена не часть внутренних ссылок",
+                title="Проверена только часть внутренних ссылок",
                 message=f"Проверено {limit} из {len(candidates)} внутренних ссылок (лимит скана).",
                 url=ctx.final_url,
                 source="webscope.links",

@@ -74,6 +74,9 @@ def build_parser() -> argparse.ArgumentParser:
     scan_cmd.add_argument("--timeout", type=int, default=30000, help="Таймаут загрузки страницы, мс")
     scan_cmd.add_argument("--max-link-checks", type=int, default=20, help="Сколько внутренних ссылок проверять")
     scan_cmd.add_argument("--allow-private", action="store_true", help="Разрешить локальные адреса (для своих стендов)")
+    scan_cmd.add_argument(
+        "--ignore-robots", action="store_true", help="Игнорировать robots.txt (только для своих стендов)"
+    )
     scan_cmd.add_argument("--headed", action="store_true", help="Показывать браузер (по умолчанию headless)")
     scan_cmd.add_argument("--fix-prompt", action="store_true", help="Вместо отчёта вывести ТЗ для coding-агента")
     add_auth_arguments(scan_cmd)
@@ -112,6 +115,12 @@ def build_parser() -> argparse.ArgumentParser:
     crawl_cmd.add_argument("--fail-on", choices=("critical", "serious", "moderate", "minor", "none"), default="none")
     crawl_cmd.add_argument("--timeout", type=int, default=30000, help="Таймаут загрузки страницы, мс")
     crawl_cmd.add_argument("--allow-private", action="store_true", help="Разрешить локальные адреса")
+    crawl_cmd.add_argument(
+        "--time-budget",
+        type=float,
+        default=None,
+        help="Общий лимит времени прогона, секунд (0 — без лимита; по умолчанию WEBSCOPE_SCAN_TIMEOUT или 600)",
+    )
     add_auth_arguments(crawl_cmd)
 
     diff_cmd = sub.add_parser("diff", help="Сравнить два снимка (прошлый и текущий)")
@@ -196,6 +205,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
             max_link_checks=args.max_link_checks,
             allow_private=args.allow_private,
             auth=_auth_from_args(args),
+            respect_robots=not args.ignore_robots,
         )
     except ScanError as exc:
         print(f"webscope: ошибка — {exc}", file=sys.stderr)
@@ -263,6 +273,19 @@ def cmd_serve(args: argparse.Namespace) -> int:
     )
 
     print(f"webscope: веб-интерфейс на http://{args.host}:{args.port}", file=sys.stderr)
+    if not os.environ.get("WEBSCOPE_AUTH_KEY"):
+        print(
+            "webscope: пароли к защищённым сайтам хранятся без шифрования. "
+            "Задайте WEBSCOPE_AUTH_KEY (Fernet-ключ), чтобы шифровать их в базе.",
+            file=sys.stderr,
+        )
+    if not os.environ.get("WEBSCOPE_AUTH_PASSWORD"):
+        print(
+            "webscope: ВНИМАНИЕ — вход не настроен, кабинет открыт всем, кто дотянется до порта. "
+            "Задайте WEBSCOPE_AUTH_PASSWORD (и при необходимости WEBSCOPE_AUTH_USER), "
+            "чтобы закрыть интерфейс паролем.",
+            file=sys.stderr,
+        )
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     return EXIT_OK
 
@@ -292,6 +315,7 @@ def cmd_crawl(args: argparse.Namespace) -> int:
             timeout_ms=args.timeout,
             allow_private=args.allow_private,
             auth=_auth_from_args(args),
+            time_budget_s=args.time_budget,
         )
     except ScanError as exc:
         print(f"webscope: ошибка — {exc}", file=sys.stderr)

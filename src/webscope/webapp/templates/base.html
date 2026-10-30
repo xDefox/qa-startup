@@ -80,8 +80,15 @@
   .top .logo a { color: var(--ink); text-decoration: none; }
   .top .logo a:hover { color: var(--ink); }
   .top .logo span { color: var(--accent); }
-  .top .theme-toggle {
+  .top-actions {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .top-actions .pill { font-size: 13px; }
+  .top .theme-toggle {
+    margin-left: 0;
     background: var(--card);
     color: var(--muted);
     border: 1px solid var(--line);
@@ -172,6 +179,105 @@
   .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
   .row > * { flex: 1 1 180px; }
   .row > .actions { flex: 0 0 auto; }
+  /* Панель «Сохранить отчёт»: всплывает поверх таблицы находок (fixed +
+     высокий z-index), но ничего не перекрывает целиком — список и таблица
+     остаются видны, вид находок не меняется. */
+  .download-btn { cursor: pointer; }
+  .download-pop {
+    position: fixed;
+    z-index: 60;
+    width: 320px;
+    max-width: calc(100vw - 24px);
+    max-height: min(70vh, 460px);
+    overflow: auto;
+    padding: 8px;
+    display: grid;
+    gap: 2px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 22px 60px -24px rgba(15, 23, 42, 0.55);
+    animation: download-pop-in 120ms ease-out;
+  }
+  .download-pop[hidden] { display: none; }
+  @keyframes download-pop-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .download-pop { animation: none; }
+  }
+  .download-pop-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 10px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .download-pop-head .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  /* Поле «Имя файла»: своё имя вместо webscope-example.com-2026-10-30. */
+  .download-name { display: grid; gap: 6px; padding: 4px 10px 10px; }
+  .download-name-label { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  .download-name-field {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .download-name-field:focus-within { border-color: var(--accent); }
+  .download-name-field input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 9px 10px;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+  }
+  .download-name-field input:focus { outline: none; }
+  .download-name-ext {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 10px;
+    border-left: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .download-name-hint { margin: 0; font-size: 11.5px; color: var(--muted); }
+  .download-pop .download-option { padding: 10px 12px; border-radius: 10px; background: transparent; }
+  .download-pop .download-option:hover { background: var(--bg); }
+  .download-pop .download-ext { font-size: 14px; }
+  .download-pop .download-hint { font-size: 12px; }
+  .download-pop-foot {
+    padding: 8px 10px 4px;
+    border-top: 1px solid var(--line);
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .download-pop-foot code { word-break: break-all; }
+  .download-option {
+    display: grid;
+    gap: 4px;
+    border: 1px solid transparent;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .download-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .download-option-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .download-option-top svg { width: 15px; height: 15px; color: var(--muted); }
+  .download-ext { font-size: 14px; font-weight: 600; }
+  .download-hint { font-size: 12px; line-height: 1.35; color: var(--muted); }
   .check-row {
     display: inline-flex;
     align-items: center;
@@ -267,9 +373,11 @@
 
   /* Все находки: таблица/список. Переключатель — иконки в стиле кнопки темы:
      без текста, тот же размер, тот же радиус, то же поведение при наведении. */
-  .findings-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .findings-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .findings-head h2 { margin: 0; }
   .view-toggle { margin-left: auto; display: inline-flex; gap: 6px; }
-  .view-btn {
+  .view-btn,
+  .icon-btn {
     background: var(--card);
     color: var(--muted);
     border: 1px solid var(--line);
@@ -283,10 +391,14 @@
     cursor: pointer;
     transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 120ms ease;
   }
-  .view-btn:hover { color: var(--ink); }
-  .view-btn:active { transform: scale(0.98); }
-  .view-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .view-btn svg { width: 18px; height: 18px; display: block; }
+  .view-btn:hover,
+  .icon-btn:hover { color: var(--ink); }
+  .view-btn:active,
+  .icon-btn:active { transform: scale(0.98); }
+  .view-btn:focus-visible,
+  .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .view-btn svg,
+  .icon-btn svg { width: 18px; height: 18px; display: block; }
   .view-btn[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); }
   .findings-view[hidden] { display: none; }
   .findings-table-wrap { overflow-x: auto; }
@@ -422,9 +534,14 @@
 <body>
 <header class="top">
   <div class="logo"><a href="/">webscope<span>.</span></a></div>
-  <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Сменить тему">
-    <span class="theme-icon" aria-hidden="true"></span>
-  </button>
+  <div class="top-actions">
+    {% if auth_enabled %}
+    <a class="pill" href="/auth/logout">Выйти</a>
+    {% endif %}
+    <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Сменить тему">
+      <span class="theme-icon" aria-hidden="true"></span>
+    </button>
+  </div>
 </header>
 <main>
   {% block content %}{% endblock %}

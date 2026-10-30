@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}webscope — вход{% endblock %}
+{% block content %}
+
+<div class="card" style="max-width: 440px; margin: 40px auto;">
+  <h1>Вход в кабинет</h1>
+  <p class="muted small">
+    В отчётах — адреса сайтов, расписание проверок и адреса для алертов,
+    поэтому интерфейс закрыт паролем.
+  </p>
+
+  {% if error %}
+  <div class="error">{{ error }}</div>
+  {% endif %}
+
+  {% if auth_enabled %}
+  <form method="post" action="/auth/login">
+    <input type="hidden" name="next" value="{{ request.query_params.get('next', '/') }}">
+    <div class="field">
+      <label for="username">Логин</label>
+      <input id="username" name="username" type="text" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="password">Пароль</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+    </div>
+    <div class="actions">
+      <button type="submit">Войти</button>
+    </div>
+  </form>
+  {% else %}
+  <p>
+    Вход не настроен: интерфейс работает в демо-режиме и доступен всем, кто
+    дотянется до порта. Задайте <code>WEBSCOPE_AUTH_PASSWORD</code> и перезапустите
+    сервер, чтобы закрыть кабинет.
+  </p>
+  {% endif %}
+</div>
+
+{% endblock %}

@@ -34,6 +34,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install -e ".[dev]"
+      # extra `web` обязателен: pytest собирает все файлы тестов, а сборка
+      # импортирует fastapi/jinja2 — без них джоба падает ещё до браузера
+      - run: pip install -e ".[dev,web]"
       - run: playwright install --with-deps chromium
-      - run: pytest -m "browser" -q
+      - name: Browser tests
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -m "browser" -q 2>&1 | tee /tmp/browser.log
+      # полный лог джобы виден только в веб-интерфейсе GitHub; короткая
+      # выжимка уходит аннотациями — их видно в PR и через API
+      - name: Surface browser failures
+        if: failure()
+        shell: bash
+        run: grep -E "^(FAILED|ERROR)" /tmp/browser.log | sed 's/^/::error::/' || true

@@ -77,3 +77,19 @@ def test_fix_prompt_without_findings() -> None:
     empty = ScanResult(url="https://example.com", final_url="https://example.com/")
     prompt = build_fix_prompt(empty)
     assert "находок webscope нет" in prompt
+
+
+def test_sarif_has_partial_fingerprints() -> None:
+    """SARIF без отпечатков превращает каждый прогон в новые алерты в GitHub."""
+    payload = json.loads(render_sarif(_result()))
+    results = payload["runs"][0]["results"]
+    prints = [item["partialFingerprints"]["webscopeFinding/v1"] for item in results]
+    assert len(prints) == len(results)
+    assert all(len(value) == 16 for value in prints)
+    assert len(set(prints)) == len(prints), "отпечатки разных находок не должны совпадать"
+
+
+def test_sarif_fingerprint_is_stable_between_runs() -> None:
+    first = json.loads(render_sarif(_result()))
+    second = json.loads(render_sarif(_result()))
+    assert first["runs"][0]["results"] == second["runs"][0]["results"]

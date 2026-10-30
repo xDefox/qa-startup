@@ -17,6 +17,7 @@ from urllib.robotparser import RobotFileParser
 import httpx
 
 from . import __version__
+from .netguard import GuardedTransport
 
 USER_AGENT = f"webscope/{__version__} (+https://github.com/webscope/webscope)"
 
@@ -203,11 +204,21 @@ def _origin(url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
-def _fetch_robots(client: httpx.Client, origin: str) -> RobotFileParser | None:
+def fetch_robots(client: httpx.Client, origin: str) -> RobotFileParser | None:
     parser = RobotFileParser()
     parser.set_url(f"{origin}/robots.txt")
     try:
         response = client.get(f"{origin}/robots.txt")
+        if response.status_code == 403:
+            # RFC 9309: 403 — роботу отказано в доступе, считаем «запрещено всё».
+            # У RobotFileParser disallow_all — флаг, а не метод.
+            parser.disallow_all = True
+            return parser
+        if response.status_code == 401:
+            # 401 — это не политика обхода, а требование представиться. Скрипт
+            # умеет ходить под basic/form-авторизацией, поэтому не превращаем
+            # закрытый стенд в «пустой сайт»: страница сама сообщит про 401.
+            return None
         if response.status_code >= 400:
             return None
         parser.parse(response.text.splitlines())
@@ -246,19 +257,30 @@ def crawl(
     timeout: float = 15.0,
     user_agent: str = USER_AGENT,
     headers: dict[str, str] | None = None,
+    allow_private: bool = False,
 ) -> CrawlResult:
     """Обходит сайт и возвращает список страниц, сгруппированных по шаблонам.
 
     ``headers`` — дополнительные заголовки на все запросы: авторизация
     (``Authorization`` для basic-защиты или ``Cookie`` живой form-сессии).
+
+    ``allow_private`` снимает SSRF-запрет (свои стенды и локальные файлы);
+    по умолчанию каждый запрос, включая редиректы, проверяется на непубличный
+    адрес (``netguard.GuardedTransport``).
     """
     root_url, _ = urldefrag(root_url)
     origin = _origin(root_url)
     result = CrawlResult(root=root_url)
 
     merged_headers = {"User-Agent": user_agent, **(headers or {})}
-    with httpx.Client(timeout=timeout, follow_redirects=True, headers=merged_headers) as client:
-        robots = _fetch_robots(client, origin) if respect_robots else None
+    transport = GuardedTransport(allow_private=allow_private)
+    with httpx.Client(
+        timeout=timeout,
+        follow_redirects=True,
+        headers=merged_headers,
+        transport=transport,
+    ) as client:
+        robots = fetch_robots(client, origin) if respect_robots else None
         result.robots_checked = robots is not None
 
         seeds: list[str] = []
@@ -284,9 +306,15 @@ def crawl(
                 continue
 
         # Главная страница — источник ссылок, если sitemap нет.
+        homepage_loaded = False
         try:
             homepage = client.get(root_url)
-            homepage_html = homepage.text
+            if homepage.status_code >= 400:
+                result.skipped.append({"url": root_url, "reason": f"HTTP {homepage.status_code}"})
+                homepage_html = ""
+            else:
+                homepage_html = homepage.text
+                homepage_loaded = True
         except httpx.HTTPError as exc:
             result.skipped.append({"url": root_url, "reason": f"не удалось загрузить: {exc}"})
             homepage_html = ""
@@ -307,7 +335,10 @@ def crawl(
         seeds = candidates or [root_url]
 
         visited: dict[str, PageTarget] = {}
-        queue: list[tuple[str, int]] = [(seed, 0) for seed in dict.fromkeys(seeds)]
+        # depth=0 — только стартовая страница: её HTML уже загружен. URL из
+        # sitemap обязаны скачиваться сами, иначе им достаётся title главной
+        # и проверка дублей по шаблонам даёт ложные срабатывания на всём сайте.
+        queue: list[tuple[str, int]] = [(seed, 0 if seed == root_url else 1) for seed in dict.fromkeys(seeds)]
 
         while queue and len(visited) < max_pages:
             url, depth = queue.pop(0)
@@ -331,6 +362,10 @@ def crawl(
                 except httpx.HTTPError as exc:
                     result.skipped.append({"url": url, "reason": f"ошибка загрузки: {exc}"})
                     continue
+            elif url == root_url and not homepage_loaded:
+                # Главную уже пробовали загрузить выше — второй раз не стучимся,
+                # но и «страницу» с пустым title в обход не добавляем.
+                continue
             else:
                 html = homepage_html
 

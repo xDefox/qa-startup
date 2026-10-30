@@ -124,3 +124,35 @@ def test_history_trend_and_listing(tmp_path: Path) -> None:
     assert len(points) == 2
     assert points[-1]["serious"] == 1
     assert points[0]["score"] == 100
+
+
+def _bare(rule: str, severity: Severity, title: str = "t") -> Finding:
+    """Находка без селектора и сниппета — как у документных правил."""
+    return Finding(rule=rule, severity=severity, title=title, message="", url="https://site.com/")
+
+
+def test_diff_keeps_new_duplicates_without_selector() -> None:
+    """Несколько находок одного правила без селектора не должны схлопываться.
+
+    Регресс: dict по ключу (rule, url, selector) терял все повторы, и дифф
+    показывал «новых проблем: 0», хотя на странице появились два дубля id.
+    """
+    old = _snapshot([_bare("content/duplicate-id", Severity.MODERATE, "dup a")])
+    new = _snapshot(
+        [
+            _bare("content/duplicate-id", Severity.MODERATE, "dup a"),
+            _bare("content/duplicate-id", Severity.MODERATE, "dup b"),
+            _bare("content/duplicate-id", Severity.MODERATE, "dup c"),
+        ]
+    )
+    diff = diff_snapshots(old, new)
+    assert len(diff.new_findings) == 2
+    assert diff.fixed_findings == []
+
+
+def test_diff_keeps_fixed_duplicates_without_selector() -> None:
+    old = _snapshot([_bare("content/duplicate-id", Severity.MODERATE, f"dup {index}") for index in range(3)])
+    new = _snapshot([_bare("content/duplicate-id", Severity.MODERATE, "dup 0")])
+    diff = diff_snapshots(old, new)
+    assert len(diff.fixed_findings) == 2
+    assert diff.new_findings == []

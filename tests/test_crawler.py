@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from webscope.crawler import CrawlResult, PageTarget, extract_links, is_html_candidate, parse_page, template_key
+from webscope.crawler import (
+    CrawlResult,
+    PageTarget,
+    crawl,
+    extract_links,
+    is_html_candidate,
+    parse_page,
+    template_key,
+)
 
 
 def test_template_key_replaces_numeric_ids() -> None:
@@ -136,3 +144,11 @@ def test_duplicate_meta_treats_whitespace_and_case_as_equal() -> None:
     result = CrawlResult(root="https://s.com/", pages=pages, templates={"s.com/x/{id}": [p.url for p in pages]})
     findings = _duplicate_meta_findings(result)
     assert [f.rule for f in findings] == ["content/duplicate-title"]
+
+
+def test_crawl_reads_real_titles_from_sitemap(local_site: str) -> None:
+    """URL из sitemap раньше получали title главной — и давали ложные дубли."""
+    result = crawl(f"{local_site}/", max_pages=10, allow_private=True)
+    titles = {page.url: page.title for page in result.pages}
+    assert titles[f"{local_site}/a/1"] == "Товар первый"
+    assert titles[f"{local_site}/a/2"] == "Товар второй"

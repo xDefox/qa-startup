@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from ..auth_vault import decrypt as vault_decrypt
+from ..auth_vault import encrypt as vault_encrypt
 from ..history import DiffReport, Snapshot, diff_snapshots
 from ..models import AuthCredentials, ScanResult, Severity
 from ..models import Finding as ScanFinding
@@ -77,6 +79,16 @@ _MIGRATIONS = (
     ("sites", "auth_password", "TEXT"),
     ("sites", "auth_login_url", "TEXT"),
 )
+
+
+def _seal(password: str | None) -> str | None:
+    """Шифрует пароль перед записью (без WEBSCOPE_AUTH_KEY — как есть)."""
+    return vault_encrypt(password) if password else password
+
+
+def _open(password: str | None) -> str | None:
+    """Расшифровывает пароль из базы (старые записи — plaintext)."""
+    return vault_decrypt(password) if password else password
 
 
 def utcnow() -> datetime:
@@ -286,7 +298,7 @@ class Storage:
                     interval_days,
                     auth_kind,
                     auth_login,
-                    auth_password,
+                    _seal(auth_password),
                     auth_login_url,
                     now_iso(),
                 ),
@@ -319,6 +331,8 @@ class Storage:
             "auth_login_url",
         }
         updates = {key: value for key, value in fields.items() if key in allowed}
+        if "auth_password" in updates:
+            updates["auth_password"] = _seal(updates["auth_password"])
         if not updates:
             return
         assignments = ", ".join(f"{key} = ?" for key in updates)
@@ -420,11 +434,23 @@ class Storage:
         return runs[0] if runs else None
 
     def latest_ok_run(self, site_id: int) -> Run | None:
-        """Последний успешный прогон — на нём строится отчёт."""
-        for run in self.list_runs(site_id, limit=20):
-            if run.status == "ok":
-                return run
-        return None
+        """Последний успешный прогон — на нём строится отчёт.
+
+        Запрос идёт по всей истории, а не по последним 20 строкам: после череды
+        неудачных прогонов (сайт лежал) отчёт исчезал из интерфейса, хотя он есть.
+        """
+        with self._conn() as connection:
+            row = connection.execute(
+                "SELECT * FROM runs WHERE site_id = ? AND status = 'ok' ORDER BY id DESC LIMIT 1",
+                (site_id,),
+            ).fetchone()
+        return _run_from_row(row) if row else None
+
+    def count_running(self) -> int:
+        """Сколько прогонов выполняется прямо сейчас (для ограничения нагрузки)."""
+        with self._conn() as connection:
+            row = connection.execute("SELECT COUNT(*) AS total FROM runs WHERE status = 'running'").fetchone()
+        return int(row["total"] or 0)
 
     def running_run(self, site_id: int) -> Run | None:
         """Прогон, который сейчас выполняется (если он есть)."""
@@ -585,7 +611,7 @@ def _site_from_row(row: sqlite3.Row) -> Site:
         # но на случай чтения до неё проверяем по именам
         auth_kind=row["auth_kind"] if "auth_kind" in keys else None,
         auth_login=row["auth_login"] if "auth_login" in keys else None,
-        auth_password=row["auth_password"] if "auth_password" in keys else None,
+        auth_password=_open(row["auth_password"]) if "auth_password" in keys else None,
         auth_login_url=row["auth_login_url"] if "auth_login_url" in keys else None,
     )
 

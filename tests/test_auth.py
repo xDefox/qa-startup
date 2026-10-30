@@ -469,13 +469,15 @@ def test_settings_empty_password_keeps_old(web) -> None:
 
 
 def test_crawl_sends_authorization_header(basic_server: str) -> None:
-    result = crawl(f"{basic_server}/", headers={"Authorization": BASIC_HEADER}, max_pages=3)
+    result = crawl(f"{basic_server}/", headers={"Authorization": BASIC_HEADER}, max_pages=3, allow_private=True)
     assert result.pages
     assert result.pages[0].title == "Секретная страница"
 
-    plain = crawl(f"{basic_server}/", max_pages=3)
-    assert plain.pages
-    assert plain.pages[0].title == ""  # сервер отдал 401-заглушку без title
+    plain = crawl(f"{basic_server}/", max_pages=3, allow_private=True)
+    # Без заголовка сервер отдаёт 401: это не «страница без title», а отказ
+    # в доступе — краулер фиксирует причину и не выдаёт её за проверенную страницу.
+    assert plain.pages == []
+    assert any("HTTP 401" in item["reason"] for item in plain.skipped)
 
 
 # --- браузер: настоящий вход на локальном сервере ---

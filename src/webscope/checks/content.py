@@ -29,10 +29,13 @@ COLLECT = r"""
     .filter((f) => !(f.getAttribute('title') || '').trim() && !(f.getAttribute('aria-label') || '').trim())
     .map((f) => pick(f, { src: f.getAttribute('src') || '' }));
 
+  // Ссылки на эту же страницу (href="#..."): меню, слайдеры, якоря — проверяем
+  // так же, как обычные. Пустая ссылка <a href="#"></a> без имени недоступна
+  // скринридеру независимо от того, куда она ведёт, а именно в якорных ссылках
+  // иконочные кнопки чаще всего остаются без доступного имени.
   const emptyLinks = Array.from(doc.querySelectorAll('a'))
     .filter((a) => a.getAttribute('data-testid') === null && a.getAttribute('data-qa') === null)
     .filter((a) => a.getAttribute('aria-hidden') !== 'true')
-    .filter((a) => !(a.getAttribute('href') || '').startsWith('#'))
     .filter((a) => u.visible(a) && u.accessibleName(a) === '')
     .map((a) => pick(a, { href: a.getAttribute('href') || '' }));
 

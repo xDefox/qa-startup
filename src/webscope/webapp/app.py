@@ -9,23 +9,41 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
+import shutil
 import tempfile
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlsplit
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import __version__
 from ..models import Severity
-from ..report import render_html, render_json, render_plain, render_sarif, render_junit
+from ..report import render_html, render_json, render_junit, render_plain, render_sarif
 from ..scoring import plain_impact, score_label, top_actions
 from .alerts import notify
+from .auth import (
+    COOKIE_NAME,
+    SAFE_METHODS,
+    apply_headers,
+    auth_configured,
+    check_credentials,
+    cookie_kwargs,
+    csrf_safe,
+    is_authenticated,
+    is_public_path,
+    login_page,
+    session_token,
+    unauthorized_response,
+)
+from .limits import RateLimiter, max_concurrent_scans, rate_limit, rate_window_seconds
 from .scheduler import Monitor, ScanOptions, Scheduler, default_scanner
 from .storage import Run, Site, Storage
 
@@ -34,6 +52,39 @@ LOGGER = logging.getLogger("webscope.webapp")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 _LOCAL_DIR = Path(tempfile.gettempdir()) / "webscope-local"
 _LOCAL_DIR.mkdir(parents=True, exist_ok=True)
+
+# Ограничения на загрузку локальной сборки: один прогон не должен уметь
+# забить диск и не должен тянуть гигабайты в память процесса.
+MAX_UPLOAD_FILES = 300
+MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024
+MAX_UPLOAD_TOTAL_BYTES = 50 * 1024 * 1024
+# Сколько последних загрузок храним (остальные удаляются при новой загрузке).
+MAX_UPLOAD_JOBS = 50
+
+# Форматы отчёта: расширение в URL, MIME-тип и подпись для кнопки «скачать».
+REPORT_MEDIA_TYPES = {
+    "html": "text/html; charset=utf-8",
+    "json": "application/json",
+    "txt": "text/plain; charset=utf-8",
+    "xml": "application/xml",
+    "sarif": "application/sarif+json",
+}
+
+REPORT_RENDERERS = {
+    "html": render_html,
+    "json": render_json,
+    "txt": render_plain,
+    "xml": render_junit,
+    "sarif": render_sarif,
+}
+
+DOWNLOAD_FORMATS = (
+    {"ext": "html", "label": "HTML", "hint": "Открыть в браузере и сохранить"},
+    {"ext": "json", "label": "JSON", "hint": "Для интеграций и своего дашборда"},
+    {"ext": "txt", "label": "TXT", "hint": "Прочитать в терминале или письмом"},
+    {"ext": "xml", "label": "JUnit", "hint": "Для CI: Jenkins, GitLab, pytest"},
+    {"ext": "sarif", "label": "SARIF", "hint": "Для GitHub Code Scanning"},
+)
 
 BLOCKER_RULE = "interaction/button-blocked"
 
@@ -66,16 +117,153 @@ _SCHEDULE_LABELS = {
 
 
 def normalize_url(url: str) -> str:
-    """Приводит введённый адрес к полному URL."""
-    cleaned = url.strip()
+    """Приводит введённый адрес к полному URL и отбрасывает мусор.
+
+    Проверяется не «похоже ли на домен», а разбирается ли адрес: переводы строк
+    (инъекция в заголовок письма), логин/пароль в URL (утечка в логи и реферер),
+    порт вне диапазона и пустой хост отклоняются. IPv6 в скобках — валидный адрес.
+    """
+    cleaned = (url or "").strip()
     if not cleaned:
         raise ValueError("Укажите адрес сайта")
+    if any(char in cleaned for char in "\r\n\t") or any(ord(char) < 32 for char in cleaned):
+        raise ValueError("В адресе есть недопустимые символы")
+    if " " in cleaned:
+        raise ValueError("Похоже, это не адрес сайта")
     if not cleaned.startswith(("http://", "https://")):
         cleaned = f"https://{cleaned}"
-    host = cleaned.split("//", 1)[1].split("/")[0].split(":")[0]
-    if "." not in host and host not in ("localhost",):
+
+    parsed = urlsplit(cleaned)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("Поддерживаются только http и https")
+    if parsed.username or parsed.password:
+        raise ValueError("Логин и пароль в адресе не поддерживаются — укажите их в блоке авторизации")
+    if not parsed.hostname:
+        raise ValueError("Похоже, это не адрес сайта")
+    try:
+        port = parsed.port
+    except ValueError as exc:  # порт не число или вне диапазона
+        raise ValueError("Некорректный порт в адресе") from exc
+    if port is not None and not 1 <= port <= 65535:
+        raise ValueError("Некорректный порт в адресе")
+
+    host = parsed.hostname
+    if not ("." in host or host == "localhost" or ":" in host):
         raise ValueError("Похоже, это не адрес сайта")
     return cleaned
+
+
+# Сколько символов имени файла разрешаем: длиннее браузеры и файловые
+# системы начинают обрезать по-своему.
+MAX_FILENAME_STEM = 120
+
+
+def safe_report_stem(value: str | None) -> str | None:
+    """Имя файла от пользователя, приведённое к безопасному виду.
+
+    Имя уходит в заголовок ``Content-Disposition``, поэтому всё, чем можно
+    навредить, вычищается: переводы строк (инъекция в заголовок), путь
+    (``../../etc/passwd`` — это имя, а не путь), кавычки, управляющие символы.
+    Расширение, если пользователь его вписал, отбрасывается: его задаёт формат.
+
+    Возвращает None, если после чистки ничего не осталось, — тогда берётся
+    имя по умолчанию.
+    """
+    if not value:
+        return None
+    # только печатаемые символы: CR/LF в заголовке — это уже другая уязвимость
+    cleaned = "".join(char for char in str(value) if char.isprintable())
+    # имя файла, а не путь: берём последний сегмент
+    cleaned = cleaned.replace("\\", "/").split("/")[-1].strip()
+    stem, dot, tail = cleaned.rpartition(".")
+    if dot and tail.lower() in REPORT_MEDIA_TYPES:
+        cleaned = stem
+    cleaned = "".join(char if (char.isalnum() or char in "-_. ") else "-" for char in cleaned)
+    cleaned = " ".join(cleaned.split()).strip(" .-_")
+    return cleaned[:MAX_FILENAME_STEM].strip(" .-_") or None
+
+
+def default_report_stem(site: Site, run: Run) -> str:
+    """Имя по умолчанию: домен и дата прогона.
+
+    Unicode-домены, порты и IPv6 превращаются в дефисы, иначе в заголовке
+    окажется что-то вроде ``https://пример.рф:8443/``.
+    """
+    host = urlsplit(site.url).hostname or "site"
+    safe_host = re.sub(r"[^A-Za-z0-9.-]+", "-", host).strip("-.") or "site"
+    day = (run.started_at or "")[:10]
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) is None:
+        day = "report"
+    return f"webscope-{safe_host}-{day}"
+
+
+def download_filename(site: Site, run: Run, ext: str, name: str | None = None) -> str:
+    """Имя файла отчёта: имя пользователя (если задал) плюс расширение формата."""
+    stem = safe_report_stem(name) or default_report_stem(site, run)
+    return f"{stem}.{ext}"
+
+
+def content_disposition(filename: str, fallback: str | None = None) -> str:
+    """Заголовок ``Content-Disposition`` для файла с любым именем.
+
+    В ``filename`` по RFC 6266 допустим только ASCII, поэтому для кириллицы
+    добавляется ``filename*`` в кодировке UTF-8, а в ``filename`` остаётся
+    ASCII-запасной вариант: старые клиенты не увидят кракозябры. ``fallback`` —
+    что показать такому клиенту; по умолчанию собирается из самого имени.
+    """
+    if filename.isascii():
+        return f'attachment; filename="{filename}"'
+    if fallback is None:
+        stem, _, ext = filename.rpartition(".")
+        fallback_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", stem).strip("-._") or "report"
+        fallback = f"{fallback_stem}.{ext}" if ext else fallback_stem
+    encoded = quote(filename, safe="")
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{encoded}"
+
+
+def human_date(value: str | None) -> str | None:
+    """Дата прогона по-человечески: 2026-10-30T09:15:00+00:00 → 30.10.2026."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).strftime("%d.%m.%Y")
+    except ValueError:
+        return None
+
+
+def _prune_local_uploads(keep: int = MAX_UPLOAD_JOBS) -> None:
+    """Удаляет старые загруженные сборки, чтобы каталог не рос бесконечно."""
+    try:
+        jobs = sorted(
+            (path for path in _LOCAL_DIR.iterdir() if path.is_dir()),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:  # каталога нет или нет прав — загрузка всё равно важнее
+        return
+    for stale in jobs[keep:]:
+        shutil.rmtree(stale, ignore_errors=True)
+
+
+class _SandboxedLocalFiles(StaticFiles):
+    """Раздача загруженных страниц в песочнице.
+
+    Загруженный HTML исполняется на origin приложения. Без песочницы его скрипт
+    читал бы cookie и ходил в `/api` от имени пользователя. Директива CSP
+    ``sandbox`` переводит документ в уникальный opaque-origin: скрипты и стили
+    самой страницы работают (иначе проверка локальной сборки теряет смысл),
+    а доступа к cookie, localStorage и API приложения у них нет.
+    """
+
+    SANDBOX = "sandbox allow-scripts allow-forms allow-popups allow-modals"
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code < 400:
+            response.headers["Content-Security-Policy"] = self.SANDBOX
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
 
 def _problem_view(group: dict) -> dict:
@@ -242,7 +430,7 @@ def create_app(
         Загруженные файлы раздаются самим приложением по /__local/ — сканировать
         свой же сервер по loopback можно, чужие loopback-адреса остаются под SSRF-защитой.
         """
-        parsed = urlparse(url)
+        parsed = urlsplit(url)
         if parsed.hostname in ("127.0.0.1", "localhost") and parsed.path.startswith("/__local/"):
             options = replace(options, allow_private=True)
         return base_scanner(url, options)
@@ -255,7 +443,25 @@ def create_app(
     )
     scheduler = Scheduler(monitor, storage, check_interval=check_interval)
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    templates.env.globals["auth_enabled"] = auth_configured()
     tasks: set[asyncio.Task] = set()
+    limiter = RateLimiter(rate_limit(), rate_window_seconds())
+
+    def client_key(request: Request) -> str:
+        """Ключ лимита: адрес клиента (за прокси нужен доверенный X-Forwarded-For)."""
+        return request.client.host if request.client else "unknown"
+
+    def scan_limit_response(request: Request) -> PlainTextResponse | JSONResponse | None:
+        """Проверяет лимиты запуска сканов; None — можно запускать."""
+        if not limiter.allow(client_key(request)):
+            message = "Слишком много запусков проверки с одного адреса. Попробуйте через минуту."
+        elif storage.count_running() >= max_concurrent_scans():
+            message = "Сейчас выполняется максимум проверок. Попробуйте через пару минут."
+        else:
+            return None
+        if request.url.path.startswith("/api/"):
+            return JSONResponse({"detail": message}, status_code=429)
+        return PlainTextResponse(message, status_code=429)
 
     def trigger(site: Site, background_tasks: BackgroundTasks | None = None) -> Run:
         """Открывает прогон и запускает проверку в фоне.
@@ -280,32 +486,55 @@ def create_app(
         await scheduler.stop()
         storage.close()
 
-    app = FastAPI(title="webscope", version=__version__, lifespan=lifespan)
+    app = FastAPI(title="webscope", version=__version__, lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.storage = storage
     app.state.monitor = monitor
     app.state.scheduler = scheduler
+    app.state.limiter = limiter
 
-    # --- авторизация разработчика ---
+    @app.middleware("http")
+    async def guard(request: Request, call_next):
+        """Вход и CSRF для всех маршрутов, кроме публичных.
+
+        Пока ``WEBSCOPE_AUTH_PASSWORD`` не задан, приложение работает как демо
+        (и `webscope serve` об этом предупреждает). Как только пароль задан,
+        без cookie не открывается ничего: ни страницы, ни API, ни отчёты.
+        """
+        if auth_configured() and not is_public_path(request.url.path):
+            if request.method not in SAFE_METHODS and not csrf_safe(request):
+                return PlainTextResponse("Запрос с чужого Origin отклонён", status_code=403)
+            if not is_authenticated(request):
+                return apply_headers(unauthorized_response(request))
+        response = await call_next(request)
+        return apply_headers(response)
+
+    # --- вход в интерфейс ---
     @app.get("/auth/login", response_class=HTMLResponse)
-    def auth_login_form(request: Request):
-        return templates.TemplateResponse(request, "auth.html", {"error": None})
+    def auth_login_form(request: Request, next: str = "/"):
+        if not auth_configured():
+            return RedirectResponse(url="/", status_code=303)
+        return login_page(request, templates)
 
     @app.post("/auth/login")
     def auth_login(
         request: Request,
         username: str = Form(""),
         password: str = Form(""),
+        next: str = Form("/"),
     ):
-        if username == "dev" and password == os.environ.get("WEBSCOPE_DEV_PASS", "dev"):
-            response = RedirectResponse(url="/sites", status_code=303)
-            response.set_cookie(key="webscope_session", value="auth", httponly=True)
+        if not auth_configured():
+            return RedirectResponse(url="/", status_code=303)
+        if check_credentials(username, password):
+            target = next if next.startswith("/") and not next.startswith("//") else "/"
+            response = RedirectResponse(url=target, status_code=303)
+            response.set_cookie(value=session_token(), **cookie_kwargs(request))
             return response
-        return templates.TemplateResponse(request, "auth.html", {"error": "Неверные данные"})
+        return login_page(request, templates, error="Неверные логин или пароль")
 
     @app.get("/auth/logout")
     def auth_logout():
         response = RedirectResponse(url="/", status_code=303)
-        response.delete_cookie("webscope_session")
+        response.delete_cookie(key=COOKIE_NAME)
         return response
 
     # --- страницы ---
@@ -340,6 +569,10 @@ def create_app(
         auth_password: str = Form(""),
         auth_login_url: str = Form(""),
     ):
+        limited = scan_limit_response(request)
+        if limited is not None:
+            return limited
+
         try:
             normalized = normalize_url(url)
         except ValueError as exc:
@@ -389,6 +622,11 @@ def create_app(
         trigger(site, background_tasks)
         return RedirectResponse(url=f"/sites/{site.id}", status_code=303)
 
+    @app.get("/sites")
+    def sites_index():
+        """Список сайтов живёт на главной; /sites — адрес после входа."""
+        return RedirectResponse(url="/", status_code=303)
+
     @app.get("/sites/{site_id}", response_class=HTMLResponse)
     def site_page(request: Request, site_id: int):
         site = storage.get_site(site_id)
@@ -409,11 +647,18 @@ def create_app(
                 "pending": pending,
                 "last_error": last_error,
                 "schedule_label": _SCHEDULE_LABELS.get(site.schedule, site.schedule),
+                "download_formats": DOWNLOAD_FORMATS,
+                "download_sample": download_filename(site, last, "json") if last else None,
+                "download_default_name": default_report_stem(site, last) if last else None,
+                "download_date": human_date(last.started_at) if last else None,
             },
         )
 
     @app.post("/sites/{site_id}/scan")
-    def rescan(site_id: int, background_tasks: BackgroundTasks):
+    def rescan(request: Request, site_id: int, background_tasks: BackgroundTasks):
+        limited = scan_limit_response(request)
+        if limited is not None:
+            return limited
         site = storage.get_site(site_id)
         if site is None:
             raise HTTPException(status_code=404, detail="Сайт не найден")
@@ -541,7 +786,10 @@ def create_app(
         return {"runs": [run.to_dict() for run in storage.list_runs(site.id, limit=100)]}
 
     @app.post("/api/sites/{site_id}/scan")
-    def api_scan(site_id: int, background_tasks: BackgroundTasks):
+    def api_scan(request: Request, site_id: int, background_tasks: BackgroundTasks):
+        limited = scan_limit_response(request)
+        if limited is not None:
+            return limited
         site = storage.get_site(site_id)
         if site is None:
             raise HTTPException(status_code=404, detail="Сайт не найден")
@@ -555,21 +803,45 @@ def create_app(
         paths: list[str] = Form(...),
         background_tasks: BackgroundTasks = None,
     ):
+        limited = scan_limit_response(request)
+        if limited is not None:
+            return limited
         if not files:
             raise HTTPException(status_code=400, detail="Нет файлов")
+        if len(files) > MAX_UPLOAD_FILES:
+            raise HTTPException(status_code=413, detail=f"Слишком много файлов (максимум {MAX_UPLOAD_FILES})")
+        if len(paths) != len(files):
+            raise HTTPException(status_code=400, detail="Число путей не совпадает с числом файлов")
+
         job_id = uuid.uuid4().hex
         base = _LOCAL_DIR / job_id
         base.mkdir(parents=True, exist_ok=True)
-        for f, p in zip(files, paths):
-            rel = Path(p)
-            # защита от выхода за пределы
-            safe = Path(*[part for part in rel.parts if part not in ("..", ".", "")])
-            if not safe.parts:
-                safe = Path(f.filename or "index.html")
-            dest = base / safe
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            content = await f.read()
-            dest.write_bytes(content)
+        total_bytes = 0
+        try:
+            for f, raw_path in zip(files, paths):
+                # Абсолютный путь или выход за пределы каталога загрузки —
+                # отказ. Раньше фильтр выбрасывал только «..», а «/etc/passwd»
+                # оставался абсолютным и записывался мимо каталога задания.
+                relative = Path((raw_path or "").replace("\\", "/"))
+                if relative.is_absolute():
+                    raise HTTPException(status_code=400, detail="Абсолютный путь файла не допускается")
+                safe = Path(*[part for part in relative.parts if part not in ("..", ".", "")])
+                if not safe.parts:
+                    safe = Path(Path(f.filename or "index.html").name)
+                dest = (base / safe).resolve()
+                if not dest.is_relative_to(base.resolve()):
+                    raise HTTPException(status_code=400, detail="Недопустимый путь файла")
+                content = await f.read(MAX_UPLOAD_FILE_BYTES + 1)
+                total_bytes += len(content)
+                if len(content) > MAX_UPLOAD_FILE_BYTES or total_bytes > MAX_UPLOAD_TOTAL_BYTES:
+                    raise HTTPException(status_code=413, detail="Загруженные файлы слишком большие")
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(content)
+        except HTTPException:
+            shutil.rmtree(base, ignore_errors=True)
+            raise
+
+        _prune_local_uploads(keep=MAX_UPLOAD_JOBS)
         # выбираем стартовый файл
         index = base / "index.html"
         if not index.exists():
@@ -592,59 +864,56 @@ def create_app(
         trigger(site, background_tasks)
         return {"url": normalized, "site_id": site.id}
 
-    @app.get("/api/sites/{site_id}/report.txt", response_class=PlainTextResponse)
-    def api_report_text(site_id: int):
+    def report_payload(site_id: int, fmt: str) -> tuple[Site, Run, str]:
+        """Готовый отчёт: сайт, прогон и содержимое в нужном формате."""
         site = storage.get_site(site_id)
         if site is None:
             raise HTTPException(status_code=404, detail="Сайт не найден")
         last = storage.latest_ok_run(site.id)
         if last is None:
             raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
-        return render_plain(_result_from_run(storage, last))
+        return site, last, REPORT_RENDERERS[fmt](_result_from_run(storage, last))
+
+    def report_response(site_id: int, fmt: str, download: bool, filename: str | None = None) -> Response:
+        """Отчёт для просмотра в браузере или файлом на скачивание.
+
+        ``filename`` — имя, выбранное пользователем в панели сохранения;
+        оно чистится (``safe_report_stem``) и попадает в ``Content-Disposition``.
+        Заголовок важнее атрибута ``download`` в ссылке, поэтому имя задаётся
+        именно здесь, а не в разметке.
+        """
+        site, run, payload = report_payload(site_id, fmt)
+        headers: dict[str, str] = {}
+        if download:
+            headers["Content-Disposition"] = content_disposition(
+                download_filename(site, run, fmt, filename),
+                fallback=download_filename(site, run, fmt),
+            )
+            headers["Cache-Control"] = "no-store"
+        return Response(content=payload, media_type=REPORT_MEDIA_TYPES[fmt], headers=headers)
+
+    @app.get("/api/sites/{site_id}/report.txt")
+    def api_report_text(site_id: int, download: bool = False, filename: str | None = None):
+        return report_response(site_id, "txt", download, filename)
 
     @app.get("/api/sites/{site_id}/report.json")
-    def api_report_json(site_id: int):
-        site = storage.get_site(site_id)
-        if site is None:
-            raise HTTPException(status_code=404, detail="Сайт не найден")
-        last = storage.latest_ok_run(site.id)
-        if last is None:
-            raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
-        return JSONResponse(render_json(_result_from_run(storage, last)))
+    def api_report_json(site_id: int, download: bool = False, filename: str | None = None):
+        return report_response(site_id, "json", download, filename)
 
-    @app.get("/api/sites/{site_id}/report.html", response_class=HTMLResponse)
-    def api_report_html(site_id: int):
-        site = storage.get_site(site_id)
-        if site is None:
-            raise HTTPException(status_code=404, detail="Сайт не найден")
-        last = storage.latest_ok_run(site.id)
-        if last is None:
-            raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
-        return render_html(_result_from_run(storage, last))
+    @app.get("/api/sites/{site_id}/report.html")
+    def api_report_html(site_id: int, download: bool = False, filename: str | None = None):
+        return report_response(site_id, "html", download, filename)
 
     @app.get("/api/sites/{site_id}/report.sarif")
-    def api_report_sarif(site_id: int):
-        site = storage.get_site(site_id)
-        if site is None:
-            raise HTTPException(status_code=404, detail="Сайт не найден")
-        last = storage.latest_ok_run(site.id)
-        if last is None:
-            raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
-        return JSONResponse(json.loads(render_sarif(_result_from_run(storage, last))))
+    def api_report_sarif(site_id: int, download: bool = False, filename: str | None = None):
+        return report_response(site_id, "sarif", download, filename)
 
     @app.get("/api/sites/{site_id}/report.xml")
-    def api_report_junit(site_id: int):
-        site = storage.get_site(site_id)
-        if site is None:
-            raise HTTPException(status_code=404, detail="Сайт не найден")
-        last = storage.latest_ok_run(site.id)
-        if last is None:
-            raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
-        from fastapi.responses import PlainTextResponse
-        return PlainTextResponse(render_junit(_result_from_run(storage, last)), media_type="application/xml")
+    def api_report_junit(site_id: int, download: bool = False, filename: str | None = None):
+        return report_response(site_id, "xml", download, filename)
 
     try:
-        app.mount("/__local", StaticFiles(directory=str(_LOCAL_DIR), html=True), name="local_static")
+        app.mount("/__local", _SandboxedLocalFiles(directory=str(_LOCAL_DIR), html=True), name="local_static")
     except (OSError, RuntimeError) as exc:  # каталог раздачи не создался — локальная загрузка будет недоступна
         LOGGER.warning("не удалось смонтировать /__local: %s", exc)
 

@@ -142,6 +142,10 @@ def render_sarif(result: ScanResult) -> str:
                 "ruleId": finding.rule,
                 "level": _sarif_level(finding.severity),
                 "message": {"text": finding.message or finding.title},
+                # GitHub Code Scanning склеивает результаты между прогонами по
+                # отпечатку: без него каждая проверка создаёт новые алерты,
+                # и вместо «третья проблема за неделю» получается «300 алертов».
+                "partialFingerprints": {"webscopeFinding/v1": finding.fingerprint},
                 "locations": [
                     {
                         "physicalLocation": {

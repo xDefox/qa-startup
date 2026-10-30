@@ -519,3 +519,48 @@ def test_site_page_links_to_help(client: TestClient) -> None:
     response = client.get(f"/sites/{site_id}")
     assert "Подробнее о проверке" in response.text
     assert "w3.org" in response.text
+
+
+def test_report_survives_long_failure_streak(tmp_path: Path) -> None:
+    """Отчёт не должен исчезать после череды неудачных прогонов.
+
+    Регресс: latest_ok_run смотрел только последние 20 строк, и после
+    20 упавших проверок интерфейс показывал «отчёт ещё не готов».
+    """
+    storage = Storage(tmp_path / "db.sqlite")
+    site = storage.add_site("https://site.com/")
+    good = storage.start_run(site.id)
+    storage.finish_run(good.id, _result([_finding()]))
+    for _ in range(25):
+        failed = storage.start_run(site.id)
+        storage.fail_run(failed.id, "сайт недоступен")
+
+    assert storage.latest_ok_run(site.id) is not None
+    assert storage.latest_ok_run(site.id).id == good.id
+    storage.close()
+
+
+# --- нормализация адреса ---
+
+
+def test_normalize_url_rejects_header_injection() -> None:
+    with pytest.raises(ValueError):
+        normalize_url("evil.com\nBcc: victim@example.com")
+
+
+def test_normalize_url_rejects_credentials() -> None:
+    with pytest.raises(ValueError):
+        normalize_url("http://user:pass@127.0.0.1/")
+
+
+def test_normalize_url_rejects_invalid_port() -> None:
+    with pytest.raises(ValueError):
+        normalize_url("a.b:99999")
+
+
+def test_normalize_url_accepts_ipv6() -> None:
+    assert normalize_url("[::1]") == "https://[::1]"
+
+
+def test_normalize_url_keeps_local_sites() -> None:
+    assert normalize_url("localhost:8888/a.html") == "https://localhost:8888/a.html"

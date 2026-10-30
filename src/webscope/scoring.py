@@ -302,6 +302,23 @@ _AXE_IMPACT: dict[str, tuple[str, str]] = {
 }
 
 
+# Находки о самом сканере, а не о сайте: «проверено 20 из 120 ссылок»,
+# «элементов больше лимита». Владельцу сайта исправлять тут нечего, поэтому
+# в балл и в план действий они не идут — иначе чистая страница получает 99.
+DIAGNOSTIC_RULES = frozenset(
+    {
+        "links/limit-reached",
+        "links/timeout",
+        "scan/timeout",
+    }
+)
+
+
+def is_diagnostic(finding: Finding) -> bool:
+    """Сообщение о полноте проверки, а не дефект страницы."""
+    return finding.rule in DIAGNOSTIC_RULES
+
+
 def is_site_defect(finding: Finding) -> bool:
     """Дефект самого сайта? Ошибки чужих виджетов (трекеры, карты, SDK) — нет."""
     owner = (finding.details or {}).get("owner")
@@ -315,7 +332,7 @@ def compute_score(findings: list[Finding]) -> int:
     дефект повторяется на 30 страницах каталога, это одна проблема, а не тридцать.
     Иначе балл скачет в зависимости от размера сайта и перестаёт быть понятным.
     """
-    own = [finding for finding in findings if is_site_defect(finding)]
+    own = [finding for finding in findings if is_site_defect(finding) and not is_diagnostic(finding)]
     if not own:
         return 100
 
@@ -359,6 +376,7 @@ def plain_impact(finding: Finding) -> tuple[str, str]:
 
 def top_actions(findings: list[Finding], limit: int = 3) -> list[Finding]:
     """Топ находок, которые стоит закрыть первыми: по серьёзности и количеству страниц."""
+    findings = [finding for finding in findings if not is_diagnostic(finding)]
     counts = affected_pages(findings)
 
     def sort_key(finding: Finding) -> tuple[int, int, str]:

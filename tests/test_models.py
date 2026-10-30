@@ -68,3 +68,49 @@ def test_to_dict_is_json_serialisable() -> None:
     payload = json.dumps(result.to_dict(), ensure_ascii=False)
     assert '"schema_version": "1.0"' in payload
     assert '"severity": "serious"' in payload
+
+
+def test_fingerprint_is_stable_for_the_same_finding() -> None:
+    """Один и тот же дефект даёт один отпечаток — даже если текст переписали.
+
+    Именно на это опирается дедупликация в GitHub Code Scanning: изменился
+    заголовок или сниппет отрендерился с другими пробелами — алерт не новый.
+    """
+    first = Finding(
+        rule="content/image-alt",
+        severity=Severity.SERIOUS,
+        title="Изображение без alt",
+        message="",
+        url="https://example.com/page#top",
+        selector="main > img",
+        snippet="  <img   src='a'> ",
+    )
+    second = Finding(
+        rule="content/image-alt",
+        severity=Severity.SERIOUS,
+        title="У картинки нет alt",
+        message="другая формулировка",
+        url="https://example.com/page",
+        selector="main > img",
+        snippet="<img src='a'>",
+        details={"owner": "site"},
+    )
+    assert first.fingerprint == second.fingerprint
+
+
+def test_fingerprint_distinguishes_different_elements() -> None:
+    base = {
+        "rule": "forms/control-without-name",
+        "severity": Severity.MODERATE,
+        "title": "t",
+        "message": "",
+        "url": "https://example.com/",
+    }
+    assert Finding(**base, selector="form > input").fingerprint != Finding(**base, selector="form > select").fingerprint
+    assert Finding(**base).fingerprint != Finding(**{**base, "rule": "forms/no-label"}).fingerprint
+
+
+def test_fingerprint_is_json_safe() -> None:
+    payload = _finding("a", Severity.MINOR).to_dict()
+    assert isinstance(payload["fingerprint"], str)
+    assert len(payload["fingerprint"]) == 16
