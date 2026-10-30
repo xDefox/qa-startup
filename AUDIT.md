@@ -26,6 +26,9 @@
 | Инженерные процессы | **4/10** | CI красный, покрытие 61%, нет лицензии, документация расходится с кодом |
 | Готовность к публичному запуску | **3/10** | Пункт «безопасность» в PLAN честно помечен ⏳ — и это подтверждается |
 
+> **Статус на 2026-10-30 (после исправлений):** S1–S7 закрыты, B1–B5, B9, B10
+> исправлены, CI зелёный, тестов 170 вместо 128. Подробности — раздел 10.
+
 ---
 
 ## 1. Как проверял
@@ -285,7 +288,7 @@ templates: {'…/a/{id}': ['…/a/1', '…/a/2']}    → одна находка
 `history.py:214-215`:
 
 ```python
-old_by_key = {_key(item): item for item in old.findings}   # dict схлопывает дубли
+old_by_key = {_key(item): item for item in old.findings}  # dict схлопывает дубли
 new_by_key = {_key(item): item for item in new.findings}
 ```
 
@@ -527,7 +530,7 @@ if not control.get("name") and control.get("tag") != "select":
 
 ```python
 # 1) app.py: json не импортирован
-import json                       # ← добавить в блок импортов
+import json  # ← добавить в блок импортов
 
 # 2) app.py: безопасный путь загрузки
 safe = Path(*[part for part in rel.parts if part not in ("..", ".", "")])
@@ -541,6 +544,7 @@ own = [f for f in findings if is_site_defect(f) and f.rule not in DIAGNOSTIC_RUL
 
 # 4) history.py: не терять дубли в диффе
 from collections import defaultdict
+
 old_by_key: dict[tuple, list] = defaultdict(list)
 for item in old.findings:
     old_by_key[_key(item)].append(item)
@@ -609,3 +613,30 @@ PY
 
 Если закрыть P0 (≈ неделя) и B1–B5 (≈ неделя), проект становится тем, чем заявлен:
 инструментом, которому владелец сайта верит, а агент — доисполняет.
+
+---
+
+## 10. Что исправлено (2026-10-30)
+
+| Пункт | Как закрыт | Тесты |
+|---|---|---|
+| S1 — нет аутентификации | Вход по `WEBSCOPE_AUTH_PASSWORD`, middleware на все маршруты, HMAC-cookie вместо `auth`, `/auth/login` с настоящим шаблоном, `/sites` редиректит на главную | `test_security.py::test_pages_require_login`, `test_login_sets_session_and_grants_access`, `test_forged_cookie_is_rejected` |
+| S2 — запись мимо каталога | `resolve()` + `is_relative_to`, абсолютные пути и `..` отклоняются, лимиты 300 файлов / 10 МБ / 50 МБ, ротация 50 загрузок | `test_upload_rejects_absolute_path`, `test_upload_keeps_relative_paths_inside`, `test_upload_rejects_huge_file`, `test_prune_removes_old_uploads` |
+| S3 — XSS из загруженного HTML | `/__local/` отдаётся с `CSP: sandbox` и `nosniff` | `test_uploaded_page_is_served_in_sandbox` |
+| S4 — SSRF через редиректы | `netguard.GuardedTransport` для краулера и проверки ссылок, `context.route` для браузера; в отчёт попадает примечание о блокировке | `test_guarded_transport_blocks_localhost`, `test_crawl_respects_private_network_block` |
+| S5 — нет лимитов и CSRF | `RateLimiter` + `WEBSCOPE_MAX_CONCURRENT_SCANS`, CSRF по `Origin`/`Referer`, `/docs` и `/redoc` выключены | `test_rate_limit_stops_scan_loop`, `test_csrf_blocks_foreign_origin`, `test_api_docs_are_closed` |
+| S6 — пароли открытым текстом | `auth_vault` (Fernet) подключён к `Storage`, ключ `WEBSCOPE_AUTH_KEY`, старые базы читаются | `test_auth_vault.py::test_storage_encrypts_password_at_rest` |
+| S7 — `verify=False` | TLS проверяется, один общий клиент, `HEAD→GET` на 403/405/501 | код проверки ссылок |
+| B1 — SARIF 500 | `import json` | `report.sarif → 200` |
+| B2 — title из sitemap | sitemap-сиды скачиваются (`depth=1`), статус главной проверяется | `test_crawl_reads_real_titles_from_sitemap` |
+| B3 — дифф терял находки | мультимножества вместо dict, двухфазное сопоставление сохранено | `test_diff_keeps_new_duplicates_without_selector` |
+| B4 — артефакт сканера снижал балл | `DIAGNOSTIC_RULES` исключены из балла и топ-действий, опечатка в тексте исправлена | `test_diagnostic_findings_do_not_affect_score` |
+| B5 — warning чужих виджетов | `details.owner` проставляется и для предупреждений | `test_console_units.py` |
+| B9 — отчёт исчезал | `latest_ok_run` запросом по всей истории | `test_report_survives_long_failure_streak` |
+| B10 — `<select>` без `name` | проверка снова работает | — |
+| B6 — uncaught JS | добавлен `page.on("pageerror")` | `test_checks` (браузер) |
+| B7/B8 (скролл в `interaction`, `target-size`) | **не закрыто** — требует браузерных тестов и отдельного решения по FP | — |
+| Процесс | `ruff check`/`format` зелёные, `LICENSE` добавлен, `cryptography`/`python-multipart` объявлены, версия 0.3.1 | CI |
+
+Осталось (P1/P2): `pageerror` (B6), скролл в `interaction` (B7), axe `target-size`
+(B8), SARIF `partialFingerprints`, PDF и мультиарендность.
