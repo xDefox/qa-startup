@@ -6,12 +6,16 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
 SCHEMA_VERSION = "1.0"
+
+_WHITESPACE = re.compile(r"\s+")
 
 
 class Severity(str, Enum):
@@ -70,9 +74,33 @@ class Finding:
     source: str = "webscope"
     details: dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def fingerprint(self) -> str:
+        """Стабильный отпечаток находки: тот же дефект — тот же отпечаток.
+
+        Нужен там, где важно узнать «эта же проблема или новая»: дедупликация
+        в GitHub Code Scanning (`partialFingerprints`), сравнение отчётов между
+        прогонами. Не зависит от порядка находок и от `details`: только правило,
+        адрес, селектор и нормализованный сниппет — они не меняются от прогона
+        к прогону, пока дефект не починили.
+
+        Адрес берётся без якоря и завершающего слэша, сниппет — со сжатыми
+        пробелами: иначе отпечаток «прыгает» на каждом рендере.
+        """
+        parts = "\x1f".join(
+            (
+                self.rule,
+                (self.url or "").split("#", 1)[0].rstrip("/"),
+                self.selector or "",
+                _WHITESPACE.sub(" ", self.snippet or "").strip(),
+            )
+        )
+        return hashlib.sha256(parts.encode("utf-8")).hexdigest()[:16]
+
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["severity"] = self.severity.value
+        data["fingerprint"] = self.fingerprint
         return data
 
 
