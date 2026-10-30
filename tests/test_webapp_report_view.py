@@ -6,6 +6,9 @@
 
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -68,9 +71,10 @@ def test_report_table_has_all_findings_and_three_categories(client) -> None:
     assert 'id="findings-table"' not in html
 
     # Переключатель — иконки без текста, в стиле кнопки темы.
-    # Рядом с ним такая же иконка «сохранить отчёт» (стрелка вниз).
+    # Рядом с ним такая же иконка «сохранить отчёт» (стрелка вниз), но это
+    # отдельный класс: иначе клик по ней срабатывал бы как переключение вида.
     assert html.count('class="view-btn"') == 2
-    assert html.count('class="view-btn download-btn"') == 1
+    assert html.count('class="icon-btn download-btn"') == 1
     assert "☰" not in html and "⊞" not in html
     assert 'aria-label="Списком"' in html and 'aria-label="Таблицей"' in html
     assert 'aria-label="Сохранить отчёт"' in html
@@ -152,7 +156,7 @@ def test_three_buttons_do_not_replace_the_report(client) -> None:
     test_client, site = client
     html = test_client.get(f"/sites/{site.id}").text
     assert html.count('class="view-btn"') == 2, "переключатель вида"
-    assert html.count('class="view-btn download-btn"') == 1, "кнопка сохранения"
+    assert html.count('class="icon-btn download-btn"') == 1, "кнопка сохранения"
     # обе панели находок на месте, даже когда открыт выбор формата
     assert html.count('class="findings-view"') == 2
     assert 'class="findings-table"' in html
@@ -237,3 +241,51 @@ def test_download_filename_keeps_regular_host(tmp_path: Path) -> None:
     run = storage.start_run(site.id)
     assert download_filename(site, run, "json") == f"webscope-example.com-{run.started_at[:10]}.json"
     storage.close()
+
+
+HARNESS = Path(__file__).parent / "js" / "report_page_harness.js"
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="нужен node для исполнения скрипта страницы")
+def test_download_button_does_not_change_findings_view(client) -> None:
+    """Клик по «скачать» не должен прятать таблицу или список находок.
+
+    Регресс: у кнопки сохранения был класс `view-btn`, обработчик переключателя
+    вида вешался на все `.view-btn`, получал `dataset.view === undefined` и прятал
+    обе панели находок — выглядело как «таблица пропала».
+
+    Проверка настоящая: берём отрендеренную страницу, исполняем её скрипт
+    в мини-DOM (tests/js/report_page_harness.js) и кликаем по кнопкам.
+    """
+    test_client, site = client
+    html = test_client.get(f"/sites/{site.id}").text
+
+    completed = subprocess.run(
+        ["node", str(HARNESS)],
+        input=json.dumps({"html": html}),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    payload = json.loads(completed.stdout or "{}")
+    assert payload.get("ok"), payload
+    assert payload["initialVisible"] == ["list"]
+    assert payload["afterDownloadClick"] == ["list"], "после «скачать» вид находок не меняется"
+    assert payload["afterTableToggle"] == ["table"]
+    assert payload["afterDownloadClickOnTable"] == ["table"], "и на таблице тоже"
+    assert payload["popOpened"] is True
+
+
+def test_download_button_is_not_a_view_toggle(client) -> None:
+    """Кнопка сохранения не должна попадать в обработчик переключателя вида."""
+    test_client, site = client
+    html = test_client.get(f"/sites/{site.id}").text
+    start = html.index('id="download-open"')
+    button = html[html.index("<button", start - 300) : html.index("</button>", start)]
+    assert "view-btn" not in button, "класс view-btn навесил бы переключатель вида на сохранение"
+    assert "icon-btn" in button
+    assert "data-view" not in button
+    # и обработчик слушает только переключатель
+    assert "'.view-toggle .view-btn'" in html
+    assert "if (mode !== 'list' && mode !== 'table') return;" in html

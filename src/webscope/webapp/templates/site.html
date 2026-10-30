@@ -123,7 +123,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 10h18"></path><path d="M9 10v10"></path></svg>
         </button>
       </span>
-      <button type="button" class="view-btn download-btn" id="download-open"
+      <button type="button" class="icon-btn download-btn" id="download-open"
               aria-label="Сохранить отчёт" title="Сохранить отчёт"
               aria-haspopup="true" aria-expanded="false" aria-controls="download-pop"
               data-fallback="/api/sites/{{ site.id }}/report.html?download=1">
@@ -330,15 +330,18 @@
   function setFindingsView(mode) {
     // Таблица и список — две панели внутри одной карточки; кнопки без текста,
     // чтобы не спорить с темой и читаться как иконки (как переключатель темы).
+    // Без режима ничего не делаем: раньше сюда прилетал клик по любой кнопке
+    // с классом view-btn (в том числе «скачать») и прятал обе панели находок.
+    if (mode !== 'list' && mode !== 'table') return;
     document.querySelectorAll('.findings-view').forEach(function (panel) {
       panel.hidden = panel.dataset.mode !== mode;
     });
-    document.querySelectorAll('.view-btn').forEach(function (btn) {
+    document.querySelectorAll('.view-toggle .view-btn').forEach(function (btn) {
       btn.setAttribute('aria-pressed', btn.dataset.view === mode ? 'true' : 'false');
     });
     localStorage.setItem('webscope_view', mode);
   }
-  document.querySelectorAll('.view-btn').forEach(function (btn) {
+  document.querySelectorAll('.view-toggle .view-btn').forEach(function (btn) {
     btn.addEventListener('click', function () { setFindingsView(btn.dataset.view); });
   });
   (function () {
