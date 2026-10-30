@@ -21,6 +21,8 @@ class ScanContext:
     timeout_ms: int = 30_000
     max_link_checks: int = 20
     notes: list[str] = field(default_factory=list)
+    # разрешены ли непубличные адреса (свои стенды и загруженные локальные файлы)
+    allow_private: bool = False
 
     def evidence_path(self, name: str) -> Path | None:
         """Путь для сохранения evidence-файла (None, если evidence выключена)."""

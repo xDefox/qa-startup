@@ -22,6 +22,7 @@ from .context import ScanContext
 from .crawler import CrawlResult, PageTarget, crawl, representative_pages, squash_ws
 from .diagnostics import diagnose_http_error, diagnose_navigation_error
 from .models import AuthCredentials, Finding, ScanResult, Severity, sort_findings
+from .netguard import is_forbidden_address, url_targets_private_network
 from .pages import page_notes
 
 # Системные Chromium-ы — фолбэк, если playwright install chromium не выполнен.
@@ -67,15 +68,8 @@ def validate_target(url: str, allow_private: bool = False) -> str:
                 "Проверьте адрес на опечатку; возможно, DNS-запись ещё не создана."
             ) from exc
         for info in infos:
-            address = ipaddress.ip_address(info[4][0])
-            if (
-                address.is_private
-                or address.is_loopback
-                or address.is_link_local
-                or address.is_reserved
-                or address.is_multicast
-                or address.is_unspecified
-            ):
+            address = ipaddress.ip_address(info[4][0].split("%", 1)[0])
+            if is_forbidden_address(address):
                 raise ScanError(f"Хост {host} резолвится в непубличный адрес {address} — сканирование заблокировано")
 
     return url
@@ -89,6 +83,38 @@ def _launch_chromium(playwright, headless: bool):
             if Path(candidate).exists():
                 return playwright.chromium.launch(headless=headless, executable_path=candidate)
         raise
+
+
+def install_private_network_guard(context, *, allow_private: bool, blocked: list[str]) -> None:
+    """Не пускает браузер на непубличные адреса — даже через редирект.
+
+    ``validate_target`` проверяет только стартовый URL. Дальше страница может
+    уйти на ``http://169.254.169.254/`` редиректом, подгрузить картинку с
+    loopback или сделать fetch во внутреннюю сеть. Каждый запрос контекста
+    проходит через этот обработчик, поэтому SSRF закрывается целиком.
+
+    ``blocked`` пополняется URL'ами, которые не пустили: отчёт говорит, что
+    сайт пытался достучаться до внутренней сети, вместо молчаливой тишины.
+    """
+    if allow_private:
+        return
+    cache: dict[str, bool] = {}
+
+    def handler(route) -> None:
+        url = route.request.url
+        if url_targets_private_network(url, cache):
+            blocked.append(url)
+            try:
+                route.abort("blockedbyclient")
+            except PlaywrightError:  # страница закрылась, пока шёл запрос
+                pass
+            return
+        try:
+            route.continue_()
+        except PlaywrightError:  # контекст уже закрыт — запрос никому не нужен
+            pass
+
+    context.route("**/*", handler)
 
 
 # --- авторизация на защищенных сайтах ---
@@ -365,6 +391,8 @@ def _scan_page(
     timeout_ms: int,
     evidence_dir: Path | None,
     max_link_checks: int,
+    allow_private: bool = False,
+    blocked_requests: list[str] | None = None,
 ) -> tuple[list[Finding], ScanContext]:
     """Открывает страницу и прогоняет по ней проверки. Возвращает находки и контекст."""
     console_messages: list[dict[str, str]] = []
@@ -432,7 +460,13 @@ def _scan_page(
             timeout_ms=timeout_ms,
             max_link_checks=max_link_checks,
             notes=notes,
+            allow_private=allow_private,
         )
+        if blocked_requests:
+            ctx.notes.append(
+                f"Сайт пытался обратиться к внутренней сети ({len(blocked_requests)} запросов) — "
+                "запросы заблокированы защитой от SSRF."
+            )
 
         findings: list[Finding] = []
         for name in checks:
@@ -536,6 +570,8 @@ def scan(
             ignore_https_errors=False,
             extra_http_headers=_basic_auth_headers(auth),
         )
+        blocked_requests: list[str] = []
+        install_private_network_guard(context, allow_private=allow_private, blocked=blocked_requests)
         page = context.new_page()
         try:
             if auth is not None and auth.kind == "form":
@@ -547,6 +583,8 @@ def scan(
                 timeout_ms=timeout_ms,
                 evidence_dir=evidence_dir,
                 max_link_checks=max_link_checks,
+                allow_private=allow_private,
+                blocked_requests=blocked_requests,
             )
             login_error = _login_page_error(page, auth, ctx.final_url or url)
             if login_error is not None:
@@ -618,6 +656,7 @@ def scan_site(
         respect_robots=respect_robots,
         user_agent=user_agent,
         headers=crawl_headers or None,
+        allow_private=allow_private,
     )
     targets = representative_pages(crawl_result, all_pages=all_pages)
 
@@ -637,6 +676,8 @@ def scan_site(
         )
         if session_cookies:
             context.add_cookies(session_cookies)
+        blocked_requests: list[str] = []
+        install_private_network_guard(context, allow_private=allow_private, blocked=blocked_requests)
         page = context.new_page()
         try:
             for target in targets:
@@ -648,6 +689,8 @@ def scan_site(
                         timeout_ms=timeout_ms,
                         evidence_dir=evidence_dir,
                         max_link_checks=max_link_checks,
+                        allow_private=allow_private,
+                        blocked_requests=blocked_requests,
                     )
                 except ScanError as exc:
                     crawl_result.skipped.append({"url": target.url, "reason": str(exc)})
