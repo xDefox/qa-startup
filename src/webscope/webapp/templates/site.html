@@ -125,7 +125,7 @@
       </span>
       <button type="button" class="view-btn download-btn" id="download-open"
               aria-label="Сохранить отчёт" title="Сохранить отчёт"
-              aria-haspopup="dialog" aria-controls="download-modal"
+              aria-haspopup="true" aria-expanded="false" aria-controls="download-pop"
               data-fallback="/api/sites/{{ site.id }}/report.html?download=1">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
       </button>
@@ -135,6 +135,23 @@
         <a class="pill" href="/api/sites/{{ site.id }}/report.{{ item.ext }}?download=1" download>{{ item.label }}</a>
         {% endfor %}
       </noscript>
+    </div>
+
+    <div class="download-pop" id="download-pop" hidden role="group" aria-label="Формат отчёта">
+      <div class="download-pop-head">
+        <span>Сохранить отчёт</span>
+        {% if download_date %}<span class="muted small">от {{ download_date }}</span>{% endif %}
+      </div>
+      {% for item in download_formats %}
+      <a class="download-option" href="/api/sites/{{ site.id }}/report.{{ item.ext }}?download=1" download>
+        <span class="download-option-top">
+          <span class="download-ext">{{ item.label }}</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
+        </span>
+        <span class="download-hint">{{ item.hint }}</span>
+      </a>
+      {% endfor %}
+      {% if download_sample %}<div class="download-pop-foot">Имя файла: <code>{{ download_sample }}</code></div>{% endif %}
     </div>
 
     {% set columns = [
@@ -211,32 +228,6 @@
     </div>
   </div>
 
-  <dialog class="download-modal" id="download-modal" aria-labelledby="download-modal-title">
-    <div class="download-modal-inner">
-      <div class="download-modal-head">
-        <div>
-          <h2 id="download-modal-title">Сохранить отчёт</h2>
-          <p class="muted small">{{ site.url }}{% if download_date %} · проверка от {{ download_date }}{% endif %}</p>
-        </div>
-        <button type="button" class="download-modal-close" data-download-close aria-label="Закрыть">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12"></path><path d="m18 6-12 12"></path></svg>
-        </button>
-      </div>
-      <p class="muted small">Тот же отчёт файлом — выберите формат.</p>
-      <div class="download-options">
-        {% for item in download_formats %}
-        <a class="download-option" href="/api/sites/{{ site.id }}/report.{{ item.ext }}?download=1" download>
-          <span class="download-option-top">
-            <span class="download-ext">{{ item.label }}</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
-          </span>
-          <span class="download-hint">{{ item.hint }}</span>
-        </a>
-        {% endfor %}
-      </div>
-      {% if download_sample %}<p class="download-modal-foot">Имя файла: <code>{{ download_sample }}</code> — расширение зависит от формата.</p>{% endif %}
-    </div>
-  </dialog>
 {% elif not pending %}
 <div class="card">
   <h2>Отчёта пока нет</h2>
@@ -271,31 +262,68 @@
     });
   })();
 
-  // Модалка «Сохранить отчёт»: нативный dialog даёт ловушку фокуса,
-  // закрытие по Esc и инертный фон — без библиотек и без наезда на таблицу.
+  // Панель форматов: всплывает поверх таблицы находок и ничего не прячет —
+  // список и таблица остаются на месте, меняется только их вид.
   (function () {
-    const modal = document.getElementById('download-modal');
     const opener = document.getElementById('download-open');
-    if (!modal || !opener) return;
-    if (typeof modal.showModal !== 'function') {
-      // Браузер без поддержки dialog: кнопка ведёт прямо на HTML-отчёт.
-      opener.addEventListener('click', function () {
-        window.location.href = opener.dataset.fallback;
-      });
-      return;
+    const pop = document.getElementById('download-pop');
+    if (!opener || !pop) return;
+
+    let isOpen = false;
+
+    // Панель fixed: считаем место от кнопки, прижимаем к экрану,
+    // а если снизу мало места — раскрываем вверх (иначе уедет за край).
+    function place() {
+      const anchor = opener.getBoundingClientRect();
+      const box = pop.getBoundingClientRect();
+      const gap = 8;
+      const margin = 12;
+      let left = anchor.right - box.width;
+      left = Math.max(margin, Math.min(left, window.innerWidth - box.width - margin));
+      let top = anchor.bottom + gap;
+      if (top + box.height > window.innerHeight - margin) {
+        top = Math.max(margin, anchor.top - box.height - gap);
+      }
+      pop.style.left = Math.round(left) + 'px';
+      pop.style.top = Math.round(top) + 'px';
     }
-    opener.addEventListener('click', function () { modal.showModal(); });
-    modal.querySelectorAll('[data-download-close]').forEach(function (btn) {
-      btn.addEventListener('click', function () { modal.close(); });
+
+    function open() {
+      isOpen = true;
+      pop.hidden = false;
+      opener.setAttribute('aria-expanded', 'true');
+      place();
+      const first = pop.querySelector('a');
+      if (first) first.focus();
+    }
+
+    function close(focusBack) {
+      if (!isOpen) return;
+      isOpen = false;
+      pop.hidden = true;
+      opener.setAttribute('aria-expanded', 'false');
+      if (focusBack) opener.focus();
+    }
+
+    opener.addEventListener('click', function () {
+      if (isOpen) close(true);
+      else open();
     });
-    // Подложка: клик мимо окна приходит на сам элемент dialog.
-    modal.addEventListener('click', function (event) {
-      if (event.target === modal) modal.close();
+
+    // Клик мимо и Esc закрывают панель; фокус возвращается на кнопку,
+    // как и положено раскрывающемуся меню.
+    document.addEventListener('click', function (event) {
+      if (isOpen && !pop.contains(event.target) && !opener.contains(event.target)) close(false);
     });
-    // Скачивание начинается — окно закрываем, чтобы оно не висело
-    // при возврате «назад» из кеша браузера.
-    modal.querySelectorAll('a[download]').forEach(function (link) {
-      link.addEventListener('click', function () { modal.close(); });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && isOpen) close(true);
+    });
+    window.addEventListener('resize', function () { if (isOpen) place(); });
+    window.addEventListener('scroll', function () { if (isOpen) place(); }, true);
+
+    // Выбрали формат — панель больше не нужна; таблица при этом не меняется.
+    pop.querySelectorAll('a[download]').forEach(function (link) {
+      link.addEventListener('click', function () { close(false); });
     });
   })();
 

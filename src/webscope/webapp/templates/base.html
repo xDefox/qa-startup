@@ -179,80 +179,71 @@
   .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
   .row > * { flex: 1 1 180px; }
   .row > .actions { flex: 0 0 auto; }
-  /* Модалка «Сохранить отчёт»: форматы вынесены в отдельное окно, чтобы меню
-     не наезжало на таблицу находок и не сдвигало её. */
+  /* Панель «Сохранить отчёт»: всплывает поверх таблицы находок (fixed +
+     высокий z-index), но ничего не перекрывает целиком — список и таблица
+     остаются видны, вид находок не меняется. */
   .download-btn { cursor: pointer; }
-  .download-modal {
-    width: min(720px, calc(100vw - 32px));
-    max-height: min(90vh, 760px);
-    padding: 0;
+  .download-pop {
+    position: fixed;
+    z-index: 60;
+    width: 320px;
+    max-width: calc(100vw - 24px);
+    max-height: min(70vh, 460px);
     overflow: auto;
-    border: 1px solid var(--line);
-    border-radius: 16px;
+    padding: 8px;
+    display: grid;
+    gap: 2px;
     background: var(--card);
-    color: var(--ink);
-    box-shadow: 0 30px 90px -30px rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 22px 60px -24px rgba(15, 23, 42, 0.55);
+    animation: download-pop-in 120ms ease-out;
   }
-  .download-modal::backdrop { background: rgba(12, 18, 32, 0.45); }
-  .download-modal[open] { animation: download-modal-in 160ms ease-out; }
-  @keyframes download-modal-in {
-    from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  .download-pop[hidden] { display: none; }
+  @keyframes download-pop-in {
+    from { opacity: 0; transform: translateY(-4px); }
     to { opacity: 1; transform: none; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .download-modal[open] { animation: none; }
+    .download-pop { animation: none; }
   }
-  .download-modal-inner { padding: 22px 24px 20px; }
-  .download-modal-head { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 4px; }
-  .download-modal-head h2 { margin: 0 0 4px; }
-  .download-modal-head p { margin: 0; word-break: break-all; }
-  .download-modal-close {
-    margin-left: auto;
-    flex: 0 0 auto;
-    width: 34px;
-    height: 34px;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--card);
+  .download-pop-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 10px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     color: var(--muted);
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    cursor: pointer;
   }
-  .download-modal-close:hover { color: var(--ink); }
-  .download-modal-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .download-modal-close svg { width: 16px; height: 16px; }
-  .download-options {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
-    gap: 10px;
-    margin: 18px 0 4px;
+  .download-pop-head .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .download-pop .download-option { padding: 10px 12px; border-radius: 10px; background: transparent; }
+  .download-pop .download-option:hover { background: var(--bg); }
+  .download-pop .download-ext { font-size: 14px; }
+  .download-pop .download-hint { font-size: 12px; }
+  .download-pop-foot {
+    padding: 8px 10px 4px;
+    border-top: 1px solid var(--line);
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--muted);
   }
+  .download-pop-foot code { word-break: break-all; }
   .download-option {
     display: grid;
-    gap: 6px;
-    padding: 14px 16px;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: var(--bg);
+    gap: 4px;
+    border: 1px solid transparent;
     color: var(--ink);
     text-decoration: none;
-    transition: border-color 160ms ease, transform 120ms ease, box-shadow 160ms ease;
-  }
-  .download-option:hover {
-    border-color: var(--accent);
-    transform: translateY(-1px);
-    box-shadow: 0 12px 26px -20px rgba(15, 23, 42, 0.9);
   }
   .download-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .download-option-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .download-option-top svg { width: 16px; height: 16px; color: var(--muted); }
-  .download-option .download-ext { font-size: 15px; font-weight: 600; }
-  .download-option .download-hint { font-size: 12.5px; line-height: 1.35; color: var(--muted); }
-  .download-modal-foot { margin: 14px 0 0; font-size: 12px; color: var(--muted); }
-  .download-modal-foot code { word-break: break-all; }
+  .download-option-top svg { width: 15px; height: 15px; color: var(--muted); }
+  .download-ext { font-size: 14px; font-weight: 600; }
+  .download-hint { font-size: 12px; line-height: 1.35; color: var(--muted); }
   .check-row {
     display: inline-flex;
     align-items: center;

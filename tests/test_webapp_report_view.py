@@ -133,29 +133,36 @@ def test_report_without_download_stays_inline(client, fmt: str) -> None:
     assert "content-disposition" not in response.headers
 
 
-def _download_modal(html: str) -> str:
-    """Кусок разметки модалки «Сохранить отчёт»."""
-    start = html.index('class="download-modal"')
-    return html[start : html.index("</dialog>", start)]
-
-
 def test_download_is_available_from_site_page(client) -> None:
     test_client, site = client
     page = test_client.get(f"/sites/{site.id}")
     assert page.status_code == 200
-    assert '<dialog class="download-modal" id="download-modal"' in page.text
+    assert 'id="download-pop"' in page.text
     assert "Сохранить отчёт" in page.text
     for fmt in ("html", "json", "txt", "xml", "sarif"):
         assert f"/api/sites/{site.id}/report.{fmt}?download=1" in page.text
 
 
-def test_download_trigger_sits_next_to_view_toggle(client) -> None:
-    """Сохранение — в шапке находок, рядом с переключателем «списком/таблицей».
+def test_three_buttons_do_not_replace_the_report(client) -> None:
+    """Список и таблица меняют вид находок, «скачать» — только показывает форматы.
 
-    Один ряд иконок над находками: сначала «как показать», потом «сохранить».
-    Раньше кнопки форматов стояли в шапке страницы и спорили с «Проверить ещё раз»,
-    а отдельная карточка в конце заставляла листать весь отчёт.
+    Панель форматов не модалка: она всплывает поверх таблицы, но фон не гасит
+    и разметку находок не трогает — таблица и список остаются в документе.
     """
+    test_client, site = client
+    html = test_client.get(f"/sites/{site.id}").text
+    assert html.count('class="view-btn"') == 2, "переключатель вида"
+    assert html.count('class="view-btn download-btn"') == 1, "кнопка сохранения"
+    # обе панели находок на месте, даже когда открыт выбор формата
+    assert html.count('class="findings-view"') == 2
+    assert 'class="findings-table"' in html
+    # и это не диалог: диалог гасит страницу под собой
+    assert "<dialog" not in html
+    assert "download-modal" not in html
+
+
+def test_download_trigger_sits_next_to_view_toggle(client) -> None:
+    """Сохранение — в шапке находок, рядом с переключателем «списком/таблицей»."""
     test_client, site = client
     html = test_client.get(f"/sites/{site.id}").text
     head = html.index('class="findings-head"')
@@ -166,51 +173,31 @@ def test_download_trigger_sits_next_to_view_toggle(client) -> None:
     assert trigger > html.index("Проверить ещё раз"), "и ниже шапки страницы"
 
 
-def test_download_formats_live_in_a_modal(client) -> None:
-    """Форматы — в <dialog>, а не в выпадашке: меню поверх отчёта закрывало таблицу."""
+def test_download_panel_is_hidden_until_opened(client) -> None:
+    """Панель лежит в разметке скрытой и не влияет на вёрстку отчёта."""
     test_client, site = client
     html = test_client.get(f"/sites/{site.id}").text
-    modal = _download_modal(html)
-    assert modal.startswith('class="download-modal" id="download-modal"')
-    assert 'aria-labelledby="download-modal-title"' in modal
-    assert '<h2 id="download-modal-title">Сохранить отчёт</h2>' in modal
-    assert modal.count('class="download-option"') == 5
+    panel_start = html.index('class="download-pop"')
+    panel = html[panel_start : html.index('<div class="findings-view" data-mode="table"', panel_start)]
+    assert "hidden" in panel[:80], "панель должна быть скрыта до нажатия"
+    assert panel.count('class="download-option"') == 5
     for fmt in ("html", "json", "txt", "xml", "sarif"):
-        assert f"report.{fmt}?download=1" in modal
-    # выпадающего меню больше нет
-    assert 'class="download-menu"' not in html
+        assert f"report.{fmt}?download=1" in panel
+    assert "webscope-example.com-" in panel, "видно, как будет называться файл"
 
 
-def test_download_trigger_opens_dialog(client) -> None:
-    """Кнопка объявляет себя диалогом и умеет открывать его без JS-фолбэка."""
+def test_download_trigger_declares_a_popup(client) -> None:
     test_client, site = client
     html = test_client.get(f"/sites/{site.id}").text
     start = html.index('id="download-open"')
     button = html[start - 200 : html.index("</button>", start)]
-    assert 'aria-haspopup="dialog"' in button
-    assert 'aria-controls="download-modal"' in button
+    assert 'aria-haspopup="true"' in button
+    assert 'aria-expanded="false"' in button
+    assert 'aria-controls="download-pop"' in button
     assert 'aria-label="Сохранить отчёт"' in button
-    assert f'data-fallback="/api/sites/{site.id}/report.html?download=1"' in button
     # Без JS форматы всё равно доступны: <noscript> с теми же ссылками.
     noscript = html[html.index("<noscript>") : html.index("</noscript>")]
     assert noscript.count("?download=1") == 5
-
-
-def test_download_modal_closes_on_escape_markup(client) -> None:
-    """Закрытие — нативная кнопка: <dialog> закрывается по Esc и с кнопки."""
-    test_client, site = client
-    modal = _download_modal(test_client.get(f"/sites/{site.id}").text)
-    assert "data-download-close" in modal
-    assert 'aria-label="Закрыть"' in modal
-
-
-def test_download_modal_shows_filename_and_date(client) -> None:
-    """В окне видно, что именно скачается, и от какой проверки отчёт."""
-    test_client, site = client
-    modal = _download_modal(test_client.get(f"/sites/{site.id}").text)
-    assert "webscope-example.com-" in modal
-    assert "расширение зависит от формата" in modal
-    assert "проверка от " in modal
 
 
 def test_download_block_hidden_without_report(client) -> None:
