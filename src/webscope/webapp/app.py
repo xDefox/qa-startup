@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
@@ -153,19 +153,72 @@ def normalize_url(url: str) -> str:
     return cleaned
 
 
-def download_filename(site: Site, run: Run, ext: str) -> str:
-    """Имя файла отчёта: ASCII, без слэшей, двоеточий и юникода.
+# Сколько символов имени файла разрешаем: длиннее браузеры и файловые
+# системы начинают обрезать по-своему.
+MAX_FILENAME_STEM = 120
 
-    Имя уходит в заголовок ``Content-Disposition``; unicode-домены, порты
-    и IPv6 в нём превращаются в дефисы, иначе браузер сохранит файл
-    с странным именем или откажется его скачивать.
+
+def safe_report_stem(value: str | None) -> str | None:
+    """Имя файла от пользователя, приведённое к безопасному виду.
+
+    Имя уходит в заголовок ``Content-Disposition``, поэтому всё, чем можно
+    навредить, вычищается: переводы строк (инъекция в заголовок), путь
+    (``../../etc/passwd`` — это имя, а не путь), кавычки, управляющие символы.
+    Расширение, если пользователь его вписал, отбрасывается: его задаёт формат.
+
+    Возвращает None, если после чистки ничего не осталось, — тогда берётся
+    имя по умолчанию.
+    """
+    if not value:
+        return None
+    # только печатаемые символы: CR/LF в заголовке — это уже другая уязвимость
+    cleaned = "".join(char for char in str(value) if char.isprintable())
+    # имя файла, а не путь: берём последний сегмент
+    cleaned = cleaned.replace("\\", "/").split("/")[-1].strip()
+    stem, dot, tail = cleaned.rpartition(".")
+    if dot and tail.lower() in REPORT_MEDIA_TYPES:
+        cleaned = stem
+    cleaned = "".join(char if (char.isalnum() or char in "-_. ") else "-" for char in cleaned)
+    cleaned = " ".join(cleaned.split()).strip(" .-_")
+    return cleaned[:MAX_FILENAME_STEM].strip(" .-_") or None
+
+
+def default_report_stem(site: Site, run: Run) -> str:
+    """Имя по умолчанию: домен и дата прогона.
+
+    Unicode-домены, порты и IPv6 превращаются в дефисы, иначе в заголовке
+    окажется что-то вроде ``https://пример.рф:8443/``.
     """
     host = urlsplit(site.url).hostname or "site"
     safe_host = re.sub(r"[^A-Za-z0-9.-]+", "-", host).strip("-.") or "site"
     day = (run.started_at or "")[:10]
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) is None:
         day = "report"
-    return f"webscope-{safe_host}-{day}.{ext}"
+    return f"webscope-{safe_host}-{day}"
+
+
+def download_filename(site: Site, run: Run, ext: str, name: str | None = None) -> str:
+    """Имя файла отчёта: имя пользователя (если задал) плюс расширение формата."""
+    stem = safe_report_stem(name) or default_report_stem(site, run)
+    return f"{stem}.{ext}"
+
+
+def content_disposition(filename: str, fallback: str | None = None) -> str:
+    """Заголовок ``Content-Disposition`` для файла с любым именем.
+
+    В ``filename`` по RFC 6266 допустим только ASCII, поэтому для кириллицы
+    добавляется ``filename*`` в кодировке UTF-8, а в ``filename`` остаётся
+    ASCII-запасной вариант: старые клиенты не увидят кракозябры. ``fallback`` —
+    что показать такому клиенту; по умолчанию собирается из самого имени.
+    """
+    if filename.isascii():
+        return f'attachment; filename="{filename}"'
+    if fallback is None:
+        stem, _, ext = filename.rpartition(".")
+        fallback_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", stem).strip("-._") or "report"
+        fallback = f"{fallback_stem}.{ext}" if ext else fallback_stem
+    encoded = quote(filename, safe="")
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{encoded}"
 
 
 def human_date(value: str | None) -> str | None:
@@ -596,6 +649,7 @@ def create_app(
                 "schedule_label": _SCHEDULE_LABELS.get(site.schedule, site.schedule),
                 "download_formats": DOWNLOAD_FORMATS,
                 "download_sample": download_filename(site, last, "json") if last else None,
+                "download_default_name": default_report_stem(site, last) if last else None,
                 "download_date": human_date(last.started_at) if last else None,
             },
         )
@@ -820,34 +874,43 @@ def create_app(
             raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
         return site, last, REPORT_RENDERERS[fmt](_result_from_run(storage, last))
 
-    def report_response(site_id: int, fmt: str, download: bool) -> Response:
-        """Отчёт для просмотра в браузере или файлом на скачивание."""
+    def report_response(site_id: int, fmt: str, download: bool, filename: str | None = None) -> Response:
+        """Отчёт для просмотра в браузере или файлом на скачивание.
+
+        ``filename`` — имя, выбранное пользователем в панели сохранения;
+        оно чистится (``safe_report_stem``) и попадает в ``Content-Disposition``.
+        Заголовок важнее атрибута ``download`` в ссылке, поэтому имя задаётся
+        именно здесь, а не в разметке.
+        """
         site, run, payload = report_payload(site_id, fmt)
         headers: dict[str, str] = {}
         if download:
-            headers["Content-Disposition"] = f'attachment; filename="{download_filename(site, run, fmt)}"'
+            headers["Content-Disposition"] = content_disposition(
+                download_filename(site, run, fmt, filename),
+                fallback=download_filename(site, run, fmt),
+            )
             headers["Cache-Control"] = "no-store"
         return Response(content=payload, media_type=REPORT_MEDIA_TYPES[fmt], headers=headers)
 
     @app.get("/api/sites/{site_id}/report.txt")
-    def api_report_text(site_id: int, download: bool = False):
-        return report_response(site_id, "txt", download)
+    def api_report_text(site_id: int, download: bool = False, filename: str | None = None):
+        return report_response(site_id, "txt", download, filename)
 
     @app.get("/api/sites/{site_id}/report.json")
-    def api_report_json(site_id: int, download: bool = False):
-        return report_response(site_id, "json", download)
+    def api_report_json(site_id: int, download: bool = False, filename: str | None = None):
+        return report_response(site_id, "json", download, filename)
 
     @app.get("/api/sites/{site_id}/report.html")
-    def api_report_html(site_id: int, download: bool = False):
-        return report_response(site_id, "html", download)
+    def api_report_html(site_id: int, download: bool = False, filename: str | None = None):
+        return report_response(site_id, "html", download, filename)
 
     @app.get("/api/sites/{site_id}/report.sarif")
-    def api_report_sarif(site_id: int, download: bool = False):
-        return report_response(site_id, "sarif", download)
+    def api_report_sarif(site_id: int, download: bool = False, filename: str | None = None):
+        return report_response(site_id, "sarif", download, filename)
 
     @app.get("/api/sites/{site_id}/report.xml")
-    def api_report_junit(site_id: int, download: bool = False):
-        return report_response(site_id, "xml", download)
+    def api_report_junit(site_id: int, download: bool = False, filename: str | None = None):
+        return report_response(site_id, "xml", download, filename)
 
     try:
         app.mount("/__local", _SandboxedLocalFiles(directory=str(_LOCAL_DIR), html=True), name="local_static")

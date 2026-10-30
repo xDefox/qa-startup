@@ -220,6 +220,40 @@
     color: var(--muted);
   }
   .download-pop-head .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  /* Поле «Имя файла»: своё имя вместо webscope-example.com-2026-10-30. */
+  .download-name { display: grid; gap: 6px; padding: 4px 10px 10px; }
+  .download-name-label { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  .download-name-field {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .download-name-field:focus-within { border-color: var(--accent); }
+  .download-name-field input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 9px 10px;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+  }
+  .download-name-field input:focus { outline: none; }
+  .download-name-ext {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 10px;
+    border-left: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .download-name-hint { margin: 0; font-size: 11.5px; color: var(--muted); }
   .download-pop .download-option { padding: 10px 12px; border-radius: 10px; background: transparent; }
   .download-pop .download-option:hover { background: var(--bg); }
   .download-pop .download-ext { font-size: 14px; }

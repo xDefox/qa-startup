@@ -187,7 +187,9 @@ def test_download_panel_is_hidden_until_opened(client) -> None:
     assert panel.count('class="download-option"') == 5
     for fmt in ("html", "json", "txt", "xml", "sarif"):
         assert f"report.{fmt}?download=1" in panel
-    assert "webscope-example.com-" in panel, "видно, как будет называться файл"
+    assert 'id="download-name"' in panel, "можно задать своё имя файла"
+    assert 'value="webscope-example.com-' in panel, "по умолчанию — домен и дата"
+    assert 'id="download-name-ext"' in panel
 
 
 def test_download_trigger_declares_a_popup(client) -> None:
@@ -277,6 +279,30 @@ def test_download_button_does_not_change_findings_view(client) -> None:
     assert payload["popOpened"] is True
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="нужен node для исполнения скрипта страницы")
+def test_filename_field_updates_download_links(client) -> None:
+    """Поле имени файла переписывает ссылки: имя, расширение, без пути и CRLF."""
+    test_client, site = client
+    html = test_client.get(f"/sites/{site.id}").text
+
+    completed = subprocess.run(
+        ["node", str(HARNESS)],
+        input=json.dumps({"html": html}),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    payload = json.loads(completed.stdout or "{}")
+    checks = payload.get("nameChecks") or {}
+    assert checks, payload.get("error") or payload
+    assert all(checks.values()), checks
+    assert payload["namedDownload"][0] == "мой отчёт за октябрь.html"
+    assert payload["namedHrefs"][0].endswith(
+        "&filename=%D0%BC%D0%BE%D0%B9%20%D0%BE%D1%82%D1%87%D1%91%D1%82%20%D0%B7%D0%B0%20%D0%BE%D0%BA%D1%82%D1%8F%D0%B1%D1%80%D1%8C"
+    )
+
+
 def test_download_button_is_not_a_view_toggle(client) -> None:
     """Кнопка сохранения не должна попадать в обработчик переключателя вида."""
     test_client, site = client
@@ -289,3 +315,65 @@ def test_download_button_is_not_a_view_toggle(client) -> None:
     # и обработчик слушает только переключатель
     assert "'.view-toggle .view-btn'" in html
     assert "if (mode !== 'list' && mode !== 'table') return;" in html
+
+
+# --- имя файла, выбранное пользователем ---
+
+
+@pytest.mark.parametrize("fmt", ["html", "json", "txt", "xml", "sarif"])
+def test_download_uses_custom_filename(client, fmt: str) -> None:
+    """Имя из поля ввода попадает в Content-Disposition с нужным расширением."""
+    test_client, site = client
+    response = test_client.get(f"/api/sites/{site.id}/report.{fmt}?download=1&filename=my-report")
+    assert response.headers["content-disposition"] == f'attachment; filename="my-report.{fmt}"'
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("../../etc/passwd", "passwd"),  # путь — это имя, а не путь
+        ("../..", None),  # после чистки пусто → имя по умолчанию
+        ("report.html", "report"),  # чужое расширение отбрасывается
+        ("  my  report  ", "my report"),  # лишние пробелы сжимаются
+        ('"; drop table', "drop table"),  # кавычки и точка с запятой вычищены
+        ("a\r\nSet-Cookie: x=1", "aSet-Cookie- x-1"),  # CRLF не проходит в заголовок
+        ("...", None),
+        ("", None),
+    ],
+)
+def test_custom_filename_is_sanitized(client, raw: str, expected: str | None) -> None:
+    """Имя уходит в заголовок ответа — всё опасное вычищается."""
+    test_client, site = client
+    response = test_client.get(f"/api/sites/{site.id}/report.json", params={"download": 1, "filename": raw})
+    disposition = response.headers["content-disposition"]
+    assert "\r" not in disposition and "\n" not in disposition
+    assert '"; ' not in disposition
+    if expected is None:
+        assert 'filename="webscope-example.com-' in disposition
+    else:
+        assert disposition == f'attachment; filename="{expected}.json"'
+
+
+def test_custom_filename_supports_cyrillic(client) -> None:
+    """Кириллица идёт в filename* (RFC 6266), ASCII-запасной — имя по умолчанию."""
+    test_client, site = client
+    response = test_client.get(f"/api/sites/{site.id}/report.html?download=1&filename=мой отчёт")
+    disposition = response.headers["content-disposition"]
+    assert 'filename="webscope-example.com-' in disposition, "старым клиентам — понятное имя"
+    assert "filename*=UTF-8''" in disposition
+    assert "%D0%BC%D0%BE%D0%B9%20%D0%BE%D1%82%D1%87%D1%91%D1%82" in disposition
+
+
+def test_custom_filename_ignored_without_download(client) -> None:
+    """Без ?download=1 отчёт открывается в браузере, имя ни на что не влияет."""
+    test_client, site = client
+    response = test_client.get(f"/api/sites/{site.id}/report.json?filename=my-report")
+    assert "content-disposition" not in response.headers
+
+
+def test_filename_stem_limits_length() -> None:
+    from webscope.webapp.app import MAX_FILENAME_STEM, safe_report_stem
+
+    stem = safe_report_stem("x" * 500)
+    assert stem is not None
+    assert len(stem) == MAX_FILENAME_STEM

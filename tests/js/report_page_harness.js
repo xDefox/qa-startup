@@ -149,6 +149,12 @@ function makeWrapper(raw, focused) {
     getBoundingClientRect() {
       return { top: 100, bottom: 138, left: 800, right: 838, width: 38, height: 38 };
     },
+    get value() {
+      return this.attrs.value || "";
+    },
+    set value(next) {
+      this.attrs.value = String(next);
+    },
     querySelectorAll(selector) {
       return queryAll(raw, selector).map((item) => item.wrapper).filter(Boolean);
     },
@@ -292,6 +298,41 @@ function main() {
   result.popClosedByEscape = pop.hidden === true;
   result.focusReturned = focused[focused.length - 1] === downloadBtn;
 
+  // 5. Имя файла: ссылки получают filename и правильное расширение.
+  const nameInput = documentApi.getElementById("download-name");
+  const links = pop.querySelectorAll("a[download]");
+  if (!nameInput) throw new Error("в панели нет поля #download-name");
+  result.defaultName = nameInput.value;
+
+  nameInput.value = "мой отчёт за октябрь";
+  nameInput.dispatch("input", { target: nameInput });
+  result.namedHrefs = links.map((link) => link.getAttribute("href"));
+  result.namedDownload = links.map((link) => link.getAttribute("download"));
+  result.duplicateSuffix = links.map((link) => (link.getAttribute("href").match(/filename=/g) || []).length);
+
+  // путь и перевод строки не должны попадать в ссылку
+  nameInput.value = "../../etc/passwd";
+  nameInput.dispatch("input", { target: nameInput });
+  result.traversalHref = links[0].getAttribute("href");
+  nameInput.value = "a\r\nSet-Cookie: x";
+  nameInput.dispatch("input", { target: nameInput });
+  result.injectionHref = links[0].getAttribute("href");
+
+  // пустое имя — возвращаемся к имени по умолчанию на сервере
+  nameInput.value = "   ";
+  nameInput.dispatch("input", { target: nameInput });
+  result.emptyHref = links[0].getAttribute("href");
+
+  result.nameChecks = {
+    defaultIsNotEmpty: Boolean(result.defaultName),
+    nameApplied: result.namedHrefs.every((href) => href.includes("filename=")),
+    extMatches: result.namedDownload[0].endsWith(".html") && result.namedDownload[4].endsWith(".sarif"),
+    noDoubleFilename: result.duplicateSuffix.every((count) => count === 1),
+    noTraversal: !result.traversalHref.includes(".."),
+    noInjection: !result.injectionHref.includes("%0D") && !result.injectionHref.includes("%0A"),
+    emptyFallsBack: result.emptyHref === "/api/sites/1/report.html?download=1",
+  };
+
   result.ok =
     result.panels === 2 &&
     result.toggles === 2 &&
@@ -302,7 +343,17 @@ function main() {
     JSON.stringify(result.afterDownloadClickOnTable) === '["table"]' &&
     result.popOpened === true &&
     result.popClosedByEscape === true &&
-    result.focusReturned === true;
+    result.focusReturned === true &&
+    Boolean(result.defaultName) &&
+    result.namedHrefs.every((href) => href.includes("filename=")) &&
+    result.namedHrefs.every((href) => href.includes(encodeURIComponent("мой отчёт за октябрь"))) &&
+    result.namedDownload[0].endsWith(".html") &&
+    result.namedDownload[4].endsWith(".sarif") &&
+    result.duplicateSuffix.every((count) => count === 1) &&
+    !result.traversalHref.includes("..") &&
+    !result.injectionHref.includes("%0D") &&
+    !result.injectionHref.includes("%0A") &&
+    result.emptyHref === "/api/sites/1/report.html?download=1";
 
   process.stdout.write(JSON.stringify(result));
 }
