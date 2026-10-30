@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -204,16 +205,56 @@ def _element_key(finding: dict) -> tuple[str, str, str]:
     return (finding.get("rule", ""), finding.get("url", ""), snippet)
 
 
+def _changed_entry(old_item: dict, new_item: dict) -> DiffEntry:
+    """Запись «серьёзность изменилась» для одной пары находок."""
+    return DiffEntry(
+        kind="changed",
+        rule=new_item.get("rule", ""),
+        title=new_item.get("title", ""),
+        url=new_item.get("url", ""),
+        selector=new_item.get("selector"),
+        snippet=new_item.get("snippet"),
+        severity_before=old_item.get("severity"),
+        severity_after=new_item.get("severity"),
+    )
+
+
+def _new_entry(item: dict) -> DiffEntry:
+    return DiffEntry(
+        kind="new",
+        rule=item.get("rule", ""),
+        title=item.get("title", ""),
+        url=item.get("url", ""),
+        selector=item.get("selector"),
+        snippet=item.get("snippet"),
+        severity_after=item.get("severity"),
+    )
+
+
+def _fixed_entry(item: dict) -> DiffEntry:
+    return DiffEntry(
+        kind="fixed",
+        rule=item.get("rule", ""),
+        title=item.get("title", ""),
+        url=item.get("url", ""),
+        selector=item.get("selector"),
+        snippet=item.get("snippet"),
+        severity_before=item.get("severity"),
+    )
+
+
 def diff_snapshots(old: Snapshot, new: Snapshot) -> DiffReport:
     """Сравнивает два снимка: что появилось, что починено, что изменилось.
 
     Сопоставление двухфазное: сначала точное по (rule, url, selector), затем
     по нормализованному фрагменту элемента — чтобы сдвиг селекторов не выглядел
     как новая проблема плюс мгновенно «исправленная» старая.
-    """
-    old_by_key = {_key(item): item for item in old.findings}
-    new_by_key = {_key(item): item for item in new.findings}
 
+    Обе фазы работают с мультимножествами: у документных правил (дубли id,
+    отсутствие lang) селектора нет, и несколько разных дефектов дают одинаковый
+    ключ. Раньше такой ключ схлопывался в dict, и новые находки пропадали
+    из диффа — владелец не узнавал, что стало хуже.
+    """
     report = DiffReport(
         url=new.url or old.url,
         old_at=old.taken_at,
@@ -222,88 +263,49 @@ def diff_snapshots(old: Snapshot, new: Snapshot) -> DiffReport:
         score_after=new.score,
     )
 
-    matched_old: set[tuple[str, str, str]] = set()
-    matched_new: set[tuple[str, str, str]] = set()
+    old_by_key: dict[tuple[str, str, str], list[int]] = defaultdict(list)
+    for index, item in enumerate(old.findings):
+        old_by_key[_key(item)].append(index)
+    new_by_key: dict[tuple[str, str, str], list[int]] = defaultdict(list)
+    for index, item in enumerate(new.findings):
+        new_by_key[_key(item)].append(index)
 
-    # Фаза 1: точное совпадение по (rule, url, selector).
-    for key, finding in new_by_key.items():
-        if key not in old_by_key:
-            continue
-        matched_new.add(key)
-        matched_old.add(key)
-        if old_by_key[key].get("severity") != finding.get("severity"):
-            report.changed_findings.append(
-                DiffEntry(
-                    kind="changed",
-                    rule=finding.get("rule", ""),
-                    title=finding.get("title", ""),
-                    url=finding.get("url", ""),
-                    selector=finding.get("selector"),
-                    snippet=finding.get("snippet"),
-                    severity_before=old_by_key[key].get("severity"),
-                    severity_after=finding.get("severity"),
-                )
-            )
+    matched_old: set[int] = set()
+    unmatched_new: list[int] = []
+
+    # Фаза 1: точное совпадение по (rule, url, selector), по одному экземпляру.
+    for key, new_indexes in new_by_key.items():
+        old_indexes = old_by_key.get(key, [])
+        for position, new_index in enumerate(new_indexes):
+            if position >= len(old_indexes):
+                unmatched_new.append(new_index)
+                continue
+            old_index = old_indexes[position]
+            matched_old.add(old_index)
+            if old.findings[old_index].get("severity") != new.findings[new_index].get("severity"):
+                report.changed_findings.append(_changed_entry(old.findings[old_index], new.findings[new_index]))
 
     # Фаза 2: несопоставленные ищем по нормализованному фрагменту элемента.
-    old_by_element: dict[tuple[str, str, str], list[tuple]] = {}
-    for key, item in old_by_key.items():
-        if key in matched_old:
+    old_by_element: dict[tuple[str, str, str], list[int]] = defaultdict(list)
+    for index, item in enumerate(old.findings):
+        if index in matched_old:
             continue
-        old_by_element.setdefault(_element_key(item), []).append(key)
+        old_by_element[_element_key(item)].append(index)
 
-    for key, finding in new_by_key.items():
-        if key in matched_new:
-            continue
-        candidates = old_by_element.get(_element_key(finding)) or []
+    still_new: list[int] = []
+    for new_index in unmatched_new:
+        item = new.findings[new_index]
+        candidates = old_by_element.get(_element_key(item)) or []
         if not candidates:
+            still_new.append(new_index)
             continue
-        old_key = candidates.pop(0)
-        matched_new.add(key)
-        matched_old.add(old_key)
-        if old_by_key[old_key].get("severity") != finding.get("severity"):
-            report.changed_findings.append(
-                DiffEntry(
-                    kind="changed",
-                    rule=finding.get("rule", ""),
-                    title=finding.get("title", ""),
-                    url=finding.get("url", ""),
-                    selector=finding.get("selector"),
-                    snippet=finding.get("snippet"),
-                    severity_before=old_by_key[old_key].get("severity"),
-                    severity_after=finding.get("severity"),
-                )
-            )
+        old_index = candidates.pop(0)
+        matched_old.add(old_index)
+        if old.findings[old_index].get("severity") != item.get("severity"):
+            report.changed_findings.append(_changed_entry(old.findings[old_index], item))
 
-    for key, finding in new_by_key.items():
-        if key in matched_new:
-            continue
-        report.new_findings.append(
-            DiffEntry(
-                kind="new",
-                rule=finding.get("rule", ""),
-                title=finding.get("title", ""),
-                url=finding.get("url", ""),
-                selector=finding.get("selector"),
-                snippet=finding.get("snippet"),
-                severity_after=finding.get("severity"),
-            )
-        )
-
-    for key, finding in old_by_key.items():
-        if key in matched_old:
-            continue
-        report.fixed_findings.append(
-            DiffEntry(
-                kind="fixed",
-                rule=finding.get("rule", ""),
-                title=finding.get("title", ""),
-                url=finding.get("url", ""),
-                selector=finding.get("selector"),
-                snippet=finding.get("snippet"),
-                severity_before=finding.get("severity"),
-            )
-        )
+    report.new_findings = [_new_entry(new.findings[index]) for index in still_new]
+    report.fixed_findings = [_fixed_entry(item) for index, item in enumerate(old.findings) if index not in matched_old]
 
     order = {severity.value: severity.rank for severity in Severity}
     report.new_findings.sort(key=lambda entry: (order.get(entry.severity_after or "", 99), entry.rule))
