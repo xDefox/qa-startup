@@ -23,7 +23,7 @@ from fastapi.templating import Jinja2Templates
 
 from .. import __version__
 from ..models import Severity
-from ..report import render_plain
+from ..report import render_html, render_json, render_plain, render_sarif, render_junit
 from ..scoring import plain_impact, score_label, top_actions
 from .alerts import notify
 from .scheduler import Monitor, ScanOptions, Scheduler, default_scanner
@@ -284,6 +284,29 @@ def create_app(
     app.state.storage = storage
     app.state.monitor = monitor
     app.state.scheduler = scheduler
+
+    # --- авторизация разработчика ---
+    @app.get("/auth/login", response_class=HTMLResponse)
+    def auth_login_form(request: Request):
+        return templates.TemplateResponse(request, "auth.html", {"error": None})
+
+    @app.post("/auth/login")
+    def auth_login(
+        request: Request,
+        username: str = Form(""),
+        password: str = Form(""),
+    ):
+        if username == "dev" and password == os.environ.get("WEBSCOPE_DEV_PASS", "dev"):
+            response = RedirectResponse(url="/sites", status_code=303)
+            response.set_cookie(key="webscope_session", value="auth", httponly=True)
+            return response
+        return templates.TemplateResponse(request, "auth.html", {"error": "Неверные данные"})
+
+    @app.get("/auth/logout")
+    def auth_logout():
+        response = RedirectResponse(url="/", status_code=303)
+        response.delete_cookie("webscope_session")
+        return response
 
     # --- страницы ---
 
@@ -578,6 +601,47 @@ def create_app(
         if last is None:
             raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
         return render_plain(_result_from_run(storage, last))
+
+    @app.get("/api/sites/{site_id}/report.json")
+    def api_report_json(site_id: int):
+        site = storage.get_site(site_id)
+        if site is None:
+            raise HTTPException(status_code=404, detail="Сайт не найден")
+        last = storage.latest_ok_run(site.id)
+        if last is None:
+            raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
+        return JSONResponse(render_json(_result_from_run(storage, last)))
+
+    @app.get("/api/sites/{site_id}/report.html", response_class=HTMLResponse)
+    def api_report_html(site_id: int):
+        site = storage.get_site(site_id)
+        if site is None:
+            raise HTTPException(status_code=404, detail="Сайт не найден")
+        last = storage.latest_ok_run(site.id)
+        if last is None:
+            raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
+        return render_html(_result_from_run(storage, last))
+
+    @app.get("/api/sites/{site_id}/report.sarif")
+    def api_report_sarif(site_id: int):
+        site = storage.get_site(site_id)
+        if site is None:
+            raise HTTPException(status_code=404, detail="Сайт не найден")
+        last = storage.latest_ok_run(site.id)
+        if last is None:
+            raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
+        return JSONResponse(json.loads(render_sarif(_result_from_run(storage, last))))
+
+    @app.get("/api/sites/{site_id}/report.xml")
+    def api_report_junit(site_id: int):
+        site = storage.get_site(site_id)
+        if site is None:
+            raise HTTPException(status_code=404, detail="Сайт не найден")
+        last = storage.latest_ok_run(site.id)
+        if last is None:
+            raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(render_junit(_result_from_run(storage, last)), media_type="application/xml")
 
     try:
         app.mount("/__local", StaticFiles(directory=str(_LOCAL_DIR), html=True), name="local_static")

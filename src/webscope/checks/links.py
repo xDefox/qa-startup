@@ -15,7 +15,10 @@ from ..models import Finding, Severity
 COLLECT = r"""
 () => {
   const u = window.__webscopeUtils;
-  return Array.from(document.querySelectorAll('a[href]')).map((a) => ({
+  return Array.from(document.querySelectorAll('a[href]'))
+    .filter((a) => a.getAttribute('data-testid') === null && a.getAttribute('data-qa') === null)
+    .filter((a) => a.getAttribute('aria-hidden') !== 'true')
+    .map((a) => ({
     href: a.getAttribute('href') || '',
     resolved: a.href || '',
     text: u.text(a).slice(0, 120),

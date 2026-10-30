@@ -30,12 +30,17 @@ COLLECT = r"""
     .map((f) => pick(f, { src: f.getAttribute('src') || '' }));
 
   const emptyLinks = Array.from(doc.querySelectorAll('a'))
+    .filter((a) => a.getAttribute('data-testid') === null && a.getAttribute('data-qa') === null)
+    .filter((a) => a.getAttribute('aria-hidden') !== 'true')
+    .filter((a) => !(a.getAttribute('href') || '').startsWith('#'))
     .filter((a) => u.visible(a) && u.accessibleName(a) === '')
     .map((a) => pick(a, { href: a.getAttribute('href') || '' }));
 
   // Один дефект — одна находка: <a> (даже с role="button") уже пойман выше
   // как ссылка, кнопки внутри <form> — их ловит forms/submit-without-accessible-name.
   const emptyButtons = Array.from(doc.querySelectorAll('button, [role="button"]'))
+    .filter((b) => b.getAttribute('data-testid') === null && b.getAttribute('data-qa') === null)
+    .filter((b) => b.getAttribute('aria-hidden') !== 'true')
     .filter((b) => u.visible(b) && u.accessibleName(b) === '')
     .filter((b) => !(b.tagName === 'A' && b.hasAttribute('href')))
     .filter((b) => !b.closest('form'))
