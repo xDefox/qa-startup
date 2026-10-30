@@ -308,6 +308,7 @@ _AXE_IMPACT: dict[str, tuple[str, str]] = {
 DIAGNOSTIC_RULES = frozenset(
     {
         "links/limit-reached",
+        "links/timeout",
         "scan/timeout",
     }
 )

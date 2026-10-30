@@ -102,6 +102,24 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
     return findings
 
 
+# Ошибки, которые означают «не дождались», а не «ссылки нет». httpx бросает
+# свои исключения по имени класса, тут же оказывается и socket.timeout.
+_TIMEOUT_ERRORS = frozenset(
+    {"TimeoutException", "ConnectTimeout", "ReadTimeout", "WriteTimeout", "PoolTimeout", "TimeoutError"}
+)
+
+
+def _error_rule(error: str) -> tuple[str, Severity]:
+    """Правило и серьёзность для сетевой ошибки при проверке ссылки.
+
+    Таймаут — свойство сети и терпения сканера, а не дефект страницы: чинить
+    владельцу сайта нечего, поэтому такое правило диагностическое.
+    """
+    if error in _TIMEOUT_ERRORS:
+        return "links/timeout", Severity.MINOR
+    return "links/unreachable", Severity.MODERATE
+
+
 def _check_internal_links(candidates: list[dict], ctx: ScanContext) -> list[Finding]:
     """Проверяет HTTP-статус внутренних ссылок (с ограничением количества).
 
@@ -141,16 +159,26 @@ def _check_internal_links(candidates: list[dict], ctx: ScanContext) -> list[Find
 
     for link, status, error in results:
         if error is not None:
+            rule, severity = _error_rule(error)
+            if rule == "links/timeout":
+                title = "Ссылка не ответила вовремя"
+                message = (
+                    "Проверка прервана по таймауту (8 с): сервер медленный или ссылка ведёт "
+                    "на внешний ресурс. Это не обязательно битая ссылка — перепроверьте вручную."
+                )
+            else:
+                title = "Ссылка недоступна"
+                message = f"Не удалось получить ответ: {error}"
             findings.append(
                 Finding(
-                    rule="links/unreachable",
-                    severity=Severity.MODERATE,
-                    title="Ссылка недоступна",
-                    message=f"Не удалось получить ответ: {error}",
+                    rule=rule,
+                    severity=severity,
+                    title=title,
+                    message=message,
                     url=ctx.final_url,
                     selector=link.get("selector"),
                     source="webscope.links",
-                    details={"href": link["url"]},
+                    details={"href": link["url"], "error": error},
                 )
             )
             continue
