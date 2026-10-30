@@ -426,6 +426,12 @@ class Storage:
                 return run
         return None
 
+    def count_running(self) -> int:
+        """Сколько прогонов выполняется прямо сейчас (для ограничения нагрузки)."""
+        with self._conn() as connection:
+            row = connection.execute("SELECT COUNT(*) AS total FROM runs WHERE status = 'running'").fetchone()
+        return int(row["total"] or 0)
+
     def running_run(self, site_id: int) -> Run | None:
         """Прогон, который сейчас выполняется (если он есть)."""
         with self._conn() as connection:

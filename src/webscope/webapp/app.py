@@ -41,6 +41,7 @@ from .auth import (
     session_token,
     unauthorized_response,
 )
+from .limits import RateLimiter, max_concurrent_scans, rate_limit, rate_window_seconds
 from .scheduler import Monitor, ScanOptions, Scheduler, default_scanner
 from .storage import Run, Site, Storage
 
@@ -272,6 +273,24 @@ def create_app(
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     templates.env.globals["auth_enabled"] = auth_configured()
     tasks: set[asyncio.Task] = set()
+    limiter = RateLimiter(rate_limit(), rate_window_seconds())
+
+    def client_key(request: Request) -> str:
+        """Ключ лимита: адрес клиента (за прокси нужен доверенный X-Forwarded-For)."""
+        return request.client.host if request.client else "unknown"
+
+    def scan_limit_response(request: Request) -> PlainTextResponse | JSONResponse | None:
+        """Проверяет лимиты запуска сканов; None — можно запускать."""
+        if not limiter.allow(client_key(request)):
+            message = "Слишком много запусков проверки с одного адреса. Попробуйте через минуту."
+        elif storage.count_running() >= max_concurrent_scans():
+            message = "Сейчас выполняется максимум проверок. Попробуйте через пару минут."
+        else:
+            return None
+        if request.url.path.startswith("/api/"):
+            return JSONResponse({"detail": message}, status_code=429)
+        return PlainTextResponse(message, status_code=429)
+
 
     def trigger(site: Site, background_tasks: BackgroundTasks | None = None) -> Run:
         """Открывает прогон и запускает проверку в фоне.
@@ -300,6 +319,7 @@ def create_app(
     app.state.storage = storage
     app.state.monitor = monitor
     app.state.scheduler = scheduler
+    app.state.limiter = limiter
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -378,6 +398,10 @@ def create_app(
         auth_password: str = Form(""),
         auth_login_url: str = Form(""),
     ):
+        limited = scan_limit_response(request)
+        if limited is not None:
+            return limited
+
         try:
             normalized = normalize_url(url)
         except ValueError as exc:
@@ -451,7 +475,10 @@ def create_app(
         )
 
     @app.post("/sites/{site_id}/scan")
-    def rescan(site_id: int, background_tasks: BackgroundTasks):
+    def rescan(request: Request, site_id: int, background_tasks: BackgroundTasks):
+        limited = scan_limit_response(request)
+        if limited is not None:
+            return limited
         site = storage.get_site(site_id)
         if site is None:
             raise HTTPException(status_code=404, detail="Сайт не найден")
@@ -579,7 +606,10 @@ def create_app(
         return {"runs": [run.to_dict() for run in storage.list_runs(site.id, limit=100)]}
 
     @app.post("/api/sites/{site_id}/scan")
-    def api_scan(site_id: int, background_tasks: BackgroundTasks):
+    def api_scan(request: Request, site_id: int, background_tasks: BackgroundTasks):
+        limited = scan_limit_response(request)
+        if limited is not None:
+            return limited
         site = storage.get_site(site_id)
         if site is None:
             raise HTTPException(status_code=404, detail="Сайт не найден")
@@ -593,6 +623,9 @@ def create_app(
         paths: list[str] = Form(...),
         background_tasks: BackgroundTasks = None,
     ):
+        limited = scan_limit_response(request)
+        if limited is not None:
+            return limited
         if not files:
             raise HTTPException(status_code=400, detail="Нет файлов")
         job_id = uuid.uuid4().hex
