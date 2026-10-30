@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import tempfile
@@ -23,7 +24,7 @@ from fastapi.templating import Jinja2Templates
 
 from .. import __version__
 from ..models import Severity
-from ..report import render_html, render_json, render_plain, render_sarif, render_junit
+from ..report import render_html, render_json, render_junit, render_plain, render_sarif
 from ..scoring import plain_impact, score_label, top_actions
 from .alerts import notify
 from .scheduler import Monitor, ScanOptions, Scheduler, default_scanner

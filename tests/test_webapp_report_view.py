@@ -94,3 +94,15 @@ def test_table_contains_minor_findings(client) -> None:
     table = html[html.index('class="findings-table"') : html.index("</table>")]
     assert "content/missing-description" in table
     assert "console/failed-request" in table
+
+
+def test_all_report_formats_are_served(client) -> None:
+    """Все форматы отчёта отдаются, включая SARIF.
+
+    Регресс: ``report.sarif`` падал с 500 — модуль ``json`` не был импортирован.
+    """
+    test_client, site = client
+    for fmt in ("html", "json", "txt", "xml", "sarif"):
+        response = test_client.get(f"/api/sites/{site.id}/report.{fmt}")
+        assert response.status_code == 200, fmt
+    assert "runs" in test_client.get(f"/api/sites/{site.id}/report.sarif").json()
