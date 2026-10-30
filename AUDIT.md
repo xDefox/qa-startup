@@ -635,8 +635,13 @@ PY
 | B9 — отчёт исчезал | `latest_ok_run` запросом по всей истории | `test_report_survives_long_failure_streak` |
 | B10 — `<select>` без `name` | проверка снова работает | — |
 | B6 — uncaught JS | добавлен `page.on("pageerror")` | `test_checks` (браузер) |
+| B13 — SARIF без отпечатков | `Finding.fingerprint` + `partialFingerprints` в SARIF | `test_models.py`, `test_report.py` |
+| §5.4 — прогон без предела по времени | `WEBSCOPE_SCAN_TIMEOUT`, `TimeBudget`, диагностика `scan/timeout` | `test_scanner.py` |
+| B4 (продолжение) — таймаут ссылки считался дефектом | правило `links/timeout` — диагностика, балл не снижает | `test_links.py` |
+| §5.17 — `scan` игнорировал robots.txt | `robots_block_reason` + `--ignore-robots` | `test_robots.py` |
 | B7/B8 (скролл в `interaction`, `target-size`) | **не закрыто** — требует браузерных тестов и отдельного решения по FP | — |
 | Процесс | `ruff check`/`format` зелёные, `LICENSE` добавлен, `cryptography`/`python-multipart` объявлены, версия 0.3.1 | CI |
 
-Осталось (P1/P2): `pageerror` (B6), скролл в `interaction` (B7), axe `target-size`
-(B8), SARIF `partialFingerprints`, PDF и мультиарендность.
+Осталось (P1/P2): скролл в `interaction` (B7), axe `target-size` вместо своей
+проверки (B8), PDF-отчёты, публичные ссылки, мультиарендность и общий
+счётчик лимитов для нескольких воркеров.
