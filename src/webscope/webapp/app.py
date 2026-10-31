@@ -619,6 +619,9 @@ def create_app(
             # Галочка выключена — вход не трогаем, чтобы перепроверка без неё
             # не чистила настроенные ранее креды.
             storage.update_site(site.id, **auth)
+            # add_site вернул объект до записи кредов — trigger() из него
+            # увидел бы site без входа, и первый прогон шёл бы без авторизации.
+            site = storage.get_site(site.id) or site
         trigger(site, background_tasks)
         return RedirectResponse(url=f"/sites/{site.id}", status_code=303)
 
