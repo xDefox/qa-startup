@@ -60,6 +60,21 @@ def build_alert_text(site_url: str, diff: DiffReport) -> str:
     return "\n".join(lines)
 
 
+def build_failure_text(site_url: str, error: str) -> str:
+    """Текст алерта: проверка не прошла — сайт остался без контроля."""
+    return (
+        f"Проверка сайта {site_url} не удалась.\n"
+        f"Причина: {error}\n\n"
+        "Предыдущий отчёт (если был) сохранён в webscope. "
+        "После исправления запустите проверку вручную или дождитесь расписания."
+    )
+
+
+def build_recovery_text(site_url: str, score: int) -> str:
+    """Текст алерта: после серии падений проверка снова проходит."""
+    return f"Проверка сайта {site_url} снова проходит.\nОценка: {score}/100."
+
+
 def send_email(to: str, subject: str, body: str) -> bool:
     """Отправляет письмо. Возвращает False, если канал не настроен или ошибка."""
     host = os.environ.get("SMTP_HOST")
@@ -112,16 +127,33 @@ def send_telegram(chat_id: str, text: str) -> bool:
 def notify(
     *,
     site_url: str,
-    diff: DiffReport,
+    diff: DiffReport | None = None,
+    error: str | None = None,
+    recovered_score: int | None = None,
     email: str | None = None,
     telegram_chat: str | None = None,
 ) -> list[str]:
-    """Рассылает алерт по настроенным каналам. Возвращает список сработавших каналов."""
-    parts = [f"{len(diff.new_findings)} новых проблем"]
-    if diff.worsened_findings:
-        parts.append(f"ухудшилось: {len(diff.worsened_findings)}")
-    subject = f"Проверка сайта {site_url}: " + ", ".join(parts)
-    text = build_alert_text(site_url, diff)
+    """Рассылает алерт по настроенным каналам. Возвращает список сработавших каналов.
+
+    Три сообщения, которые передаются по одному: обычная дельта (``diff``),
+    падение проверки (``error``) и восстановление (``recovered_score`` —
+    когда дельты нет, но после падений проверка снова проходит).
+    """
+    if error is not None:
+        subject = f"Проверка не удалась: {site_url}"
+        text = build_failure_text(site_url, error)
+    elif recovered_score is not None:
+        subject = f"Сайт снова проходит проверку: {site_url}"
+        text = build_recovery_text(site_url, recovered_score)
+    elif diff is not None:
+        parts = [f"{len(diff.new_findings)} новых проблем"]
+        if diff.worsened_findings:
+            parts.append(f"ухудшилось: {len(diff.worsened_findings)}")
+        subject = f"Проверка сайта {site_url}: " + ", ".join(parts)
+        text = build_alert_text(site_url, diff)
+    else:
+        LOGGER.info("алерт по %s пропущен: передавать нечего", site_url)
+        return []
 
     sent: list[str] = []
     if email and send_email(email, subject, text):

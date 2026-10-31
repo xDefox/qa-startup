@@ -129,17 +129,21 @@
       <div class="site-row-main">
         <div class="site-row-url">{{ item.site.url }}</div>
         <div class="site-row-meta muted small">
-          {% if item.run and item.run.status == 'ok' %}
+          {% if not item.run %}
+            проверка ещё не выполнялась
+          {% elif item.run.status == 'ok' %}
             последняя проверка: {{ item.run.finished_at[:16].replace('T', ' ') }}
-          {% elif item.run %}
+          {% elif item.run.status == 'running' %}
             проверка выполняется…
           {% else %}
-            проверка ещё не выполнялась
+            <span class="status-error" title="{{ item.run.error or '' }}">последняя проверка не удалась{% if item.run.error %}: {{ item.run.error.split('\n')[0][:90] }}{% endif %}</span>
           {% endif %}
         </div>
       </div>
       {% if item.run and item.run.status == 'ok' %}
       <div class="site-row-score">{{ item.run.score }}/100</div>
+      {% elif item.run and item.run.status == 'error' %}
+      <div class="site-row-score status-error" title="{{ item.run.error or '' }}">!</div>
       {% else %}
       <div class="site-row-arrow muted">→</div>
       {% endif %}

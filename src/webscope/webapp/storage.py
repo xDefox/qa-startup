@@ -452,6 +452,21 @@ class Storage:
             row = connection.execute("SELECT COUNT(*) AS total FROM runs WHERE status = 'running'").fetchone()
         return int(row["total"] or 0)
 
+    def reconcile_running(self, error: str = "прогон прерван: приложение перезапустилось") -> int:
+        """Закрывает прогоны, оставшиеся 'running' после падения процесса.
+
+        Такие сироты иначе вечно висят «проверка выполняется» на главной и
+        навсегда съедают лимит count_running() — после 3–4 рестартов мониторинг
+        перестаёт запускаться вообще. Возвращает число закрытых прогонов.
+        """
+        with self._conn() as connection:
+            cursor = connection.execute(
+                "UPDATE runs SET status = 'error', finished_at = ?, error = ? WHERE status = 'running'",
+                (now_iso(), error[:2000]),
+            )
+            connection.commit()
+            return int(cursor.rowcount or 0)
+
     def running_run(self, site_id: int) -> Run | None:
         """Прогон, который сейчас выполняется (если он есть)."""
         with self._conn() as connection:

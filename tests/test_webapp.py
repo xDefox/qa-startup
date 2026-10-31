@@ -38,6 +38,11 @@ def _result(findings: list[Finding] | None = None) -> ScanResult:
     return result
 
 
+def _never(url, options):
+    """Заглушка сканера: в тестах, где проверка не должна запускаться."""
+    raise AssertionError(f"сканер не должен вызываться: {url}")
+
+
 # --- хранилище ---
 
 
@@ -212,6 +217,88 @@ def test_monitor_records_failure(tmp_path: Path) -> None:
     assert run.status == "error"
     assert "недоступен" in (run.error or "")
     storage.close()
+
+
+def test_monitor_alerts_on_failure_and_recovery(tmp_path: Path) -> None:
+    """Алерт уходит при падении и при восстановлении, а не только при дельте.
+
+    Регресс-тест на «мониторинг, который не сообщает о поломке»: раньше
+    notifier вызывался только при успешном прогоне с новыми проблемами —
+    упавший сайт оставался тихим, пока владелец не заглянул в интерфейс.
+    """
+    storage = Storage(tmp_path / "db.sqlite")
+    site = storage.add_site("https://site.com/")
+    calls: list[dict] = []
+
+    def notifier(**kwargs):
+        calls.append(kwargs)
+        return ["email"]
+
+    def boom(url, options):
+        raise RuntimeError("страница входа не открылась")
+
+    monitor = Monitor(storage, ScanOptions(), scanner_func=boom, notifier=notifier)
+
+    monitor.run_site(site)  # первое падение — алерт обязан уйти
+    assert len(calls) == 1
+    assert "страница входа не открылась" in calls[0]["error"]
+
+    monitor.run_site(site)  # падение подряд — без флуда
+    assert len(calls) == 1
+
+    ok = Monitor(
+        storage,
+        ScanOptions(),
+        scanner_func=lambda url, options: CrawlOutcome(_result()),
+        notifier=notifier,
+    )
+    ok.run_site(site)  # восстановление: дельты нет (не с чем сравнивать) — алерт всё равно
+    assert len(calls) == 2
+    assert calls[1]["recovered_score"] == 100  # без находок — полный балл
+    storage.close()
+
+
+def test_reconcile_running_closes_stray_runs(tmp_path: Path) -> None:
+    """Прогоны, оборванные падением процесса, закрываются при старте.
+
+    Иначе сироты вечно висят «проверка выполняется» и навсегда съедают
+    лимит одновременных проверок.
+    """
+    storage = Storage(tmp_path / "db.sqlite")
+    site = storage.add_site("https://site.com/")
+    storage.start_run(site.id)
+    storage.start_run(site.id)
+    assert storage.count_running() == 2
+
+    closed = storage.reconcile_running()
+
+    assert closed == 2
+    assert storage.count_running() == 0
+    strays = [run for run in storage.list_runs(site.id) if run.status == "error"]
+    assert len(strays) == 2
+    assert all("перезапустилось" in (run.error or "") for run in strays)
+    storage.close()
+
+
+def test_index_shows_failed_run_not_progress(tmp_path: Path) -> None:
+    """Упавший прогон на главной — «не удалась», а не «выполывается».
+
+    Регресс-тест: статус ошибки попадал в ветку elif и висел вечным
+    «проверка выполняется…» — поломка была невидимой.
+    """
+    storage = Storage(tmp_path / "db.sqlite")
+    site = storage.add_site("https://site.com/")
+    run = storage.start_run(site.id)
+    storage.fail_run(run.id, "ScanError: Не удалось открыть сайт")
+    storage.close()
+
+    app = create_app(db_path=tmp_path / "db.sqlite", scanner_func=_never, notifier=lambda **kwargs: [])
+    with TestClient(app) as test_client:
+        body = test_client.get("/").text
+
+    assert "проверка выполняется…" not in body
+    assert "последняя проверка не удалась" in body
+    assert "Не удалось открыть сайт" in body
 
 
 # --- маршруты ---

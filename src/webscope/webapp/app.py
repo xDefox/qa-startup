@@ -481,6 +481,12 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # прогоны, оборванные падением прошлого процесса, иначе навсегда
+        # остаются 'running': главная показывает «выполывается», а лимит
+        # одновременных проверок съеден навсегда
+        strays = storage.reconcile_running()
+        if strays:
+            LOGGER.warning("закрыто прерванных прогонов: %d", strays)
         scheduler.start()
         yield
         await scheduler.stop()

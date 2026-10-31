@@ -114,29 +114,54 @@ class Monitor:
         return run
 
     def execute(self, site: Site, run: Run) -> Run:
-        """Выполняет проверку, сохраняет результат, шлёт алерт о дельтах."""
+        """Выполняет проверку, сохраняет результат, шлёт алерты о смене состояния.
+
+        Алерты идут по переходам: падение (было не-ошибка → ошибка) и
+        восстановление (ошибка → успех), плюс обычная дельта новых проблем.
+        Без падений мониторинг молчит ровно тогда, когда нельзя, — владелец
+        узнаёт о поломке только из интерфейса.
+        """
         # у каждого сайта свои креды — собираем свои опции, общие не трогаем
         options = replace(self.options, auth=site.auth_credentials())
+        # предыдущий завершённый прогон: текущий ещё 'running' и не учитывается
+        previous = self.storage.latest_run(site.id)
+        was_failing = previous is not None and previous.status == "error"
         try:
             outcome = self.scanner_func(site.url, options)
         except Exception as exc:  # noqa: BLE001 - прогон не должен ронять планировщик
             LOGGER.warning("проверка %s не удалась: %s", site.url, exc)
-            return self.storage.fail_run(run.id, f"{type(exc).__name__}: {exc}")
+            failed = self.storage.fail_run(run.id, f"{type(exc).__name__}: {exc}")
+            # повторное падение подряд не алертим — иначе отладка входа
+            # или неделя лежащего сайта зафлудит почту
+            if not was_failing:
+                self._alert(site, error=failed.error or "причина неизвестна")
+            return failed
 
         stored = self.storage.finish_run(run.id, outcome.result)
         diff = self.storage.diff_with_previous(stored)
         # алертим и о новых проблемах, и о том, что старые стали серьёзнее:
         # регрессия без новых находок иначе остаётся незамеченной
         if diff is not None and (diff.new_findings or diff.worsened_findings):
+            self._alert(site, diff=diff)
+        elif was_failing:
+            # после падений важно услышать, что контроль над сайтом вернулся
+            self._alert(site, recovered_score=stored.score)
+        return stored
+
+    def _alert(self, site: Site, **kwargs) -> None:
+        """Шлёт алерт; ошибка канала не должна ломать прогон."""
+        try:
             sent = self.notifier(
                 site_url=site.url,
-                diff=diff,
                 email=site.email,
                 telegram_chat=site.telegram_chat,
+                **kwargs,
             )
-            if sent:
-                LOGGER.info("алерт по %s отправлен: %s", site.url, ", ".join(sent))
-        return stored
+        except Exception:
+            LOGGER.exception("алерт по %s не отправился", site.url)
+            return
+        if sent:
+            LOGGER.info("алерт по %s отправлен: %s", site.url, ", ".join(sent))
 
     def run_site(self, site: Site) -> Run:
         """Полный цикл: открыть прогон → проверить → сохранить → сообщить."""
