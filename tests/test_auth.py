@@ -469,9 +469,22 @@ def test_settings_empty_password_keeps_old(web) -> None:
     )
     assert storage.get_site(site_id).auth_password == PASSWORD
 
-    # сняли галочку — вход выключен полностью
+    # сняли галочку — вход выключен, но креды не уничтожены: пароль форма
+    # не показывает, поэтому снятая по ошибке галочка не должна его убивать
     client.post(f"/sites/{site_id}/settings", data={"schedule": "off"})
-    assert not storage.get_site(site_id).has_auth
+    disabled = storage.get_site(site_id)
+    assert not disabled.has_auth
+    assert disabled.auth_login == LOGIN
+    assert disabled.auth_password == PASSWORD
+
+    # включили обратно с пустым паролем — работает сохранённый
+    client.post(
+        f"/sites/{site_id}/settings",
+        data={"schedule": "off", "auth_enabled": "1", "auth_kind": "basic", "auth_login": LOGIN, "auth_password": ""},
+    )
+    reenabled = storage.get_site(site_id)
+    assert reenabled.has_auth
+    assert reenabled.auth_password == PASSWORD
 
 
 # --- краулер шлёт заголовок авторизации (без браузера) ---
