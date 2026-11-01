@@ -11,8 +11,23 @@
 
 {% if last_error %}
 <div class="error">
-  Последняя проверка не удалась: {{ last_error }}.
-  {% if view %}Показываем результат предыдущей проверки.{% endif %}
+  <div><strong>Последняя проверка не удалась:</strong> {{ last_error }}</div>
+  <div class="small" style="margin-top:6px;">
+    {% if 'авториз' in last_error|lower or 'auth' in last_error|lower or '401' in last_error or 'login' in last_error|lower %}
+      Проверьте настройки входа — логин/пароль или форму авторизации.
+    {% elif 'timeout' in last_error|lower or 'таймаут' in last_error|lower or 'connect' in last_error|lower %}
+      Сайт не отвечает. Проверьте доступность или увеличьте таймаут.
+    {% elif 'robots' in last_error|lower %}
+      robots.txt запрещает обход. Проверьте настройки или доступность сайта.
+    {% elif 'dns' in last_error|lower or 'name' in last_error|lower %}
+      Не удалось резолвить домен. Проверьте адрес сайта.
+    {% elif 'ssl' in last_error|lower or 'certificate' in last_error|lower or 'сертификат' in last_error|lower %}
+      Проблема с HTTPS-сертификатом. Проверьте сайт.
+    {% else %}
+      Проверьте доступность сайта и настройки. Можно запустить проверку повторно.
+    {% endif %}
+    {% if view %}Показываем результат предыдущей проверки.{% endif %}
+  </div>
 </div>
 {% endif %}
 

@@ -681,8 +681,9 @@ def create_app(
         site = storage.get_site(site_id)
         if site is None:
             raise HTTPException(status_code=404, detail="Сайт не найден")
-        runs = [run for run in storage.list_runs(site.id, limit=60) if run.status == "ok"]
-        counts = storage.severity_counts([run.id for run in runs])
+        runs = storage.list_runs(site.id, limit=60)
+        ok_runs = [run for run in runs if run.status == "ok"]
+        counts = storage.severity_counts([run.id for run in ok_runs])
         return templates.TemplateResponse(
             request,
             "history.html",
