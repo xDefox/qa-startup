@@ -21,6 +21,7 @@ from .checks import DEFAULT_CHECKS, REGISTRY
 from .checks.js import JS_UTILS
 from .context import ScanContext
 from .crawler import CrawlResult, PageTarget, crawl, fetch_robots, representative_pages, squash_ws
+from .credscope import auth_origins, scoped_cookie_header
 from .diagnostics import diagnose_http_error, diagnose_navigation_error
 from .models import AuthCredentials, Finding, ScanResult, Severity, sort_findings
 from .netguard import GuardedTransport, is_forbidden_address, url_targets_private_network
@@ -238,11 +239,29 @@ def _absolute_login_url(target: str) -> str:
 
 
 def _basic_auth_headers(auth: AuthCredentials | None) -> dict[str, str] | None:
-    """Заголовок ``Authorization: Basic`` для каждого запроса (или None)."""
+    """Заголовок ``Authorization: Basic`` для каждого запроса (или None).
+
+    Нужен краулеру (httpx); в браузер креды идут иначе — через
+    ``_browser_http_credentials``.
+    """
     if auth is None or auth.kind != "basic":
         return None
     token = base64.b64encode(f"{auth.login}:{auth.password}".encode()).decode()
     return {"Authorization": f"Basic {token}"}
+
+
+def _browser_http_credentials(auth: AuthCredentials | None, root_url: str) -> list[dict] | None:
+    """Origin-скоупленные basic-креды для браузерного контекста (или None).
+
+    Вместо ``extra_http_headers``, который шлёт Authorization на ВСЕ запросы
+    контекста — CDN, шрифты и аналитика чужих доменов получали бы пароль в
+    base64. ``http_credentials`` с ``origin`` отвечает на 401-челлендж только
+    совпавшему origin; чужой хост, вызывающий авторизацию, получает отказ
+    (проверено тестом на утечку).
+    """
+    if auth is None or auth.kind != "basic":
+        return None
+    return [{"username": auth.login, "password": auth.password, "origin": origin} for origin in auth_origins(root_url)]
 
 
 def _login_page_error(page, auth: AuthCredentials | None, url: str) -> ScanError | None:
@@ -342,6 +361,7 @@ def _form_login_cookies(
     headless: bool,
     user_agent: str,
     timeout_ms: int,
+    allow_private: bool = False,
 ) -> list[dict]:
     """Входит через форму в отдельной сессии и возвращает её cookies.
 
@@ -355,6 +375,9 @@ def _form_login_cookies(
             user_agent=user_agent,
             ignore_https_errors=False,
         )
+        # страница входа может увести редиректом во внутреннюю сеть —
+        # тот же SSRF-гард, что и в основном контексте сканирования
+        install_private_network_guard(context, allow_private=allow_private, blocked=[])
         try:
             page = context.new_page()
             _form_login(page, auth, start_url=root_url, timeout_ms=timeout_ms)
@@ -669,8 +692,9 @@ def scan(
 ) -> ScanResult:
     """Сканирует одну страницу и возвращает результат.
 
-    ``auth`` — вход на защищённый сайт: ``basic`` шлёт заголовок на каждый
-    запрос, ``form`` сначала входит через форму (сессия живёт в контексте).
+    ``auth`` — вход на защищённый сайт: ``basic`` авторизует origin'ы сайта
+    (браузеру — через http_credentials, краулеру — заголовком), ``form``
+    сначала входит через форму (сессия живёт в контексте).
     ``respect_robots`` — уважать ли robots.txt (как в обходе сайта).
     """
     validate_target(url, allow_private=allow_private)
@@ -692,7 +716,7 @@ def scan(
             viewport={"width": 1280, "height": 800},
             user_agent=user_agent,
             ignore_https_errors=False,
-            extra_http_headers=_basic_auth_headers(auth),
+            http_credentials=_browser_http_credentials(auth, url),
         )
         blocked_requests: list[str] = []
         install_private_network_guard(context, allow_private=allow_private, blocked=blocked_requests)
@@ -751,10 +775,12 @@ def scan_site(
     Возвращает (результат, результат обхода). Одна страница = один шаблон:
     300 страниц каталога проверяются по одному представителю.
 
-    ``auth`` — вход на защищённый сайт. ``basic``: заголовок Authorization и
-    краулеру, и браузеру. ``form``: до обходим заходим через форму в отдельной
-    сессии и переносим её cookies в краулер и в контекст сканирования —
-    обход и проверки идут уже «под пользователем».
+    ``auth`` — вход на защищённый сайт. ``basic``: браузеру — креды только
+    origin'ам сайта (http_credentials), краулеру — заголовок Authorization,
+    который снимается с запросов чужим хостам (credscope). ``form``: до
+    обходим заходим через форму в отдельной сессии и переносим её cookies
+    в краулер и в контекст сканирования — обход и проверки идут уже
+    «под пользователем».
     """
     validate_target(root_url, allow_private=allow_private)
     selected = _resolve_checks(checks)
@@ -772,10 +798,15 @@ def scan_site(
             headless=headless,
             user_agent=user_agent,
             timeout_ms=timeout_ms,
+            allow_private=allow_private,
         )
     crawl_headers: dict[str, str] = dict(auth_headers or {})
-    if session_cookies:
-        crawl_headers["Cookie"] = "; ".join(f"{c['name']}={c['value']}" for c in session_cookies)
+    # куки из плоской строки без фильтра ушли бы чужим хостам вместе с
+    # запросом (в сессии входа — куки третьих сторон); браузер отбирал бы
+    # их по домену, здесь то же самое
+    cookie_header = scoped_cookie_header(session_cookies or [], root_url)
+    if cookie_header:
+        crawl_headers["Cookie"] = cookie_header
 
     crawl_result = crawl(
         root_url,
@@ -801,7 +832,9 @@ def scan_site(
             viewport={"width": 1280, "height": 800},
             user_agent=user_agent,
             ignore_https_errors=False,
-            extra_http_headers=auth_headers,
+            # basic-креды — только origin'ам сайта: extra_http_headers шлёт
+            # Authorization на каждый запрос контекста, включая чужие CDN
+            http_credentials=_browser_http_credentials(auth, root_url),
         )
         if session_cookies:
             context.add_cookies(session_cookies)

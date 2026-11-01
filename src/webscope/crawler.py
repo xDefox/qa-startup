@@ -17,6 +17,7 @@ from urllib.robotparser import RobotFileParser
 import httpx
 
 from . import __version__
+from .credscope import strip_out_of_scope_headers
 from .netguard import GuardedTransport
 
 USER_AGENT = f"webscope/{__version__} (+https://github.com/webscope/webscope)"
@@ -261,8 +262,9 @@ def crawl(
 ) -> CrawlResult:
     """Обходит сайт и возвращает список страниц, сгруппированных по шаблонам.
 
-    ``headers`` — дополнительные заголовки на все запросы: авторизация
-    (``Authorization`` для basic-защиты или ``Cookie`` живой form-сессии).
+    ``headers`` — заголовки авторизации (``Authorization`` для basic-защиты
+    или ``Cookie`` живой form-сессии): шлются на хосты сайта, чужим хостам
+    снимаются (credscope).
 
     ``allow_private`` снимает SSRF-запрет (свои стенды и локальные файлы);
     по умолчанию каждый запрос, включая редиректы, проверяется на непубличный
@@ -279,6 +281,10 @@ def crawl(
         follow_redirects=True,
         headers=merged_headers,
         transport=transport,
+        # заголовки авторизации — только хостам сайта: sitemap-индексы и
+        # ссылки на sitemap с чужих хостов, как и редиректы, секретов
+        # не получают (хук срабатывает на каждый прыжок редиректа)
+        event_hooks={"request": [strip_out_of_scope_headers(root_url)]},
     ) as client:
         robots = fetch_robots(client, origin) if respect_robots else None
         result.robots_checked = robots is not None
