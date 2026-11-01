@@ -12,6 +12,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 from ..context import ScanContext
+from ..credscope import strip_out_of_scope_headers
 from ..models import Finding, Severity
 from ..netguard import GuardedTransport
 
@@ -126,7 +127,10 @@ def _check_internal_links(candidates: list[dict], ctx: ScanContext) -> list[Find
     Клиент один на всю проверку: соединения переиспользуются, TLS проверяется
     (иначе «битые ссылки» на самом деле означают «наш сканер не поверил
     сертификату»), а запросы на непубличные адреса блокируются тем же
-    транспортом, что и в краулере.
+    транспортом, что и в краулере. На защищённом сайте запрос без кредов
+    получает 401 — ложную «битую ссылку», — поэтому проверка идёт с теми же
+    заголовками авторизации, что и скан (ctx.site_headers), но только для
+    хостов страницы: редирект на чужой хост секреты снимает.
     """
     if not candidates:
         return []
@@ -139,7 +143,13 @@ def _check_internal_links(candidates: list[dict], ctx: ScanContext) -> list[Find
     # потокобезопасен, а создание клиента на каждую ссылку рвало пул соединений.
     transport = GuardedTransport(allow_private=ctx.allow_private)
     results: list[tuple[dict, int | None, str | None]] = []
-    with httpx.Client(timeout=timeout, follow_redirects=True, transport=transport) as client:
+    with httpx.Client(
+        timeout=timeout,
+        follow_redirects=True,
+        transport=transport,
+        headers=ctx.site_headers or None,
+        event_hooks={"request": [strip_out_of_scope_headers(ctx.final_url)]},
+    ) as client:
 
         def probe(link: dict) -> tuple[dict, int | None, str | None]:
             status: int | None = None

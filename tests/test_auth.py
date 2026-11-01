@@ -56,6 +56,10 @@ OPEN_PAGE = """<!doctype html>
 
 EMPTY_401 = "<html><head></head><body>401</body></html>"
 
+INNER_PAGE = """<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Внутри</title></head>
+<body><p>Тоже за паролем.</p></body></html>"""
+
 
 # --- локальные серверы для браузерных тестов ---
 
@@ -566,6 +570,43 @@ def test_scan_basic_auth_never_sends_creds_to_foreign_host() -> None:
     assert result.title == "Секретная страница"
     assert foreign_seen, "страница должна была запросить чужой ресурс — иначе тест ничего не доказывает"
     assert all(auth is None for auth in foreign_seen), f"чужой хост увидел креды: {foreign_seen}"
+
+
+@pytest.mark.browser
+def test_links_check_uses_scan_credentials() -> None:
+    """Внутренняя ссылка на защищённом сайте — не ложная «битая» из-за 401.
+
+    Регресс-тест (канал D из ревью): проверка ссылок ходила по сети без
+    кредов, и каждая внутренняя ссылка на basic-сайте отвечала 401 —
+    отчёт пестрил ложными «битыми ссылками». Теперь probe идёт с теми же
+    заголовками авторизации, что и сам скан.
+    """
+
+    class _BasicWithInnerLink(_BasicHandler):
+        def do_GET(self) -> None:
+            if self.headers.get("Authorization") != BASIC_HEADER:
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", 'Basic realm="webscope-test"')
+                self._finish(EMPTY_401)
+                return
+            if self.path.startswith("/inner"):
+                self._page(200, INNER_PAGE)
+            else:
+                self._page(200, SECRET_PAGE.replace("</body>", '<a href="/inner">Внутри</a></body>'))
+
+    server, url = _serve(_BasicWithInnerLink)
+    try:
+        result, _crawl_result = scan_site(
+            f"{url}/",
+            allow_private=True,
+            auth=AuthCredentials(kind="basic", login=LOGIN, password=PASSWORD),
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    broken = [finding for finding in result.findings if finding.rule == "links/broken"]
+    assert not broken, f"внутренняя ссылка за защищённым сайтом — не ложная битая: {broken}"
 
 
 @pytest.mark.browser

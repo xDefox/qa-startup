@@ -515,6 +515,7 @@ def _scan_page(
     max_link_checks: int,
     allow_private: bool = False,
     blocked_requests: list[str] | None = None,
+    site_headers: dict[str, str] | None = None,
 ) -> tuple[list[Finding], ScanContext]:
     """Открывает страницу и прогоняет по ней проверки. Возвращает находки и контекст."""
     console_messages: list[dict[str, str]] = []
@@ -596,6 +597,7 @@ def _scan_page(
             max_link_checks=max_link_checks,
             notes=notes,
             allow_private=allow_private,
+            site_headers=dict(site_headers or {}),
         )
         if blocked_requests:
             ctx.notes.append(
@@ -722,8 +724,14 @@ def scan(
         install_private_network_guard(context, allow_private=allow_private, blocked=blocked_requests)
         page = context.new_page()
         try:
+            site_headers: dict[str, str] = dict(_basic_auth_headers(auth) or {})
             if auth is not None and auth.kind == "form":
                 _form_login(page, auth, start_url=url, timeout_ms=timeout_ms)
+                # проверка внутренних ссылок идёт вне браузера — сессии
+                # нужны в явном виде (куки только своих доменов)
+                cookie = scoped_cookie_header(context.cookies(), url)
+                if cookie:
+                    site_headers["Cookie"] = cookie
             findings, ctx = _scan_page(
                 page,
                 url,
@@ -733,6 +741,7 @@ def scan(
                 max_link_checks=max_link_checks,
                 allow_private=allow_private,
                 blocked_requests=blocked_requests,
+                site_headers=site_headers,
             )
             login_error = _login_page_error(page, auth, ctx.final_url or url)
             if login_error is not None:
@@ -856,6 +865,7 @@ def scan_site(
                         max_link_checks=max_link_checks,
                         allow_private=allow_private,
                         blocked_requests=blocked_requests,
+                        site_headers=crawl_headers,
                     )
                 except ScanError as exc:
                     crawl_result.skipped.append({"url": target.url, "reason": str(exc)})
