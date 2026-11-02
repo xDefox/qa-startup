@@ -44,6 +44,7 @@ from .auth import (
     unauthorized_response,
 )
 from .limits import RateLimiter, max_concurrent_scans, rate_limit, rate_window_seconds
+from .routes import auth as auth_routes, pages as pages_routes, upload as upload_routes
 from .scheduler import Monitor, ScanOptions, Scheduler, default_scanner
 from .storage import Run, Site, Storage
 
@@ -499,6 +500,11 @@ def create_app(
     app.state.monitor = monitor
     app.state.scheduler = scheduler
     app.state.limiter = limiter
+
+    # P0 разделение: подключение роутеров
+    app.include_router(auth_routes.router)
+    app.include_router(pages_routes.router)
+    app.include_router(upload_routes.router)
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
