@@ -29,7 +29,7 @@ def test_max_concurrent_scans_returns_429(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setenv("WEBSCOPE_MAX_CONCURRENT_SCANS", "1")
     monkeypatch.delenv("WEBSCOPE_AUTH_PASSWORD", raising=False)
     app = create_app(db_path=tmp_path / "db.sqlite", scanner_func=stub_scanner, notifier=lambda **kw: [])
-    storage = app.state.storage
+    storage = app.state.webscope.storage
     site = storage.add_site("https://example.com/")
     storage.start_run(site.id)  # имитируем идущий прогон
 

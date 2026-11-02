@@ -262,7 +262,7 @@ def test_create_site_rejects_garbage(client: TestClient) -> None:
 
 def test_site_page_shows_report(client: TestClient) -> None:
     site_id = _create_site(client)
-    storage: Storage = client.app.state.storage
+    storage: Storage = client.app.state.webscope.storage
 
     run = storage.start_run(site_id)
     storage.finish_run(run.id, _result([_finding()]))
@@ -275,7 +275,7 @@ def test_site_page_shows_report(client: TestClient) -> None:
 
 def test_api_returns_findings(client: TestClient) -> None:
     site_id = _create_site(client)
-    storage: Storage = client.app.state.storage
+    storage: Storage = client.app.state.webscope.storage
     run = storage.start_run(site_id)
     storage.finish_run(run.id, _result([_finding()]))
 
@@ -288,7 +288,7 @@ def test_api_returns_findings(client: TestClient) -> None:
 
 def test_site_page_keeps_previous_report_after_failure(client: TestClient) -> None:
     site_id = _create_site(client)
-    storage: Storage = client.app.state.storage
+    storage: Storage = client.app.state.webscope.storage
 
     run = storage.start_run(site_id)
     storage.finish_run(run.id, _result([_finding()]))
@@ -303,7 +303,7 @@ def test_site_page_keeps_previous_report_after_failure(client: TestClient) -> No
 
 def test_history_page(client: TestClient) -> None:
     site_id = _create_site(client)
-    storage: Storage = client.app.state.storage
+    storage: Storage = client.app.state.webscope.storage
     run = storage.start_run(site_id)
     storage.finish_run(run.id, _result([_finding()]))
 
@@ -317,7 +317,7 @@ def test_history_page(client: TestClient) -> None:
 
 def test_settings_page_shows_current_values(client: TestClient) -> None:
     site_id = _create_site(client)
-    storage: Storage = client.app.state.storage
+    storage: Storage = client.app.state.webscope.storage
     storage.update_site(site_id, email="owner@example.com", schedule="weekly")
 
     response = client.get(f"/sites/{site_id}/settings")
@@ -328,7 +328,7 @@ def test_settings_page_shows_current_values(client: TestClient) -> None:
 
 def test_settings_save_updates_site(client: TestClient) -> None:
     site_id = _create_site(client)
-    storage: Storage = client.app.state.storage
+    storage: Storage = client.app.state.webscope.storage
 
     response = client.post(
         f"/sites/{site_id}/settings",
@@ -347,7 +347,7 @@ def test_settings_save_updates_site(client: TestClient) -> None:
 
 def test_settings_clear_email(client: TestClient) -> None:
     site_id = _create_site(client)
-    storage: Storage = client.app.state.storage
+    storage: Storage = client.app.state.webscope.storage
     storage.update_site(site_id, email="owner@example.com")
 
     client.post(f"/sites/{site_id}/settings", data={"email": "", "schedule": "off"})
@@ -356,7 +356,7 @@ def test_settings_clear_email(client: TestClient) -> None:
 
 def test_delete_site_removes_history(client: TestClient) -> None:
     site_id = _create_site(client)
-    storage: Storage = client.app.state.storage
+    storage: Storage = client.app.state.webscope.storage
     run = storage.start_run(site_id)
     storage.finish_run(run.id, _result([_finding()]))
 
@@ -485,7 +485,7 @@ def test_local_upload_scan_allows_private(tmp_path: Path) -> None:
         return CrawlOutcome(_result([]))
 
     app = create_app(db_path=tmp_path / "db.sqlite", scanner_func=scanner, notifier=lambda **kwargs: [])
-    monitor: Monitor = app.state.monitor
+    monitor: Monitor = app.state.webscope.monitor
 
     monitor.scanner_func("http://127.0.0.1:8000/__local/abc/index.html", ScanOptions())
     monitor.scanner_func("http://127.0.0.1:9200/", ScanOptions())
@@ -498,7 +498,7 @@ def test_local_upload_scan_allows_private(tmp_path: Path) -> None:
 
 def test_site_page_crosses_out_previous_score(client: TestClient) -> None:
     site_id = _create_site(client)
-    storage: Storage = client.app.state.storage
+    storage: Storage = client.app.state.webscope.storage
 
     first = storage.start_run(site_id)
     storage.finish_run(first.id, _result([_finding()]))  # 92
@@ -513,7 +513,7 @@ def test_site_page_crosses_out_previous_score(client: TestClient) -> None:
 
 def test_site_page_links_to_help(client: TestClient) -> None:
     site_id = _create_site(client)
-    storage: Storage = client.app.state.storage
+    storage: Storage = client.app.state.webscope.storage
     run = storage.start_run(site_id)
     storage.finish_run(run.id, _result([_finding()]))
 

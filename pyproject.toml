@@ -49,8 +49,9 @@ line-length = 120
 target-version = "py313"
 
 [tool.ruff.lint.per-file-ignores]
-# File(...)/Form(...) в дефолтах — идиоматичный FastAPI-паттерн
+# File(...)/Form(...)/Depends(...) в дефолтах — идиоматичный FastAPI-паттерн
 "src/webscope/webapp/app.py" = ["B008"]
+"src/webscope/webapp/routes/*.py" = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

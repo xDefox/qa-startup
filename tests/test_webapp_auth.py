@@ -110,7 +110,7 @@ def test_csrf_blocks_foreign_origin(guarded_app) -> None:
         follow_redirects=False,
     )
     assert response.status_code == 403
-    assert app.state.storage.list_sites() == []
+    assert app.state.webscope.storage.list_sites() == []
 
 
 def test_csrf_allows_same_origin(guarded_app) -> None:
@@ -123,7 +123,7 @@ def test_csrf_allows_same_origin(guarded_app) -> None:
         follow_redirects=False,
     )
     assert response.status_code == 303
-    assert len(app.state.storage.list_sites()) == 1
+    assert len(app.state.webscope.storage.list_sites()) == 1
 
 
 def test_api_docs_are_closed(guarded_app) -> None:

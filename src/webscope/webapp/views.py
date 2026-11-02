@@ -25,6 +25,13 @@ SEVERITY_GROUPS = (
 # но не путались с дефектами сайта.
 EXTERNAL_TITLE = "Замечания сканирования — не дефекты сайта (чужие виджеты)"
 
+SCHEDULE_LABELS = {
+    "off": "без автоматических проверок",
+    "daily": "каждый день",
+    "weekly": "каждую неделю",
+    "monthly": "каждый месяц",
+}
+
 SEVERITY_LABELS = {
     "critical": "критично",
     "serious": "существенно",
@@ -159,6 +166,7 @@ def result_from_run(storage: Storage, run: Run) -> ScanResult:
 __all__ = [
     "BLOCKER_RULE",
     "EXTERNAL_TITLE",
+    "SCHEDULE_LABELS",
     "SEVERITY_GROUPS",
     "SEVERITY_LABELS",
     "build_report_view",

@@ -22,7 +22,8 @@ from webscope.cli import _auth_from_args, build_parser
 from webscope.crawler import crawl
 from webscope.models import AuthCredentials, ScanResult
 from webscope.scanner import ScanError, _absolute_login_url, scan, scan_site
-from webscope.webapp.app import _auth_fields, create_app
+from webscope.webapp.app import create_app
+from webscope.webapp.forms import auth_fields as _auth_fields
 from webscope.webapp.scheduler import CrawlOutcome, Monitor, ScanOptions
 from webscope.webapp.storage import Storage
 
@@ -323,7 +324,7 @@ def web(tmp_path: Path):
         notifier=lambda **kwargs: [],
     )
     with TestClient(app) as client:
-        yield client, app.state.storage
+        yield client, app.state.webscope.storage
 
 
 def test_index_renders_auth_checkbox(web) -> None:
