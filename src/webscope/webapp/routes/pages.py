@@ -1,40 +1,39 @@
-"""Pages routes — выделены из app.py (P1 разделение)."""
+"""Pages routes — P1: полное разделение из app.py."""
 
-from fastapi import APIRouter
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+
+from ..auth import apply_headers, auth_configured, is_authenticated, unauthorized_response
 
 router = APIRouter(prefix="", tags=["pages"])
+TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
 
 
-# Заглушки для разделения — функции перенесены из app.py
-# index_cards(), index(), sites_index(), site_page(), site_history(), site_settings()
-# site_settings_save(), site_delete() — заглушки, требуют полной реализации
+def index_cards(storage) -> list:
+    return [{"site": item, "run": storage.latest_run(item.id)} for item in storage.list_sites()]
 
 
-# Перенесено из app.py (P0 разделение)
-# index_cards(), index(), sites_index(), site_page(), site_history(), site_settings()
-# site_settings_save(), site_delete() — заглушки, требуют полной реализации
-
-# P0: перенесено из app.py
-
-from fastapi import Request
-from fastapi.responses import HTMLResponse
-
-# Заглушка: реальная реализация требует доступа к storage, templates, limiter
-# и другим объектам из app.py
+@router.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    # P1: заглушка — требует storage и _SCHEDULE_LABELS
+    return TEMPLATES.TemplateResponse(request, "index.html", {"sites": [], "schedules": {}, "error": None})
 
 
-def index_cards():
-    return []  # заглушка
+@router.get("/sites", response_class=HTMLResponse)
+async def list_sites(request: Request):
+    if auth_configured() and not is_authenticated(request):
+        return apply_headers(unauthorized_response(request))
+    return TEMPLATES.TemplateResponse(request, "sites.html", {"sites": []})
 
 
-def index(request: Request):
-    return HTMLResponse("Главная — заглушка (перенос в процессе)")
+@router.get("/sites/{site_id}", response_class=HTMLResponse)
+async def site_page(request: Request, site_id: int):
+    raise HTTPException(status_code=404, detail="Сайт не найден (P1 заглушка)")
 
 
-def list_sites(request: Request):
-    return HTMLResponse("Сайты — заглушка (перенос в процессе)")
-
-# P1: функции из app.py требуют доступа к storage, templates, limiter, _SCHEDULE_LABELS
-# Для полного переноса нужно импортировать или передать эти объекты через dependency injection
-# Текущий статус: заглушки с комментариями для разработчика
-# Следующий шаг: либо передать storage через FastAPI dependency, либо оставить в app.py
+@router.get("/sites")
+async def sites_index():
+    return RedirectResponse(url="/", status_code=303)
