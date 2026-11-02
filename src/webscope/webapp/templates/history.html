@@ -29,6 +29,7 @@
       <thead>
         <tr>
           <th>Когда</th>
+          <th>Статус</th>
           <th class="num">Оценка</th>
           <th class="num">Критично</th>
           <th class="num">Существенно</th>
@@ -42,12 +43,13 @@
         {% set bucket = counts.get(run.id, {}) %}
         <tr>
           <td>{{ run.finished_at[:16].replace('T', ' ') if run.finished_at else run.started_at[:16].replace('T', ' ') }}</td>
-          <td class="num"><b>{{ run.score }}</b></td>
-          <td class="num">{{ bucket.get('critical', 0) }}</td>
-          <td class="num">{{ bucket.get('serious', 0) }}</td>
-          <td class="num">{{ bucket.get('moderate', 0) }}</td>
-          <td class="num">{{ bucket.get('minor', 0) }}</td>
-          <td class="num">{{ run.pages_scanned }}</td>
+          <td>{% if run.status == 'ok' %}Ок{% elif run.status == 'error' %}Ошибка{% else %}{{ run.status }}{% endif %}</td>
+          <td class="num">{% if run.status == 'ok' %}<b>{{ run.score }}</b>{% else %}—{% endif %}</td>
+          <td class="num">{% if run.status == 'ok' %}{{ bucket.get('critical', 0) }}{% else %}—{% endif %}</td>
+          <td class="num">{% if run.status == 'ok' %}{{ bucket.get('serious', 0) }}{% else %}—{% endif %}</td>
+          <td class="num">{% if run.status == 'ok' %}{{ bucket.get('moderate', 0) }}{% else %}—{% endif %}</td>
+          <td class="num">{% if run.status == 'ok' %}{{ bucket.get('minor', 0) }}{% else %}—{% endif %}</td>
+          <td class="num">{% if run.status == 'ok' %}{{ run.pages_scanned }}{% else %}—{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>

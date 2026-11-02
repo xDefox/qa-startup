@@ -57,6 +57,10 @@ OPEN_PAGE = """<!doctype html>
 
 EMPTY_401 = "<html><head></head><body>401</body></html>"
 
+INNER_PAGE = """<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Внутри</title></head>
+<body><p>Тоже за паролем.</p></body></html>"""
+
 
 # --- локальные серверы для браузерных тестов ---
 
@@ -116,14 +120,19 @@ class _FormHandler(_QuietHandler):
             self._page(200, FORM_PAGE)  # ошибка входа: форма остаётся на месте
 
 
-def _serve(handler_class: type[BaseHTTPRequestHandler]):
+def _serve(handler_class: type[BaseHTTPRequestHandler], hostname: str = "127.0.0.1"):
+    """HTTP-сервер на loopback; ``hostname`` — как к нему обращаться в URL.
+
+    Браузерные креды скоупятся по origin (порт участвует), а httpx-скоуп —
+    по hostname: «чужой хост» в тестах — это localhost против 127.0.0.1.
+    """
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     server = ThreadingHTTPServer(("127.0.0.1", port), handler_class)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    return server, f"http://127.0.0.1:{port}"
+    return server, f"http://{hostname}:{port}"
 
 
 @pytest.fixture()
@@ -461,9 +470,22 @@ def test_settings_empty_password_keeps_old(web) -> None:
     )
     assert storage.get_site(site_id).auth_password == PASSWORD
 
-    # сняли галочку — вход выключен полностью
+    # сняли галочку — вход выключен, но креды не уничтожены: пароль форма
+    # не показывает, поэтому снятая по ошибке галочка не должна его убивать
     client.post(f"/sites/{site_id}/settings", data={"schedule": "off"})
-    assert not storage.get_site(site_id).has_auth
+    disabled = storage.get_site(site_id)
+    assert not disabled.has_auth
+    assert disabled.auth_login == LOGIN
+    assert disabled.auth_password == PASSWORD
+
+    # включили обратно с пустым паролем — работает сохранённый
+    client.post(
+        f"/sites/{site_id}/settings",
+        data={"schedule": "off", "auth_enabled": "1", "auth_kind": "basic", "auth_login": LOGIN, "auth_password": ""},
+    )
+    reenabled = storage.get_site(site_id)
+    assert reenabled.has_auth
+    assert reenabled.auth_password == PASSWORD
 
 
 # --- краулер шлёт заголовок авторизации (без браузера) ---
@@ -514,6 +536,91 @@ def test_scan_site_basic_auth_checks_protected_site(basic_server: str) -> None:
     assert result.pages_scanned == 1
     assert result.title == "Секретная страница"
     assert not crawl_result.skipped
+
+
+@pytest.mark.browser
+def test_scan_basic_auth_never_sends_creds_to_foreign_host() -> None:
+    """Канал утечки: extra_http_headers шлёт Authorization на ВСЕ запросы.
+
+    Страница сайта тянет ресурс с чужого хоста, а тот активно вызывает
+    авторизацию (401 + WWW-Authenticate) — пытается выманить креды. Раньше
+    пароль в base64 уезжал туда вместе с любым запросом контекста; теперь
+    браузер отвечает чужому хосту отказом (http_credentials со origin).
+    """
+    foreign_seen: list[str | None] = []
+
+    class _Foreign(_QuietHandler):
+        def do_GET(self) -> None:
+            foreign_seen.append(self.headers.get("Authorization"))
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="phishing"')
+            self._finish(EMPTY_401)
+
+    # чужой хост — другой hostname; браузерные креды скоупятся по origin
+    foreign_server, foreign_url = _serve(_Foreign, hostname="localhost")
+
+    class _BasicWithForeignImage(_BasicHandler):
+        def do_GET(self) -> None:
+            if self.headers.get("Authorization") != BASIC_HEADER:
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", 'Basic realm="webscope-test"')
+                self._finish(EMPTY_401)
+                return
+            self._page(200, SECRET_PAGE.replace("</body>", f'<img src="{foreign_url}/steal.png"></body>'))
+
+    site_server, site_url = _serve(_BasicWithForeignImage)
+    try:
+        result = scan(
+            f"{site_url}/",
+            allow_private=True,
+            auth=AuthCredentials(kind="basic", login=LOGIN, password=PASSWORD),
+        )
+    finally:
+        site_server.shutdown()
+        site_server.server_close()
+        foreign_server.shutdown()
+        foreign_server.server_close()
+
+    assert result.title == "Секретная страница"
+    assert foreign_seen, "страница должна была запросить чужой ресурс — иначе тест ничего не доказывает"
+    assert all(auth is None for auth in foreign_seen), f"чужой хост увидел креды: {foreign_seen}"
+
+
+@pytest.mark.browser
+def test_links_check_uses_scan_credentials() -> None:
+    """Внутренняя ссылка на защищённом сайте — не ложная «битая» из-за 401.
+
+    Регресс-тест (канал D из ревью): проверка ссылок ходила по сети без
+    кредов, и каждая внутренняя ссылка на basic-сайте отвечала 401 —
+    отчёт пестрил ложными «битыми ссылками». Теперь probe идёт с теми же
+    заголовками авторизации, что и сам скан.
+    """
+
+    class _BasicWithInnerLink(_BasicHandler):
+        def do_GET(self) -> None:
+            if self.headers.get("Authorization") != BASIC_HEADER:
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", 'Basic realm="webscope-test"')
+                self._finish(EMPTY_401)
+                return
+            if self.path.startswith("/inner"):
+                self._page(200, INNER_PAGE)
+            else:
+                self._page(200, SECRET_PAGE.replace("</body>", '<a href="/inner">Внутри</a></body>'))
+
+    server, url = _serve(_BasicWithInnerLink)
+    try:
+        result, _crawl_result = scan_site(
+            f"{url}/",
+            allow_private=True,
+            auth=AuthCredentials(kind="basic", login=LOGIN, password=PASSWORD),
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    broken = [finding for finding in result.findings if finding.rule == "links/broken"]
+    assert not broken, f"внутренняя ссылка за защищённым сайтом — не ложная битая: {broken}"
 
 
 @pytest.mark.browser

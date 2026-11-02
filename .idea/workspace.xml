@@ -4,7 +4,46 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="3cfb9521-d56e-4d6f-a8d5-cd4bc3a4a8f8" name="Changes" comment="" />
+    <list default="true" id="3cfb9521-d56e-4d6f-a8d5-cd4bc3a4a8f8" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/.idea/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/LECTURE.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/PLAN_SECURITY.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/economic-audit.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/economic-persona.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/webscope/credscope.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/webscope/webapp/billing.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/webscope/webapp/routes/upload.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/webscope/webapp/services/reports.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/webscope/webapp/services/scans.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/webscope/webapp/storage_local.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/test_credscope.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/test_security.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/webscope.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/webscope.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PLAN.md" beforeDir="false" afterPath="$PROJECT_DIR$/PLAN.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/checks/links.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/checks/links.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/context.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/context.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/crawler.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/crawler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/netguard.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/netguard.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/scanner.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/scanner.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/webapp/alerts.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/webapp/alerts.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/webapp/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/webapp/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/webapp/routes/api.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/webapp/routes/api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/webapp/routes/auth.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/webapp/routes/auth.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/webapp/routes/pages.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/webapp/routes/pages.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/webapp/scheduler.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/webapp/scheduler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/webapp/storage.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/webapp/storage.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/webapp/templates/base.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/webapp/templates/base.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/webapp/templates/history.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/webapp/templates/history.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/webapp/templates/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/webapp/templates/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/webscope/webapp/templates/site.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/webscope/webapp/templates/site.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_auth.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_auth.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_ratelimit.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_ratelimit.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_webapp.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_webapp.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -32,7 +71,7 @@
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "arena/c7c8b4c9-qa-startup",
+    "git-widget-placeholder": "Merging work-complete",
     "last_opened_file_path": "/home/kuga/Work/qa-startup",
     "python.packages.toolwindow.project.migrated.to.right.top.v2": "true"
   }

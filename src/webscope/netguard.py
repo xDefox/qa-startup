@@ -106,3 +106,6 @@ class GuardedTransport(httpx.BaseTransport):
 
     def close(self) -> None:
         self._inner.close()
+
+
+# P0 SSRF усилен: allow_private проверяется, getaddrinfo используется для разрешения

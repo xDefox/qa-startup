@@ -31,9 +31,10 @@ def test_max_concurrent_scans_returns_429(tmp_path: Path, monkeypatch: pytest.Mo
     app = create_app(db_path=tmp_path / "db.sqlite", scanner_func=stub_scanner, notifier=lambda **kw: [])
     storage = app.state.webscope.storage
     site = storage.add_site("https://example.com/")
-    storage.start_run(site.id)  # имитируем идущий прогон
 
     with TestClient(app) as client:
+        storage.start_run(site.id)  # идущий прогон имитируем уже после старта:
+        # на самом запуске reconcile_running() закрыл бы такую сироту
         response = client.post(f"/api/sites/{site.id}/scan")
     assert response.status_code == 429
     assert "максимум" in response.json()["detail"]

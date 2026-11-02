@@ -8,4 +8,9 @@
     <orderEntry type="jdk" jdkName="~/Work/qa-startup/.venv" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
+<<<<<<< HEAD
+=======
+  <component name="PackageRequirementsSettings" />
+  <component name="ReSTService" />
+>>>>>>> arena/5c8b4ba6-qa-startup
 </module>

@@ -61,3 +61,8 @@ def api_scan(request: Request, site_id: int, background_tasks: BackgroundTasks, 
     site = get_site_or_404(state, site_id)
     run = trigger(state, site, background_tasks)
     return JSONResponse({"status": "started", "site_id": site_id, "run_id": run.id}, status_code=202)
+"""API routes — выделены из app.py (P1 разделение)."""
+
+from fastapi import APIRouter
+
+router = APIRouter(prefix="/api", tags=["api"])
