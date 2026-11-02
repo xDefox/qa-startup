@@ -159,7 +159,7 @@ def validate_target(url: str, allow_private: bool = False) -> str:
     if not host:
         raise ScanError("В URL нет хоста")
 
-    # P0: удалён глобальный env — защита только через параметр allow_private
+        # P0: удалён глобальный env — защита только через параметр allow_private
         try:
             infos = socket.getaddrinfo(host, None)
         except socket.gaierror as exc:

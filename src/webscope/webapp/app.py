@@ -44,7 +44,9 @@ from .auth import (
     unauthorized_response,
 )
 from .limits import RateLimiter, max_concurrent_scans, rate_limit, rate_window_seconds
-from .routes import auth as auth_routes, pages as pages_routes, upload as upload_routes
+from .routes import auth as auth_routes
+from .routes import pages as pages_routes
+from .routes import upload as upload_routes
 from .scheduler import Monitor, ScanOptions, Scheduler, default_scanner
 from .storage import Run, Site, Storage
 
@@ -259,6 +261,14 @@ class _SandboxedLocalFiles(StaticFiles):
     SANDBOX = "sandbox allow-scripts allow-forms allow-popups allow-modals"
 
     async def get_response(self, path: str, scope):
+        # P0: если auth включён, проверяем cookie для доступа к локальным файлам
+        from .auth import auth_configured, is_authenticated
+
+        request = scope.get("request")
+        if auth_configured() and request is not None and not is_authenticated(request):
+            from fastapi.responses import PlainTextResponse
+
+            return PlainTextResponse("Требуется вход", status_code=401)
         response = await super().get_response(path, scope)
         if response.status_code < 400:
             response.headers["Content-Security-Policy"] = self.SANDBOX
@@ -574,9 +584,7 @@ def create_app(
         # P0: для защиты — если auth включён, проверяем cookie
         if auth_configured() and not is_authenticated(request):
             return apply_headers(unauthorized_response(request))
-        return templates.TemplateResponse(
-            request, "sites.html", {"sites": storage.list_sites()}
-        )
+        return templates.TemplateResponse(request, "sites.html", {"sites": storage.list_sites()})
 
     @app.post("/sites")
     def create_site(
