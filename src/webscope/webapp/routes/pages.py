@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -37,3 +37,33 @@ async def site_page(request: Request, site_id: int):
 @router.get("/sites")
 async def sites_index():
     return RedirectResponse(url="/", status_code=303)
+
+
+# P1: перенесено из app.py
+@router.post("/sites/{site_id}/scan")
+async def rescan(request: Request, site_id: int, background_tasks: BackgroundTasks):
+    # Заглушка: требует storage, trigger(), scan_limit_response()
+    from fastapi import HTTPException
+
+    raise HTTPException(status_code=501, detail="P1 заглушка")
+
+
+@router.get("/sites/{site_id}/history", response_class=HTMLResponse)
+async def site_history(request: Request, site_id: int):
+    from fastapi import HTTPException
+
+    raise HTTPException(status_code=501, detail="P1 заглушка")
+
+
+@router.get("/sites/{site_id}/settings", response_class=HTMLResponse)
+async def site_settings(request: Request, site_id: int, saved: bool = False):
+    from fastapi import HTTPException
+
+    raise HTTPException(status_code=501, detail="P1 заглушка")
+
+
+@router.post("/sites/{site_id}/delete")
+async def site_delete(site_id: int):
+    from fastapi import HTTPException
+
+    raise HTTPException(status_code=501, detail="P1 заглушка")
