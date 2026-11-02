@@ -24,3 +24,10 @@ def test_local_access_requires_auth():
     # P0: /__local должен требовать auth при auth_configured()
     # Заглушка — полная проверка требует запуска FastAPI TestClient
     assert True
+
+
+# P1: тесты безопасности (расширенные)
+# /upload: проверка лимитов (MAX_UPLOAD_FILE_BYTES, MAX_UPLOAD_TOTAL_BYTES)
+# /__local: проверка CSP заголовков (X-Content-Type-Options, Cache-Control)
+# CSRF: проверка csrf_safe() с разными Origin/Referer
+# SSRF: проверка validate_target() с приватными IP

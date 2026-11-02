@@ -33,3 +33,8 @@ def index(request: Request):
 
 def list_sites(request: Request):
     return HTMLResponse("Сайты — заглушка (перенос в процессе)")
+
+# P1: функции из app.py требуют доступа к storage, templates, limiter, _SCHEDULE_LABELS
+# Для полного переноса нужно импортировать или передать эти объекты через dependency injection
+# Текущий статус: заглушки с комментариями для разработчика
+# Следующий шаг: либо передать storage через FastAPI dependency, либо оставить в app.py
