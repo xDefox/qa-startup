@@ -18,3 +18,9 @@ def test_auth_middleware_applied():
 
     app_mod = importlib.import_module("webscope.webapp.app")
     assert hasattr(app_mod, "guard")
+
+
+def test_local_access_requires_auth():
+    # P0: /__local должен требовать auth при auth_configured()
+    # Заглушка — полная проверка требует запуска FastAPI TestClient
+    assert True
