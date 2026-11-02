@@ -387,7 +387,14 @@ qa-startup/
 │   ├── vendor/axe.min.js      # вендорим axe-core 4.11.0
 │   ├── checks/                # a11y, content, forms, links, console, viewport
 │   └── webapp/                # веб-продукт для владельца сайта
-│       ├── app.py             # FastAPI: формы, страницы, JSON API
+│       ├── app.py             # сборка: хранилище, монитор, роутеры, middleware
+│       ├── state.py           # AppState — то, что раньше жило в замыканиях
+│       ├── deps.py            # лимиты запуска, создание прогона, 404
+│       ├── routes/            # обработчики: auth, pages, api, reports, uploads
+│       ├── views.py           # данные для страницы отчёта (группы, дифф)
+│       ├── report_files.py    # форматы отчёта и имена файлов
+│       ├── urls.py            # разбор введённого адреса
+│       ├── uploads.py         # локальные сборки: лимиты, песочница
 │       ├── storage.py         # SQLite: сайты, прогоны, находки
 │       ├── scheduler.py       # расписание и монитор
 │       ├── alerts.py          # email и Telegram
