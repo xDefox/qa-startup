@@ -563,6 +563,15 @@ def create_app(
             },
         )
 
+    @app.get("/sites", response_class=HTMLResponse)
+    def list_sites(request: Request):
+        # P0: для защиты — если auth включён, проверяем cookie
+        if auth_configured() and not is_authenticated(request):
+            return apply_headers(unauthorized_response(request))
+        return templates.TemplateResponse(
+            request, "sites.html", {"sites": storage.list_sites()}
+        )
+
     @app.post("/sites")
     def create_site(
         request: Request,
@@ -946,3 +955,6 @@ def _result_from_run(storage: Storage, run: Run):
     )
     result.findings = storage.findings_as_models(run.id)
     return result
+
+
+# Полная реализация — в subagent/security-plan

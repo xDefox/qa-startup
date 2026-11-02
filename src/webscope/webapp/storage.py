@@ -80,6 +80,37 @@ _MIGRATIONS = (
     ("sites", "auth_login_url", "TEXT"),
 )
 
+# Миграция биллинга (Milestone 4): таблицы subscriptions + invoices.
+# Добавляется отдельно, чтобы не ломать существующие базы без Stripe-интеграции.
+BILLING_MIGRATION = """
+CREATE TABLE IF NOT EXISTS subscriptions (
+    site_id INTEGER PRIMARY KEY REFERENCES sites(id) ON DELETE CASCADE,
+    plan TEXT NOT NULL DEFAULT 'free',
+    status TEXT NOT NULL DEFAULT 'trial',
+    started_at TEXT NOT NULL,
+    trial_ends_at TEXT,
+    current_period_ends_at TEXT,
+    stripe_customer_id TEXT,
+    stripe_subscription_id TEXT,
+    payment_method TEXT
+);
+CREATE TABLE IF NOT EXISTS invoices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    amount_cents INTEGER NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    status TEXT NOT NULL DEFAULT 'draft',
+    stripe_invoice_id TEXT,
+    due_at TEXT,
+    paid_at TEXT,
+    pdf_url TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_site ON subscriptions(site_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_site ON invoices(site_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+"""
+
 
 def _seal(password: str | None) -> str | None:
     """Шифрует пароль перед записью (без WEBSCOPE_AUTH_KEY — как есть)."""
@@ -250,6 +281,7 @@ class Storage:
     def init_db(self) -> None:
         with self._conn() as connection:
             connection.executescript(SCHEMA)
+            connection.executescript(BILLING_MIGRATION)
             self._migrate(connection)
             connection.commit()
 
