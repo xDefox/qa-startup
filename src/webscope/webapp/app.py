@@ -9,25 +9,19 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
 import shutil
-import tempfile
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import replace
-from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote, urlsplit
+from urllib.parse import urlsplit
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import __version__
-from ..models import Severity
-from ..report import render_html, render_json, render_junit, render_plain, render_sarif
-from ..scoring import plain_impact, score_label, top_actions
+from . import uploads
 from .alerts import notify
 from .auth import (
     COOKIE_NAME,
@@ -44,336 +38,30 @@ from .auth import (
     unauthorized_response,
 )
 from .limits import RateLimiter, max_concurrent_scans, rate_limit, rate_window_seconds
+from .report_files import (
+    DOWNLOAD_FORMATS,
+    REPORT_MEDIA_TYPES,
+    REPORT_RENDERERS,
+    content_disposition,
+    default_report_stem,
+    download_filename,
+    human_date,
+)
 from .scheduler import Monitor, ScanOptions, Scheduler, default_scanner
 from .storage import Run, Site, Storage
+from .uploads import LOCAL_DIR, MAX_UPLOAD_JOBS, SandboxedLocalFiles, prune_local_uploads
+from .urls import normalize_url
+from .views import build_report_view, result_from_run
 
 LOGGER = logging.getLogger("webscope.webapp")
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
-_LOCAL_DIR = Path(tempfile.gettempdir()) / "webscope-local"
-_LOCAL_DIR.mkdir(parents=True, exist_ok=True)
-
-# Ограничения на загрузку локальной сборки: один прогон не должен уметь
-# забить диск и не должен тянуть гигабайты в память процесса.
-MAX_UPLOAD_FILES = 300
-MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024
-MAX_UPLOAD_TOTAL_BYTES = 50 * 1024 * 1024
-# Сколько последних загрузок храним (остальные удаляются при новой загрузке).
-MAX_UPLOAD_JOBS = 50
-
-# Форматы отчёта: расширение в URL, MIME-тип и подпись для кнопки «скачать».
-REPORT_MEDIA_TYPES = {
-    "html": "text/html; charset=utf-8",
-    "json": "application/json",
-    "txt": "text/plain; charset=utf-8",
-    "xml": "application/xml",
-    "sarif": "application/sarif+json",
-}
-
-REPORT_RENDERERS = {
-    "html": render_html,
-    "json": render_json,
-    "txt": render_plain,
-    "xml": render_junit,
-    "sarif": render_sarif,
-}
-
-DOWNLOAD_FORMATS = (
-    {"ext": "html", "label": "HTML", "hint": "Открыть в браузере и сохранить"},
-    {"ext": "json", "label": "JSON", "hint": "Для интеграций и своего дашборда"},
-    {"ext": "txt", "label": "TXT", "hint": "Прочитать в терминале или письмом"},
-    {"ext": "xml", "label": "JUnit", "hint": "Для CI: Jenkins, GitLab, pytest"},
-    {"ext": "sarif", "label": "SARIF", "hint": "Для GitHub Code Scanning"},
-)
-
-BLOCKER_RULE = "interaction/button-blocked"
-
-SEVERITY_GROUPS = (
-    (Severity.CRITICAL, "Критично — сайт работает неправильно", "critical"),
-    (Severity.SERIOUS, "Существенно — часть клиентов теряется", "serious"),
-    (Severity.MODERATE, "Желательно — стоит поправить", "moderate"),
-    (Severity.MINOR, "Мелочи — на ваше усмотрение", "minor"),
-)
-
-# Третья категория находок: ошибки на чужих доменах (счётчики, карты, реклама).
-# Показываем их отдельной группой, чтобы в таблице были видны все находки,
-# но не путались с дефектами сайта.
-EXTERNAL_TITLE = "Замечания сканирования — не дефекты сайта (чужие виджеты)"
-
-SEVERITY_LABELS = {
-    "critical": "критично",
-    "serious": "существенно",
-    "moderate": "желательно",
-    "minor": "мелочь",
-    "external": "виджет",
-}
-
 _SCHEDULE_LABELS = {
     "off": "без автоматических проверок",
     "daily": "каждый день",
     "weekly": "каждую неделю",
     "monthly": "каждый месяц",
 }
-
-
-def normalize_url(url: str) -> str:
-    """Приводит введённый адрес к полному URL и отбрасывает мусор.
-
-    Проверяется не «похоже ли на домен», а разбирается ли адрес: переводы строк
-    (инъекция в заголовок письма), логин/пароль в URL (утечка в логи и реферер),
-    порт вне диапазона и пустой хост отклоняются. IPv6 в скобках — валидный адрес.
-    """
-    cleaned = (url or "").strip()
-    if not cleaned:
-        raise ValueError("Укажите адрес сайта")
-    if any(char in cleaned for char in "\r\n\t") or any(ord(char) < 32 for char in cleaned):
-        raise ValueError("В адресе есть недопустимые символы")
-    if " " in cleaned:
-        raise ValueError("Похоже, это не адрес сайта")
-    if not cleaned.startswith(("http://", "https://")):
-        cleaned = f"https://{cleaned}"
-
-    parsed = urlsplit(cleaned)
-    if parsed.scheme not in {"http", "https"}:
-        raise ValueError("Поддерживаются только http и https")
-    if parsed.username or parsed.password:
-        raise ValueError("Логин и пароль в адресе не поддерживаются — укажите их в блоке авторизации")
-    if not parsed.hostname:
-        raise ValueError("Похоже, это не адрес сайта")
-    try:
-        port = parsed.port
-    except ValueError as exc:  # порт не число или вне диапазона
-        raise ValueError("Некорректный порт в адресе") from exc
-    if port is not None and not 1 <= port <= 65535:
-        raise ValueError("Некорректный порт в адресе")
-
-    host = parsed.hostname
-    if not ("." in host or host == "localhost" or ":" in host):
-        raise ValueError("Похоже, это не адрес сайта")
-    return cleaned
-
-
-# Сколько символов имени файла разрешаем: длиннее браузеры и файловые
-# системы начинают обрезать по-своему.
-MAX_FILENAME_STEM = 120
-
-
-def safe_report_stem(value: str | None) -> str | None:
-    """Имя файла от пользователя, приведённое к безопасному виду.
-
-    Имя уходит в заголовок ``Content-Disposition``, поэтому всё, чем можно
-    навредить, вычищается: переводы строк (инъекция в заголовок), путь
-    (``../../etc/passwd`` — это имя, а не путь), кавычки, управляющие символы.
-    Расширение, если пользователь его вписал, отбрасывается: его задаёт формат.
-
-    Возвращает None, если после чистки ничего не осталось, — тогда берётся
-    имя по умолчанию.
-    """
-    if not value:
-        return None
-    # только печатаемые символы: CR/LF в заголовке — это уже другая уязвимость
-    cleaned = "".join(char for char in str(value) if char.isprintable())
-    # имя файла, а не путь: берём последний сегмент
-    cleaned = cleaned.replace("\\", "/").split("/")[-1].strip()
-    stem, dot, tail = cleaned.rpartition(".")
-    if dot and tail.lower() in REPORT_MEDIA_TYPES:
-        cleaned = stem
-    cleaned = "".join(char if (char.isalnum() or char in "-_. ") else "-" for char in cleaned)
-    cleaned = " ".join(cleaned.split()).strip(" .-_")
-    return cleaned[:MAX_FILENAME_STEM].strip(" .-_") or None
-
-
-def default_report_stem(site: Site, run: Run) -> str:
-    """Имя по умолчанию: домен и дата прогона.
-
-    Unicode-домены, порты и IPv6 превращаются в дефисы, иначе в заголовке
-    окажется что-то вроде ``https://пример.рф:8443/``.
-    """
-    host = urlsplit(site.url).hostname or "site"
-    safe_host = re.sub(r"[^A-Za-z0-9.-]+", "-", host).strip("-.") or "site"
-    day = (run.started_at or "")[:10]
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) is None:
-        day = "report"
-    return f"webscope-{safe_host}-{day}"
-
-
-def download_filename(site: Site, run: Run, ext: str, name: str | None = None) -> str:
-    """Имя файла отчёта: имя пользователя (если задал) плюс расширение формата."""
-    stem = safe_report_stem(name) or default_report_stem(site, run)
-    return f"{stem}.{ext}"
-
-
-def content_disposition(filename: str, fallback: str | None = None) -> str:
-    """Заголовок ``Content-Disposition`` для файла с любым именем.
-
-    В ``filename`` по RFC 6266 допустим только ASCII, поэтому для кириллицы
-    добавляется ``filename*`` в кодировке UTF-8, а в ``filename`` остаётся
-    ASCII-запасной вариант: старые клиенты не увидят кракозябры. ``fallback`` —
-    что показать такому клиенту; по умолчанию собирается из самого имени.
-    """
-    if filename.isascii():
-        return f'attachment; filename="{filename}"'
-    if fallback is None:
-        stem, _, ext = filename.rpartition(".")
-        fallback_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", stem).strip("-._") or "report"
-        fallback = f"{fallback_stem}.{ext}" if ext else fallback_stem
-    encoded = quote(filename, safe="")
-    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{encoded}"
-
-
-def human_date(value: str | None) -> str | None:
-    """Дата прогона по-человечески: 2026-10-30T09:15:00+00:00 → 30.10.2026."""
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value).strftime("%d.%m.%Y")
-    except ValueError:
-        return None
-
-
-def _prune_local_uploads(keep: int = MAX_UPLOAD_JOBS) -> None:
-    """Удаляет старые загруженные сборки, чтобы каталог не рос бесконечно."""
-    try:
-        jobs = sorted(
-            (path for path in _LOCAL_DIR.iterdir() if path.is_dir()),
-            key=lambda path: path.stat().st_mtime,
-            reverse=True,
-        )
-    except OSError:  # каталога нет или нет прав — загрузка всё равно важнее
-        return
-    for stale in jobs[keep:]:
-        shutil.rmtree(stale, ignore_errors=True)
-
-
-class _SandboxedLocalFiles(StaticFiles):
-    """Раздача загруженных страниц в песочнице.
-
-    Загруженный HTML исполняется на origin приложения. Без песочницы его скрипт
-    читал бы cookie и ходил в `/api` от имени пользователя. Директива CSP
-    ``sandbox`` переводит документ в уникальный opaque-origin: скрипты и стили
-    самой страницы работают (иначе проверка локальной сборки теряет смысл),
-    а доступа к cookie, localStorage и API приложения у них нет.
-    """
-
-    SANDBOX = "sandbox allow-scripts allow-forms allow-popups allow-modals"
-
-    async def get_response(self, path: str, scope):
-        response = await super().get_response(path, scope)
-        if response.status_code < 400:
-            response.headers["Content-Security-Policy"] = self.SANDBOX
-            response.headers["X-Content-Type-Options"] = "nosniff"
-            response.headers["Cache-Control"] = "no-store"
-        return response
-
-
-def _problem_view(group: dict) -> dict:
-    """Одна проблема для шаблона: что, где и как проверить."""
-    rep = group.get("representative")
-    details = getattr(rep, "details", None) or {}
-    source = details.get("location") or details.get("location_url") or details.get("resource") or ""
-    if not source:
-        checker = getattr(rep, "source", "") or ""
-        # внутренние пометки вида «webscope.forms» пользователю не интересны
-        source = "" if checker.startswith("webscope") else checker
-    severity = getattr(rep, "severity", None)
-    return {
-        "severity": getattr(severity, "value", str(severity or "")),
-        "severity_label": SEVERITY_LABELS.get(getattr(severity, "value", ""), getattr(severity, "value", "")),
-        "meaning": group["meaning"],
-        "fix": group["fix"],
-        "url": ", ".join(group["examples"]) if group["examples"] else "",
-        "pages_count": group["pages_count"],
-        "count": group["count"],
-        "rule": group["rule"],
-        "selector": getattr(rep, "selector", None) or "",
-        "snippet": getattr(rep, "snippet", None) or "",
-        "message": getattr(rep, "message", None) or "",
-        "source": source,
-        "help_url": getattr(rep, "help_url", None) or "",
-    }
-
-
-def build_report_view(storage: Storage, run: Run) -> dict:
-    """Готовит данные для страницы отчёта: группы, план действий, дифф."""
-    findings = storage.findings_as_models(run.id)
-    from ..pages import page_notes
-    from ..scoring import group_by_rule, is_site_defect
-
-    blocker_groups = group_by_rule([f for f in findings if f.rule == BLOCKER_RULE])
-    blockers = [_problem_view(group) for group in blocker_groups]
-
-    # Находки делятся на три категории, и все три обязаны быть в отчёте:
-    # 1) проблемы самого сайта (блокеры кликов входят сюда же — отдельной карточкой),
-    # 2) мелочи сайта,
-    # 3) замечания сканирования — ошибки на чужих доменах, которые не дефект сайта.
-    own = [finding for finding in findings if is_site_defect(finding)]
-    external = [finding for finding in findings if not is_site_defect(finding)]
-    groups = []
-    for severity, title, key in SEVERITY_GROUPS:
-        items = group_by_rule(
-            [finding for finding in own if finding.severity == severity and finding.rule != BLOCKER_RULE]
-        )
-        if not items:
-            continue
-        groups.append(
-            {
-                "title": title,
-                "key": key,
-                "count": len(items),
-                "problems": [_problem_view(group) for group in items],
-            }
-        )
-    external_items = group_by_rule(external)
-    if external_items:
-        groups.append(
-            {
-                "title": EXTERNAL_TITLE,
-                "key": "external",
-                "count": len(external_items),
-                "problems": [_problem_view(group) for group in external_items],
-            }
-        )
-
-    actions = [
-        {
-            "meaning": plain_impact(finding)[0],
-            "fix": plain_impact(finding)[1],
-            "url": finding.url,
-            "selector": finding.selector or "",
-        }
-        for finding in top_actions(findings, limit=3)
-    ]
-
-    diff = storage.diff_with_previous(run)
-    diff_view = None
-    if diff is not None:
-        diff_view = {
-            "delta": diff.score_after - diff.score_before,
-            "score_before": diff.score_before,
-            "score_after": diff.score_after,
-            "new": [
-                {"title": entry.title, "url": entry.url, "severity": entry.severity_after}
-                for entry in diff.new_findings[:10]
-            ],
-            "fixed": [{"title": entry.title, "url": entry.url} for entry in diff.fixed_findings[:10]],
-            "new_count": len(diff.new_findings),
-            "fixed_count": len(diff.fixed_findings),
-        }
-
-    score = run.score if run.score is not None else 100
-    return {
-        "run": run,
-        "score": score,
-        "score_label": score_label(score),
-        "blockers": blockers,
-        "groups": groups,
-        "actions": actions,
-        "diff": diff_view,
-        "total": len(own),
-        "external_total": len(external),
-        "has_external": bool(external),
-        "notes": page_notes(run.raw.get("url"), run.raw.get("final_url")),
-    }
 
 
 def _auth_fields(
@@ -414,6 +102,7 @@ def create_app(
     allow_private: bool = False,
     scanner_func=None,
     notifier=None,
+    local_dir: Path | str | None = None,
 ) -> FastAPI:
     """Собирает приложение: хранилище, монитор, планировщик и маршруты."""
     scan_options = options or ScanOptions()
@@ -421,6 +110,9 @@ def create_app(
         scan_options.allow_private = True
 
     storage = Storage(db_path)
+    # каталог загруженных сборок: по умолчанию общий, тесты передают свой
+    upload_dir = Path(local_dir) if local_dir is not None else LOCAL_DIR
+    upload_dir.mkdir(parents=True, exist_ok=True)
 
     base_scanner = scanner_func or default_scanner
 
@@ -808,13 +500,13 @@ def create_app(
             return limited
         if not files:
             raise HTTPException(status_code=400, detail="Нет файлов")
-        if len(files) > MAX_UPLOAD_FILES:
-            raise HTTPException(status_code=413, detail=f"Слишком много файлов (максимум {MAX_UPLOAD_FILES})")
+        if len(files) > uploads.MAX_UPLOAD_FILES:
+            raise HTTPException(status_code=413, detail=f"Слишком много файлов (максимум {uploads.MAX_UPLOAD_FILES})")
         if len(paths) != len(files):
             raise HTTPException(status_code=400, detail="Число путей не совпадает с числом файлов")
 
         job_id = uuid.uuid4().hex
-        base = _LOCAL_DIR / job_id
+        base = upload_dir / job_id
         base.mkdir(parents=True, exist_ok=True)
         total_bytes = 0
         try:
@@ -831,9 +523,9 @@ def create_app(
                 dest = (base / safe).resolve()
                 if not dest.is_relative_to(base.resolve()):
                     raise HTTPException(status_code=400, detail="Недопустимый путь файла")
-                content = await f.read(MAX_UPLOAD_FILE_BYTES + 1)
+                content = await f.read(uploads.MAX_UPLOAD_FILE_BYTES + 1)
                 total_bytes += len(content)
-                if len(content) > MAX_UPLOAD_FILE_BYTES or total_bytes > MAX_UPLOAD_TOTAL_BYTES:
+                if len(content) > uploads.MAX_UPLOAD_FILE_BYTES or total_bytes > uploads.MAX_UPLOAD_TOTAL_BYTES:
                     raise HTTPException(status_code=413, detail="Загруженные файлы слишком большие")
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(content)
@@ -841,7 +533,7 @@ def create_app(
             shutil.rmtree(base, ignore_errors=True)
             raise
 
-        _prune_local_uploads(keep=MAX_UPLOAD_JOBS)
+        prune_local_uploads(keep=MAX_UPLOAD_JOBS, directory=upload_dir)
         # выбираем стартовый файл
         index = base / "index.html"
         if not index.exists():
@@ -872,7 +564,7 @@ def create_app(
         last = storage.latest_ok_run(site.id)
         if last is None:
             raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
-        return site, last, REPORT_RENDERERS[fmt](_result_from_run(storage, last))
+        return site, last, REPORT_RENDERERS[fmt](result_from_run(storage, last))
 
     def report_response(site_id: int, fmt: str, download: bool, filename: str | None = None) -> Response:
         """Отчёт для просмотра в браузере или файлом на скачивание.
@@ -913,24 +605,8 @@ def create_app(
         return report_response(site_id, "xml", download, filename)
 
     try:
-        app.mount("/__local", _SandboxedLocalFiles(directory=str(_LOCAL_DIR), html=True), name="local_static")
+        app.mount("/__local", SandboxedLocalFiles(directory=str(upload_dir), html=True), name="local_static")
     except (OSError, RuntimeError) as exc:  # каталог раздачи не создался — локальная загрузка будет недоступна
         LOGGER.warning("не удалось смонтировать /__local: %s", exc)
 
     return app
-
-
-def _result_from_run(storage: Storage, run: Run):
-    """Собирает ScanResult из сохранённого прогона."""
-    from ..models import ScanResult
-
-    result = ScanResult(
-        url=run.raw.get("url", ""),
-        final_url=run.raw.get("final_url"),
-        title=run.raw.get("title"),
-        archetype=run.raw.get("archetype", {}),
-        duration_ms=run.duration_ms,
-        pages_scanned=run.pages_scanned,
-    )
-    result.findings = storage.findings_as_models(run.id)
-    return result

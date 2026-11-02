@@ -14,8 +14,14 @@ from pathlib import Path
 import pytest
 
 from webscope.models import Finding, ScanResult, Severity
-from webscope.webapp.app import EXTERNAL_TITLE, create_app
+from webscope.webapp.app import create_app
+from webscope.webapp.report_files import (
+    MAX_FILENAME_STEM,
+    download_filename,
+    safe_report_stem,
+)
 from webscope.webapp.storage import Storage
+from webscope.webapp.views import EXTERNAL_TITLE
 
 
 def _finding(rule: str, severity: Severity, **details) -> Finding:
@@ -220,7 +226,6 @@ def test_download_block_hidden_without_report(client) -> None:
 
 def test_download_filename_is_ascii_and_safe(tmp_path: Path) -> None:
     """Unicode-домены, порты и IPv6 не должны ломать имя файла."""
-    from webscope.webapp.app import download_filename
     from webscope.webapp.storage import Storage
 
     storage = Storage(tmp_path / "names.db")
@@ -235,7 +240,6 @@ def test_download_filename_is_ascii_and_safe(tmp_path: Path) -> None:
 
 
 def test_download_filename_keeps_regular_host(tmp_path: Path) -> None:
-    from webscope.webapp.app import download_filename
     from webscope.webapp.storage import Storage
 
     storage = Storage(tmp_path / "plain.db")
@@ -372,7 +376,6 @@ def test_custom_filename_ignored_without_download(client) -> None:
 
 
 def test_filename_stem_limits_length() -> None:
-    from webscope.webapp.app import MAX_FILENAME_STEM, safe_report_stem
 
     stem = safe_report_stem("x" * 500)
     assert stem is not None

@@ -11,9 +11,10 @@ from fastapi.testclient import TestClient
 
 from webscope.models import Finding, ScanResult, Severity
 from webscope.webapp.alerts import build_alert_text
-from webscope.webapp.app import create_app, normalize_url
+from webscope.webapp.app import create_app
 from webscope.webapp.scheduler import CrawlOutcome, Monitor, ScanOptions
 from webscope.webapp.storage import Storage
+from webscope.webapp.urls import normalize_url
 
 
 def _finding(rule: str = "content/image-alt", severity: Severity = Severity.SERIOUS) -> Finding:
