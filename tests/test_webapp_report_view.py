@@ -190,8 +190,8 @@ def test_download_panel_is_hidden_until_opened(client) -> None:
     panel_start = html.index('class="download-pop"')
     panel = html[panel_start : html.index('<div class="findings-view" data-mode="table"', panel_start)]
     assert "hidden" in panel[:80], "панель должна быть скрыта до нажатия"
-    assert panel.count('class="download-option"') == 5
-    for fmt in ("html", "json", "txt", "xml", "sarif"):
+    assert panel.count('class="download-option"') == 6
+    for fmt in ("html", "json", "txt", "xml", "sarif", "pdf"):
         assert f"report.{fmt}?download=1" in panel
     assert 'id="download-name"' in panel, "можно задать своё имя файла"
     assert 'value="webscope-example.com-' in panel, "по умолчанию — домен и дата"
@@ -209,7 +209,7 @@ def test_download_trigger_declares_a_popup(client) -> None:
     assert 'aria-label="Сохранить отчёт"' in button
     # Без JS форматы всё равно доступны: <noscript> с теми же ссылками.
     noscript = html[html.index("<noscript>") : html.index("</noscript>")]
-    assert noscript.count("?download=1") == 5
+    assert noscript.count("?download=1") == 6
 
 
 def test_download_block_hidden_without_report(client) -> None:

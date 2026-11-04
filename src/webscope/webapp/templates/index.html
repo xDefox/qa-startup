@@ -46,6 +46,14 @@
           {% endfor %}
         </select>
       </div>
+      <div class="field">
+        <label for="organization">Организация</label>
+        <select id="organization" name="organization_id">
+          {% for org in organizations %}
+          <option value="{{ org.id }}"{% if org.id == 0 %} selected{% endif %}>{{ org.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
     <label class="check-row" for="auth-enabled">
       <input type="checkbox" id="auth-enabled" name="auth_enabled" value="1">

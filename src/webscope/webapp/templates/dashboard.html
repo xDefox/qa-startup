@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Дашборд — webscope{% endblock %}
+{% block content %}
+<div class="dashboard-header">
+  <div>
+    <h1>Дашборд</h1>
+    <p class="muted">Привет, {{ user.username }}. Твои сайты и настройки.</p>
+  </div>
+  <a class="btn" href="/">← На главную</a>
+</div>
+
+<nav class="dashboard-tabs">
+  <a href="/dashboard" class="{% if active_tab == 'sites' %}active{% endif %}">Мои сайты</a>
+  <a href="/dashboard/organizations" class="{% if active_tab == 'organizations' %}active{% endif %}">Организации</a>
+  <a href="/dashboard/settings" class="{% if active_tab == 'settings' %}active{% endif %}">Настройки</a>
+  <a href="/dashboard/api-keys" class="{% if active_tab == 'api_keys' %}active{% endif %}">API ключи</a>
+</nav>
+
+<div class="card">
+  <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 16px;">
+    <h2 style="margin: 0;">Мои сайты ({{ cards|length }})</h2>
+    <a class="btn" href="/">Добавить сайт</a>
+  </div>
+
+  {% if cards %}
+  <table class="sites-table">
+    <thead>
+      <tr>
+        <th>Сайт</th>
+        <th>Организация</th>
+        <th>Последняя проверка</th>
+        <th>Оценка</th>
+        <th>Расписание</th>
+        <th>Действия</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for card in cards %}
+      <tr>
+        <td>
+          <a href="/sites/{{ card.site.id }}">{{ card.site.url }}</a>
+        </td>
+        <td>
+          {% if card.site.organization_id and card.site.organization_id > 0 %}
+            <span class="badge org">{{ card.site.organization_id }}</span>
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if card.run %}
+            {{ card.run.started_at[:19].replace('T', ' ') }}
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if card.run and card.run.score is not none %}
+            <span class="score-{{ 'ok' if card.run.score >= 80 else 'warn' if card.run.score >= 50 else 'bad' }}">{{ card.run.score }}</span>
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td>{{ card.site.schedule }}</td>
+        <td>
+          <div class="actions">
+            <a class="btn-sm" href="/sites/{{ card.site.id }}">Отчёт</a>
+            <a class="btn-sm secondary" href="/sites/{{ card.site.id }}/settings">Настройки</a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Сайтов нет. <a href="/">Добавить первый</a>.</p>
+  {% endif %}
+</div>
+{% endblock %}

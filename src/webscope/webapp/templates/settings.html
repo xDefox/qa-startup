@@ -31,6 +31,14 @@
         {% endfor %}
       </select>
     </div>
+    <div class="field">
+      <label for="organization">Организация</label>
+      <select id="organization" name="organization_id">
+        {% for org in organizations %}
+        <option value="{{ org.id }}" {% if site.organization_id == org.id %}selected{% endif %}>{{ org.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
     <label class="check-row" for="auth-enabled">
       <input type="checkbox" id="auth-enabled" name="auth_enabled" value="1" {% if site.has_auth %}checked{% endif %}>
       <span>Нужна авторизация</span>

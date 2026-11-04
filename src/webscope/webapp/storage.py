@@ -33,7 +33,15 @@ CREATE TABLE IF NOT EXISTS sites (
     auth_login      TEXT,
     auth_password   TEXT,
     auth_login_url  TEXT,
+    organization_id INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS organizations (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    owner_email TEXT NOT NULL,
+    created_at  TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS runs (
@@ -134,8 +142,8 @@ def now_iso() -> str:
 class Site:
     """Сайт под наблюдением."""
 
-    id: int
-    url: str
+    id: int = 0
+    url: str = ""
     email: str | None = None
     telegram_chat: str | None = None
     schedule: str = "off"
@@ -147,6 +155,7 @@ class Site:
     auth_login: str | None = None
     auth_password: str | None = None
     auth_login_url: str | None = None
+    organization_id: int = 0
 
     @property
     def has_auth(self) -> bool:
@@ -177,6 +186,7 @@ class Site:
             # пароль наружу не отдаём — только флаг «вход настроен»
             "has_auth": self.has_auth,
             "auth_kind": self.auth_kind if self.has_auth else None,
+            "organization_id": self.organization_id,
         }
 
 
@@ -240,7 +250,16 @@ class Finding:
             "source": self.source,
             "help_url": self.help_url,
             "details": self.details,
+            "fp": self.details.get("fp", False),
         }
+
+    @property
+    def is_fp(self) -> bool:
+        """Является ли находка ложным срабатыванием.
+
+        Проверяет поле fp в details для обратной совместимости.
+        """
+        return self.details.get("fp", False)
 
 
 class Storage:
@@ -342,6 +361,12 @@ class Storage:
     def get_site(self, site_id: int) -> Site | None:
         with self._conn() as connection:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
+        return _site_from_row(row) if row else None
+
+    def get_site_by_url(self, url: str) -> Site | None:
+        """Найти сайт по URL."""
+        with self._conn() as connection:
+            row = connection.execute("SELECT * FROM sites WHERE url = ?", (url,)).fetchone()
         return _site_from_row(row) if row else None
 
     def list_sites(self) -> list[Site]:
@@ -522,6 +547,20 @@ class Storage:
             rows = connection.execute("SELECT * FROM findings WHERE run_id = ? ORDER BY id", (run_id,)).fetchall()
         return [_finding_from_row(row) for row in rows]
 
+    def mark_finding_fp(self, finding_id: int, fp: bool = True) -> None:
+        """Помечает находку как ложную (FP) или снимает пометку."""
+        with self._conn() as connection:
+            row = connection.execute("SELECT details FROM findings WHERE id = ?", (finding_id,)).fetchone()
+            if row is None:
+                return
+            details = json.loads(row["details"] or "{}")
+            details["fp"] = fp
+            connection.execute(
+                "UPDATE findings SET details = ? WHERE id = ?",
+                (json.dumps(details, ensure_ascii=False), finding_id),
+            )
+            connection.commit()
+
     def findings_as_models(self, run_id: int) -> list[ScanFinding]:
         """Находки прогона в виде моделей движка — чтобы переиспользовать scoring."""
         result: list[ScanFinding] = []
@@ -660,6 +699,7 @@ def _site_from_row(row: sqlite3.Row) -> Site:
         auth_login=row["auth_login"] if "auth_login" in keys else None,
         auth_password=_open(row["auth_password"]) if "auth_password" in keys else None,
         auth_login_url=row["auth_login_url"] if "auth_login_url" in keys else None,
+        organization_id=row["organization_id"] if "organization_id" in keys else 0,
     )
 
 

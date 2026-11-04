@@ -35,7 +35,6 @@ class ScanOptions:
     max_pages: int = 20
     depth: int = 2
     timeout_ms: int = 30_000
-    max_link_checks: int = 10
     allow_private: bool = False
     checks: list[str] | None = None
     # общий лимит времени прогона, секунд; None — взять из WEBSCOPE_SCAN_TIMEOUT
@@ -64,7 +63,6 @@ def default_scanner(url: str, options: ScanOptions) -> CrawlOutcome:
         max_pages=options.max_pages,
         max_depth=options.depth,
         timeout_ms=options.timeout_ms,
-        max_link_checks=options.max_link_checks,
         allow_private=allow_private,
         checks=options.checks,
         auth=options.auth,

@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.responses import PlainTextResponse
 from fastapi.templating import Jinja2Templates
 
@@ -32,11 +33,12 @@ from .auth import (
     unauthorized_response,
 )
 from .limits import RateLimiter, rate_limit, rate_window_seconds
-from .routes import api, auth, pages, reports
+from .routes import api, auth, dashboard, pages, reports
 from .routes import uploads as upload_routes
 from .scheduler import Monitor, ScanOptions, Scheduler, default_scanner
 from .state import STATE_KEY, AppState
 from .storage import Storage
+from .services.site_service import ensure_default_organization, migrate_add_organization_id
 from .uploads import LOCAL_DIR, SandboxedLocalFiles
 
 LOGGER = logging.getLogger("webscope.webapp")
@@ -46,7 +48,7 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 def create_app(
     *,
-    db_path: Path | str = "webscope.db",
+    db_path: Path | str | None = None,
     options: ScanOptions | None = None,
     check_interval: int = 300,
     allow_private: bool = False,
@@ -55,11 +57,19 @@ def create_app(
     local_dir: Path | str | None = None,
 ) -> FastAPI:
     """Собирает приложение: хранилище, монитор, планировщик и маршруты."""
+    if db_path is None:
+        db_path = os.environ.get("WEBSCOPE_DB_PATH", "data/webscope.db")
+    db_path = Path(db_path)
+    # Гарантируем, что директория для БД существует
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    
     scan_options = options or ScanOptions()
     if allow_private or os.environ.get("WEBSCOPE_ALLOW_PRIVATE") == "1":
         scan_options.allow_private = True
 
     storage = Storage(db_path)
+    # Миграция мультиарендности: добавляем organization_id колонку к существующим БД
+    migrate_add_organization_id(storage)
     # каталог загруженных сборок: по умолчанию общий, тесты передают свой
     upload_dir = Path(local_dir) if local_dir is not None else LOCAL_DIR
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -107,6 +117,10 @@ def create_app(
     )
     setattr(app.state, STATE_KEY, state)
 
+    # /healthz — public service endpoint, must be registered before middleware/routers
+    # so it's always accessible for CI and monitoring regardless of auth config
+    app.add_api_route("/healthz", lambda: {"status": "ok"}, methods=["GET"])
+
     @app.middleware("http")
     async def guard(request: Request, call_next):
         """Вход и CSRF для всех маршрутов, кроме публичных.
@@ -127,6 +141,7 @@ def create_app(
     # ничего лишнего, а `/api/sites/{site_id}` не затенил отчёты
     app.include_router(auth.router)
     app.include_router(pages.router)
+    app.include_router(dashboard.router)
     app.include_router(api.router)
     app.include_router(reports.router)
     app.include_router(upload_routes.router)

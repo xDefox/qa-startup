@@ -135,8 +135,6 @@ def _check_internal_links(candidates: list[dict], ctx: ScanContext) -> list[Find
     if not candidates:
         return []
 
-    limit = max(0, ctx.max_link_checks)
-    targets = candidates[:limit]
     findings: list[Finding] = []
     timeout = httpx.Timeout(8.0, connect=4.0)
     # Один клиент (и одно соединение на хост) на все ссылки: httpx.Client
@@ -165,7 +163,7 @@ def _check_internal_links(candidates: list[dict], ctx: ScanContext) -> list[Find
             return link, status, error
 
         with ThreadPoolExecutor(max_workers=8) as pool:
-            results = list(pool.map(probe, targets))
+            results = list(pool.map(probe, candidates))
 
     for link, status, error in results:
         if error is not None:
@@ -205,18 +203,6 @@ def _check_internal_links(candidates: list[dict], ctx: ScanContext) -> list[Find
                     details={"href": link["url"], "status": status},
                 )
             )
-
-    if len(candidates) > limit:
-        findings.append(
-            Finding(
-                rule="links/limit-reached",
-                severity=Severity.MINOR,
-                title="Проверена только часть внутренних ссылок",
-                message=f"Проверено {limit} из {len(candidates)} внутренних ссылок (лимит скана).",
-                url=ctx.final_url,
-                source="webscope.links",
-            )
-        )
 
     return findings
 

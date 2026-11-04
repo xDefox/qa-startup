@@ -149,7 +149,13 @@ def validate_target(url: str, allow_private: bool = False) -> str:
     Защита от SSRF: только http/https, без credentials в URL, без локальных и
     приватных адресов (если явно не разрешено через ``allow_private`` или
     переменную окружения ``WEBSCOPE_ALLOW_PRIVATE=1``).
+
+    Если allow_private=True, проверку SSRF пропускаем entirely — caller несет
+    ответственность за безопасность такой цели.
     """
+    if allow_private:
+        return url
+
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
         raise ScanError(f"Недопустимая схема: {parsed.scheme or '(пусто)'} — поддерживаются только http и https")
@@ -159,18 +165,21 @@ def validate_target(url: str, allow_private: bool = False) -> str:
     if not host:
         raise ScanError("В URL нет хоста")
 
-        # P0: удалён глобальный env — защита только через параметр allow_private
-        try:
-            infos = socket.getaddrinfo(host, None)
-        except socket.gaierror as exc:
+    # P0: удалён глобальный env — защита только через параметр allow_private
+    # Проверяем резолв хоста на приватные адреса
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as exc:
+        raise ScanError(
+            f"Не удалось открыть {url}: домен не найден. "
+            "Проверьте адрес на опечатку; возможно, DNS-запись ещё не создана."
+        ) from exc
+    for info in infos:
+        address = ipaddress.ip_address(info[4][0].split("%", 1)[0])
+        if is_forbidden_address(address):
             raise ScanError(
-                f"Не удалось открыть {url}: домен не найден. "
-                "Проверьте адрес на опечатку; возможно, DNS-запись ещё не создана."
-            ) from exc
-        for info in infos:
-            address = ipaddress.ip_address(info[4][0].split("%", 1)[0])
-            if is_forbidden_address(address):
-                raise ScanError(f"Хост {host} резолвится в непубличный адрес {address} — сканирование заблокировано")
+                f"Хост {host} резолвится в непубличный адрес {address} — сканирование заблокировано"
+            )
 
     return url
 
@@ -512,7 +521,6 @@ def _scan_page(
     checks: Sequence[str],
     timeout_ms: int,
     evidence_dir: Path | None,
-    max_link_checks: int,
     allow_private: bool = False,
     blocked_requests: list[str] | None = None,
     site_headers: dict[str, str] | None = None,
@@ -594,7 +602,6 @@ def _scan_page(
             failed_requests=failed_requests,
             evidence_dir=evidence_dir,
             timeout_ms=timeout_ms,
-            max_link_checks=max_link_checks,
             notes=notes,
             allow_private=allow_private,
             site_headers=dict(site_headers or {}),
@@ -686,7 +693,6 @@ def scan(
     timeout_ms: int = 30_000,
     headless: bool = True,
     evidence_dir: Path | None = None,
-    max_link_checks: int = 20,
     allow_private: bool = False,
     user_agent: str = DEFAULT_UA,
     auth: AuthCredentials | None = None,
@@ -738,7 +744,6 @@ def scan(
                 checks=selected,
                 timeout_ms=timeout_ms,
                 evidence_dir=evidence_dir,
-                max_link_checks=max_link_checks,
                 allow_private=allow_private,
                 blocked_requests=blocked_requests,
                 site_headers=site_headers,
@@ -773,7 +778,6 @@ def scan_site(
     timeout_ms: int = 30_000,
     headless: bool = True,
     evidence_dir: Path | None = None,
-    max_link_checks: int = 20,
     allow_private: bool = False,
     user_agent: str = DEFAULT_UA,
     auth: AuthCredentials | None = None,
@@ -862,7 +866,6 @@ def scan_site(
                         checks=selected,
                         timeout_ms=timeout_ms,
                         evidence_dir=evidence_dir,
-                        max_link_checks=max_link_checks,
                         allow_private=allow_private,
                         blocked_requests=blocked_requests,
                         site_headers=crawl_headers,

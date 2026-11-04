@@ -75,6 +75,13 @@ def api_report_sarif(
     return _report_response(state, site_id, "sarif", download, filename)
 
 
+@router.get("/api/sites/{site_id}/report.pdf")
+def api_report_pdf(
+    site_id: int, state: AppState = Depends(get_state), download: bool = False, filename: str | None = None
+):
+    return _report_response(state, site_id, "pdf", download, filename)
+
+
 @router.get("/api/sites/{site_id}/report.xml")
 def api_report_junit(
     site_id: int, state: AppState = Depends(get_state), download: bool = False, filename: str | None = None

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from ..models import ScanResult, Severity
 from ..pages import page_notes
-from ..scoring import group_by_rule, is_site_defect, plain_impact, score_label, top_actions
+from ..scoring import group_by_rule, is_site_defect, is_false_positive, plain_impact, score_label, top_actions
 from .storage import Run, Storage
 
 BLOCKER_RULE = "interaction/button-blocked"
@@ -24,6 +24,8 @@ SEVERITY_GROUPS = (
 # Показываем их отдельной группой, чтобы в таблице были видны все находки,
 # но не путались с дефектами сайта.
 EXTERNAL_TITLE = "Замечания сканирования — не дефекты сайта (чужие виджеты)"
+
+FP_TITLE = "Ложные срабатывания (FP) — исключены из оценки и плана действий"
 
 SCHEDULE_LABELS = {
     "off": "без автоматических проверок",
@@ -65,6 +67,7 @@ def problem_view(group: dict) -> dict:
         "message": getattr(rep, "message", None) or "",
         "source": source,
         "help_url": getattr(rep, "help_url", None) or "",
+        "details": details,  # <-- added for FP button and template access
     }
 
 
@@ -72,14 +75,16 @@ def build_report_view(storage: Storage, run: Run) -> dict:
     """Готовит данные для страницы отчёта: группы, план действий, дифф."""
     findings = storage.findings_as_models(run.id)
 
-    blocker_groups = group_by_rule([f for f in findings if f.rule == BLOCKER_RULE])
+    blocker_groups = group_by_rule([f for f in findings if f.rule == BLOCKER_RULE and not is_false_positive(f)])
     blockers = [problem_view(group) for group in blocker_groups]
 
-    # Находки делятся на три категории, и все три обязаны быть в отчёте:
-    # 1) проблемы самого сайта (блокеры кликов входят сюда же — отдельной карточкой),
+    # Находки делятся на ЧЕТЫРЕ категории:
+    # 1) проблемы самого сайта (блокеры кликов — отдельной карточкой),
     # 2) мелочи сайта,
-    # 3) замечания сканирования — ошибки на чужих доменах, которые не дефект сайта.
-    own = [finding for finding in findings if is_site_defect(finding)]
+    # 3) замечания сканирования — ошибки на чужих доменах,
+    # 4) ложные срабатывания (FP) — исключены из скора и плана действий.
+    own = [finding for finding in findings if is_site_defect(finding) and not is_false_positive(finding)]
+    fp_findings = [finding for finding in findings if is_site_defect(finding) and is_false_positive(finding)]
     external = [finding for finding in findings if not is_site_defect(finding)]
     groups = []
     for severity, title, key in SEVERITY_GROUPS:
@@ -106,6 +111,16 @@ def build_report_view(storage: Storage, run: Run) -> dict:
                 "problems": [problem_view(group) for group in external_items],
             }
         )
+    fp_items = group_by_rule(fp_findings)
+    if fp_items:
+        groups.append(
+            {
+                "title": FP_TITLE,
+                "key": "fp",
+                "count": len(fp_items),
+                "problems": [problem_view(group) for group in fp_items],
+            }
+        )
 
     actions = [
         {
@@ -114,7 +129,7 @@ def build_report_view(storage: Storage, run: Run) -> dict:
             "url": finding.url,
             "selector": finding.selector or "",
         }
-        for finding in top_actions(findings, limit=3)
+        for finding in top_actions(own, limit=3)
     ]
 
     diff = storage.diff_with_previous(run)

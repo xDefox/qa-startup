@@ -302,12 +302,11 @@ _AXE_IMPACT: dict[str, tuple[str, str]] = {
 }
 
 
-# Находки о самом сканере, а не о сайте: «проверено 20 из 120 ссылок»,
-# «элементов больше лимита». Владельцу сайта исправлять тут нечего, поэтому
+# Находки о самом сканере, а не о сайте: «элементов больше лимита».
+# Владельцу сайта исправлять тут нечего, поэтому
 # в балл и в план действий они не идут — иначе чистая страница получает 99.
 DIAGNOSTIC_RULES = frozenset(
     {
-        "links/limit-reached",
         "links/timeout",
         "scan/timeout",
     }
@@ -325,14 +324,24 @@ def is_site_defect(finding: Finding) -> bool:
     return owner in (None, "", "site")
 
 
+def is_false_positive(finding: Finding) -> bool:
+    """Является ли находка ложным срабатыванием (FP).
+
+    Исключается из скора, отчётов и API.
+    """
+    return finding.is_fp
+
+
 def compute_score(findings: list[Finding]) -> int:
     """Итоговый балл «здоровья» сайта: 0–100.
 
     Считается по уникальным правилам, а не по числу страниц: если один и тот же
     дефект повторяется на 30 страницах каталога, это одна проблема, а не тридцать.
     Иначе балл скачет в зависимости от размера сайта и перестаёт быть понятным.
+
+    Ложные срабатывания (FP) исключаются из расчёта.
     """
-    own = [finding for finding in findings if is_site_defect(finding) and not is_diagnostic(finding)]
+    own = [finding for finding in findings if is_site_defect(finding) and not is_diagnostic(finding) and not is_false_positive(finding)]
     if not own:
         return 100
 

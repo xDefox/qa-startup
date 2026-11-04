@@ -19,7 +19,6 @@ class ScanContext:
     failed_requests: list[dict[str, Any]] = field(default_factory=list)
     evidence_dir: Path | None = None
     timeout_ms: int = 30_000
-    max_link_checks: int = 20
     notes: list[str] = field(default_factory=list)
     # разрешены ли непубличные адреса (свои стенды и загруженные локальные файлы)
     allow_private: bool = False

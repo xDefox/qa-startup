@@ -115,7 +115,65 @@ COLLECT = r"""
       };
     })
     .filter(Boolean);
-  return nodes;
+
+  // ── Карусели: интерактивные элементы внутри неактивных слайдов ──
+  // Кнопка, которая лежит за пределами видимой области карусели (scrollLeft),
+  // недоступна пользователю без ручного прокручивания. Это скрытая проблема:
+  // разработчик видит кнопку в коде, но пользователь не может её нажать.
+  const carousels = Array.from(document.querySelectorAll(
+    '[class*="carousel"], [class*="slider"], [class*="swiper"], ' +
+    '[class*="slider-container"], [role="region"][aria-label*="карусель"], ' +
+    '[role="region"][aria-label*="slider"], [role="region"][aria-label*="carousel"]'
+  ));
+
+  const carouselIssues = [];
+  for (const carousel of carousels) {
+    const scrollW = carousel.scrollWidth;
+    const scrollH = carousel.scrollHeight;
+    const clientW = carousel.clientWidth;
+    const clientH = carousel.clientHeight;
+    const scrollLeft = carousel.scrollLeft || 0;
+    const scrollTop = carousel.scrollTop || 0;
+
+    // Карусель без прокрутки — проверять нечего.
+    if (scrollW <= clientW + 2 && scrollH <= clientH + 2) continue;
+
+    const interactiveEls = carousel.querySelectorAll('a, button, [role="button"], input[type="submit"], input[type="button"]');
+    for (const el of interactiveEls) {
+      const style = getComputedStyle(el);
+      if (style.visibility === 'hidden' || style.display === 'none' || style.pointerEvents === 'none') continue;
+
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 8 || rect.height < 8) continue;
+
+      const carouselRect = carousel.getBoundingClientRect();
+      // Координаты элемента относительно контейнера карусели.
+      const relLeft = rect.left - carouselRect.left + scrollLeft;
+      const relTop = rect.top - carouselRect.top + scrollTop;
+      const relRight = relLeft + rect.width;
+      const relBottom = relTop + rect.height;
+
+      // Элемент выходит за границы видимой области карусели (горизонтальная прокрутка).
+      const outOfView = relRight > clientW + 2 || relLeft < -2;
+
+      if (outOfView) {
+        carouselIssues.push({
+          selector: u.cssPath(el),
+          text: (el.innerText || el.value || el.getAttribute('aria-label') || '').slice(0, 60).trim(),
+          carouselSelector: (carousel.getAttribute('class') || carousel.tagName).slice(0, 80),
+          carouselClass: carousel.getAttribute('class') || '',
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+          snippet: (el.outerHTML || '').slice(0, 220),
+          scrollLeft,
+          clientW,
+          scrollW,
+        });
+      }
+    }
+  }
+
+  return nodes.concat(carouselIssues);
 }
 """
 
@@ -143,17 +201,32 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
         return []
 
     for item in data or []:
-        if not item.get("blocked"):
+        if not item.get("blocked") and not item.get("carouselSelector"):
             continue
         label = item.get("text") or "интерактивный элемент"
-        add(
-            "interaction/button-blocked",
-            Severity.CRITICAL,
-            f"Кнопку/ссылку «{label}» нельзя кликнуть — элемент перекрыт",
-            "Другой элемент перехватывает клик в центре кнопки. Из-за этого пользователь не может оставить заявку/заказ.",
-            selector=item.get("selector"),
-            snippet=item.get("snippet"),
-            details={"blocker": item.get("blocker"), "size": f"{item.get('width')}x{item.get('height')}"},
-        )
+        if item.get("carouselSelector"):
+            add(
+                "interaction/button-blocked",
+                Severity.CRITICAL,
+                f"Кнопка/ссылка «{label}» скрыта в неактивном слайде карусели",
+                "Элемент вне области просмотра карусели — пользователь не может его увидеть или нажать без ручного скролла.",
+                selector=item.get("selector"),
+                snippet=item.get("snippet"),
+                details={"blocker": "carousel", "carousel": item.get("carouselSelector"), "size": f"{item.get('width')}x{item.get('height')}"},
+            )
+        else:
+            blocked = item.get("blocked")
+            if not blocked:
+                continue
+            blocker = item.get("blocker")
+            add(
+                "interaction/button-blocked",
+                Severity.CRITICAL,
+                f"Кнопку/ссылку «{label}» нельзя кликнуть — элемент перекрыт",
+                "Другой элемент перехватывает клик в центре кнопки. Из-за этого пользователь не может оставить заявку/заказ.",
+                selector=item.get("selector"),
+                snippet=item.get("snippet"),
+                details={"blocker": blocker, "size": f"{item.get('width')}x{item.get('height')}"},
+            )
 
     return findings

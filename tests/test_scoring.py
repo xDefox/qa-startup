@@ -58,18 +58,18 @@ def test_score_label() -> None:
 
 
 def test_diagnostic_findings_do_not_affect_score() -> None:
-    """«Проверена не вся ссылка» — сообщение сканера, а не дефект сайта.
+    """Сообщения о полноте проверки не влияют на балл.
 
-    Регресс: чистая страница с одним links/limit-reached получала 99 из 100.
+    Регресс: чистая страница с одним links/timeout получала 99 из 100.
     """
-    findings = [_finding("links/limit-reached", Severity.MINOR)]
+    findings = [_finding("links/timeout", Severity.MINOR)]
     assert compute_score(findings) == 100
     assert top_actions(findings) == []
 
 
 def test_diagnostic_findings_do_not_hide_real_problems() -> None:
     findings = [
-        _finding("links/limit-reached", Severity.MINOR),
+        _finding("links/timeout", Severity.MINOR),
         _finding("content/image-alt", Severity.SERIOUS),
     ]
     assert compute_score(findings) == 92

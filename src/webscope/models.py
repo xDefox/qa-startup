@@ -73,6 +73,7 @@ class Finding:
     help_url: str | None = None
     source: str = "webscope"
     details: dict[str, Any] = field(default_factory=dict)
+    fp: bool = False  # False positive — ложное срабатывание, исключается из скора и отчётов
 
     @property
     def fingerprint(self) -> str:
@@ -102,6 +103,15 @@ class Finding:
         data["severity"] = self.severity.value
         data["fingerprint"] = self.fingerprint
         return data
+
+    @property
+    def is_fp(self) -> bool:
+        """Является ли находка ложным срабатыванием.
+
+        Проверяет и поле fp, и details["fp"] для обратной совместимости
+        со старыми данными, где флаг хранился только в details.
+        """
+        return self.fp or self.details.get("fp", False)
 
 
 @dataclass

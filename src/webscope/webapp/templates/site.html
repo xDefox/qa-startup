@@ -38,6 +38,7 @@
       <div class="muted small">
         Автоматическая проверка: {{ schedule_label }}
         {% if site.email %} · отчёты на {{ site.email }}{% endif %}
+        {% if site.organization_id and organization_name %} · {{ organization_name }}{% endif %}
       </div>
       {% if view and view.notes %}
       <div class="note-context">
@@ -234,6 +235,11 @@
         <div class="where">Страница: {{ item.url }}</div>
         {% endif %}
         <div class="fix">Что сделать: {{ item.fix }}</div>
+        <div class="fp-actions" style="margin-top: 6px;">
+          <button type="button" class="btn-fp" data-finding-id="{{ item.id }}" data-fp="{{ item.details.fp if item.details.fp is defined else false }}">
+            {% if item.details.fp %}✓ Ложная находка{% else %}🚫 Это ложная находка{% endif %}
+          </button>
+        </div>
         {% if item.message and item.rule in ('console/error', 'console/failed-request') %}
         <div class="where">Детали: {{ item.message }}</div>
         {% endif %}

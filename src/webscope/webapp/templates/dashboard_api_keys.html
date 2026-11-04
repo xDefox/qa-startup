@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}API ключи — webscope{% endblock %}
+{% block content %}
+<div class="dashboard-header">
+  <div>
+    <h1>API ключи</h1>
+    <p class="muted">Управление ключами для внешнего доступа к API.</p>
+  </div>
+  <a class="btn" href="/dashboard">← К сайтам</a>
+</div>
+
+<nav class="dashboard-tabs">
+  <a href="/dashboard" class="{% if active_tab == 'sites' %}active{% endif %}">Мои сайты</a>
+  <a href="/dashboard/organizations" class="{% if active_tab == 'organizations' %}active{% endif %}">Организации</a>
+  <a href="/dashboard/settings" class="{% if active_tab == 'settings' %}active{% endif %}">Настройки</a>
+  <a href="/dashboard/api-keys" class="{% if active_tab == 'api_keys' %}active{% endif %}">API ключи</a>
+</nav>
+
+<div class="card">
+  <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 16px;">
+    <h2 style="margin: 0;">API ключи</h2>
+    <button class="btn" onclick="createApiKey()">Создать ключ</button>
+  </div>
+
+  <div id="api-keys-list" class="muted">Загрузка...</div>
+</div>
+
+<div class="card" style="margin-top: 24px;">
+  <h3>Инструкция</h3>
+  <pre class="small">
+# Пример использования API ключа
+curl -H "Authorization: Bearer YOUR_API_KEY" \\
+  https://your-webscope.example.com/api/sites
+  </pre>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function loadApiKeys() {
+  const res = await fetch('/api/api-keys');
+  if (!res.ok) return;
+  const data = await res.json();
+  const container = document.getElementById('api-keys-list');
+  if (!data.keys || data.keys.length === 0) {
+    container.innerHTML = '<p class="muted">Ключей нет. Нажмите «Создать ключ».</p>';
+    return;
+  }
+  container.innerHTML = data.keys.map(k => `
+    <div class="api-key-row">
+      <code>${k.prefix}****${k.suffix}</code>
+      <span class="muted">Создан: ${k.created_at}</span>
+      <button class="btn-sm danger" onclick="revokeApiKey('${k.id}')">Отозвать</button>
+    </div>
+  `).join('');
+}
+
+async function createApiKey() {
+  const res = await fetch('/api/api-keys', { method: 'POST' });
+  if (!res.ok) return alert('Ошибка создания');
+  const data = await res.json();
+  alert('Ключ создан (покажите только один раз):\n' + data.key);
+  loadApiKeys();
+}
+
+async function revokeApiKey(id) {
+  if (!confirm('Отозвать этот ключ?')) return;
+  const res = await fetch('/api/api-keys/' + id, { method: 'DELETE' });
+  if (!res.ok) return alert('Ошибка');
+  loadApiKeys();
+}
+
+loadApiKeys();
+</script>
+{% endblock %}

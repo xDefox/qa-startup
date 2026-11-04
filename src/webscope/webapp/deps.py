@@ -7,12 +7,14 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 from fastapi import BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from .limits import max_concurrent_scans
 from .scheduler import Site
+from .services.site_service import list_sites as list_sites_service
 from .state import AppState
 from .storage import Run
 
@@ -61,4 +63,13 @@ def get_site_or_404(state: AppState, site_id: int) -> Site:
 
 def index_cards(state: AppState) -> list[dict]:
     """Сайты с последним прогоном — данные главной страницы (нужны и в ошибках)."""
-    return [{"site": item, "run": state.storage.latest_run(item.id)} for item in state.storage.list_sites()]
+    return [
+        {"site": item, "run": state.storage.latest_run(item.id)}
+        for item in list_sites_service(state.storage)
+    ]
+
+
+def get_current_user(request: Request) -> dict:
+    """Текущий пользователь из сессии (демо — из env)."""
+    username = (os.environ.get("WEBSCOPE_AUTH_USER") or "admin").strip() or "admin"
+    return {"username": username, "is_admin": True}

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from .models import Finding, ScanResult, Severity
 from .pages import page_notes
+from .scoring import is_false_positive
 
 if TYPE_CHECKING:
     from .history import DiffReport
@@ -52,7 +53,6 @@ ACCEPTANCE: dict[str, str] = {
     "links/mixed-content": "Все ресурсы страницы загружаются по https.",
     "links/broken": "Ссылка ведёт на страницу с HTTP-статусом < 400.",
     "links/unreachable": "Ссылка открывается.",
-    "links/limit-reached": "Все внутренние ссылки страницы проверены (лимит проверок не сработал).",
     "console/error": "В консоли нет ошибок.",
     "console/warning": "В консоли нет предупреждений.",
     "console/failed-request": "Все ресурсы страницы загружаются без ошибок.",
@@ -89,14 +89,19 @@ def render_text(result: ScanResult) -> str:
     )
     if summary.get("external"):
         lines.append(f"в виджетах: {summary['external']} (чужие домены — не дефект сайта)")
+    fp_count = sum(1 for f in result.findings if is_false_positive(f))
+    if fp_count:
+        lines.append(f"ложные срабатывания (FP): {fp_count} — исключены из оценки")
 
-    if not result.findings:
+    # Фильтруем FP для отображения
+    display_findings = [f for f in result.findings if not is_false_positive(f)]
+    if not display_findings:
         lines.append("")
         lines.append("Проблем не найдено.")
         return "\n".join(lines)
 
     lines.append("")
-    for index, finding in enumerate(result.findings, start=1):
+    for index, finding in enumerate(display_findings, start=1):
         location = f"{finding.url}"
         if finding.selector:
             location += f" → {finding.selector}"
@@ -115,7 +120,19 @@ def render_text(result: ScanResult) -> str:
 
 
 def render_json(result: ScanResult) -> str:
-    return json.dumps(result.to_dict(), ensure_ascii=False, indent=2)
+    # Исключаем FP из JSON-отчёта
+    filtered = ScanResult(
+        url=result.url,
+        final_url=result.final_url,
+        title=result.title,
+        archetype=result.archetype,
+        duration_ms=result.duration_ms,
+        pages_scanned=result.pages_scanned,
+        findings=[f for f in result.findings if not is_false_positive(f)],
+        schema_version=result.schema_version,
+        generated_at=result.generated_at,
+    )
+    return json.dumps(filtered.to_dict(), ensure_ascii=False, indent=2)
 
 
 def render_sarif(result: ScanResult) -> str:
@@ -124,6 +141,8 @@ def render_sarif(result: ScanResult) -> str:
     results: list[dict[str, Any]] = []
 
     for finding in result.findings:
+        if is_false_positive(finding):
+            continue
         rules.setdefault(
             finding.rule,
             {
@@ -208,12 +227,16 @@ def render_junit(result: ScanResult) -> str:
 
 def render_html(result: ScanResult) -> str:
     """Автономный HTML-отчёт (один файл, без внешних зависимостей)."""
+    # Фильтруем FP
+    display_findings = [f for f in result.findings if not is_false_positive(f)]
+    fp_count = len(result.findings) - len(display_findings)
+    
     summary = result.summary
     archetype = result.archetype or {}
     stack = ", ".join(filter(None, [archetype.get("framework"), archetype.get("cms"), archetype.get("ui_kit")]))
 
     rows = []
-    for index, finding in enumerate(result.findings, start=1):
+    for index, finding in enumerate(display_findings, start=1):
         selector = f"<code>{html_lib.escape(finding.selector)}</code>" if finding.selector else ""
         snippet = f"<pre>{html_lib.escape(finding.snippet)}</pre>" if finding.snippet else ""
         help_link = f'<a href="{html_lib.escape(finding.help_url)}">документация</a>' if finding.help_url else ""
@@ -265,6 +288,7 @@ def render_html(result: ScanResult) -> str:
   <div class="card"><b>{summary["serious"]}</b>serious</div>
   <div class="card"><b>{summary["moderate"]}</b>moderate</div>
   <div class="card"><b>{summary["minor"]}</b>minor</div>
+  {f'<div class="card" style="border-color: #888;"><b>{fp_count}</b>FP (исключены)</div>' if fp_count else ''}
 </div>
 <table>
 <tr><th>#</th><th>severity</th><th>правило</th><th>почему это проблема</th><th>где</th><th>доки</th></tr>
@@ -276,12 +300,78 @@ WCAG и не являются юридическим заключением о �
 </html>"""
 
 
-def render_plain(result: ScanResult) -> str:
-    """Отчёт для владельца сайта: без терминов, с баллом и планом действий."""
-    from .scoring import compute_score, group_by_rule, is_site_defect, plain_impact, score_label, top_actions
+def render_pdf(result: ScanResult) -> str:
+    """PDF-отчёт — автономный файл (fpdf2), можно скачать или открыть в браузере."""
+    from fpdf import FPDF
+    from .scoring import compute_score, group_by_rule, is_site_defect, is_false_positive, plain_impact, score_label, top_actions
+    from .pages import page_notes
 
     score = compute_score(result.findings)
-    own = [finding for finding in result.findings if is_site_defect(finding)]
+    own = [finding for finding in result.findings if is_site_defect(finding) and not is_false_positive(finding)]
+    fu = result.final_url or result.url
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+
+    # Заголовок
+    pdf.cell(0, 10, "webscope — отчёт по сканированию", ln=True, align="C")
+    pdf.ln(5)
+    pdf.cell(0, 10, f"URL: {fu}", ln=True)
+    if result.title:
+        pdf.cell(0, 10, f"Название: {result.title}", ln=True)
+    pdf.ln(5)
+
+    # Сводка
+    fp_count = sum(1 for f in result.findings if is_false_positive(f))
+    pdf.cell(0, 10, f"Оценка: {score}/100 — {score_label(score)}", ln=True)
+    if fp_count:
+        pdf.cell(0, 10, f"Ложных срабатываний (FP): {fp_count} — исключены из оценки", ln=True)
+    pdf.cell(0, 10, f"Проверено страниц: {result.pages_scanned}", ln=True)
+    pdf.ln(5)
+
+    # Найденные проблемы
+    own = [f for f in result.findings if is_site_defect(f) and not is_false_positive(f)]
+    if not own:
+        pdf.cell(0, 10, "Проблем не найдено.", ln=True)
+    else:
+        # Топ-3 действия
+        actions = top_actions(own, limit=3)
+        if actions:
+            pdf.cell(0, 10, "ЧТО СДЕЛАТЬ В ПЕРВУЮ ОЧЕРЕДЬ", ln=True)
+            for index, finding in enumerate(actions, start=1):
+                meaning, fix = plain_impact(finding)
+                pdf.cell(0, 10, f"  {index}. {meaning}", ln=True)
+                pdf.cell(0, 10, f"     Что сделать: {fix}", ln=True)
+                if finding.url:
+                    pdf.cell(0, 10, f"     Страница: {finding.url}", ln=True)
+            pdf.ln(5)
+
+        # Блокирующие клики
+        blockers = group_by_rule([f for f in own if f.rule == "interaction/button-blocked"])
+        if blockers:
+            pdf.cell(0, 10, "БЛОКИРУЕТ КЛИКИ — нельзя нажать кнопку/ссылку (критично)", ln=True)
+            for group in blockers:
+                meaning, fix = group["meaning"], group["fix"]
+                pdf.cell(0, 10, f"  • {meaning}", ln=True)
+                if group["examples"]:
+                    pdf.cell(0, 10, f"    Где: {group['examples'][0]}", ln=True)
+                pdf.cell(0, 10, f"    Что сделать: {fix}", ln=True)
+
+    pdf.ln(5)
+    pdf.cell(0, 10, "Отчёт сформирован автоматически.", ln=True)
+    pdf.cell(0, 10, "Автоматизированные проверки покрывают лишь часть критериев WCAG.", ln=True)
+
+    return pdf.output(destination="S").encode("utf-8")
+
+
+def render_plain(result: ScanResult) -> str:
+    """Отчёт для владельца сайта: без терминов, с баллом и планом действий."""
+    from .scoring import compute_score, group_by_rule, is_site_defect, is_false_positive, plain_impact, score_label, top_actions
+
+    score = compute_score(result.findings)
+    own = [finding for finding in result.findings if is_site_defect(finding) and not is_false_positive(finding)]
+    fp_count = sum(1 for f in result.findings if is_false_positive(f))
     lines: list[str] = []
 
     fu = result.final_url or result.url
@@ -290,6 +380,8 @@ def render_plain(result: ScanResult) -> str:
         lines.append(f"Название: {result.title}")
     lines.append(f"Проверено страниц: {result.pages_scanned}")
     lines.append(f"Оценка: {score}/100 — {score_label(score)}")
+    if fp_count:
+        lines.append(f"Ложных срабатываний (FP): {fp_count} — исключены из оценки")
     for note in page_notes(result.url, result.final_url):
         lines.append(f"Примечание: {note}")
     lines.append("")
@@ -410,6 +502,17 @@ def render_plain(result: ScanResult) -> str:
             lines.append(f"  • {group['title']}: {group['count']}" + (f" (например, {host})" if host else ""))
         lines.append("")
 
+    fp_groups = group_by_rule([f for f in result.findings if is_site_defect(f) and is_false_positive(f)])
+    if fp_groups:
+        lines.append(f"ЛОЖНЫЕ СРАБАТЫВАНИЯ (FP) — ИСКЛЮЧЕНЫ ИЗ ОЦЕНКИ И ПЛАНА ДЕЙСТВИЙ ({len(fp_groups)} правил)")
+        total = sum(group["count"] for group in fp_groups)
+        lines.append(f"  Эти находки помечены как ложные срабатывания — {total} шт.")
+        lines.append("  Они не влияют на оценку и не требуют исправления.")
+        for group in fp_groups:
+            rep = group.get("representative")
+            lines.append(f"  • {group['title']}: {group['count']}")
+        lines.append("")
+
     lines.append(
         "Проверка автоматическая: она находит типовые проблемы доступности, скорости и "
         "работоспособности, но не заменяет проверку человеком."
@@ -481,8 +584,12 @@ def build_fix_prompt(result: ScanResult, rules: list[str] | None = None) -> str:
 
     Это основная точка ценности: находки превращаются в задачу, которую агент
     может выполнить и проверить повторным сканом.
+    
+    Ложные срабатывания (FP) исключаются — агент не должен их чинить.
     """
-    selected = [f for f in result.findings if not rules or f.rule in rules]
+    from .scoring import is_false_positive
+    
+    selected = [f for f in result.findings if not is_false_positive(f) and (not rules or f.rule in rules)]
     if not selected:
         return f"По URL {result.final_url or result.url} находок webscope нет — исправлять нечего."
 

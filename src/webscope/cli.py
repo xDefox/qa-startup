@@ -202,7 +202,6 @@ def cmd_scan(args: argparse.Namespace) -> int:
             timeout_ms=args.timeout,
             headless=not args.headed,
             evidence_dir=args.evidence_dir,
-            max_link_checks=args.max_link_checks,
             allow_private=args.allow_private,
             auth=_auth_from_args(args),
             respect_robots=not args.ignore_robots,

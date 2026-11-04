@@ -12,7 +12,7 @@ import re
 from datetime import datetime
 from urllib.parse import quote, urlsplit
 
-from ..report import render_html, render_json, render_junit, render_plain, render_sarif
+from ..report import render_html, render_json, render_junit, render_plain, render_pdf, render_sarif
 from .storage import Run, Site
 
 # Форматы отчёта: расширение в URL, MIME-тип и подпись для кнопки «скачать».
@@ -22,6 +22,7 @@ REPORT_MEDIA_TYPES = {
     "txt": "text/plain; charset=utf-8",
     "xml": "application/xml",
     "sarif": "application/sarif+json",
+    "pdf": "application/pdf",
 }
 
 REPORT_RENDERERS = {
@@ -30,6 +31,7 @@ REPORT_RENDERERS = {
     "txt": render_plain,
     "xml": render_junit,
     "sarif": render_sarif,
+    "pdf": render_pdf,
 }
 
 DOWNLOAD_FORMATS = (
@@ -38,6 +40,7 @@ DOWNLOAD_FORMATS = (
     {"ext": "txt", "label": "TXT", "hint": "Прочитать в терминале или письмом"},
     {"ext": "xml", "label": "JUnit", "hint": "Для CI: Jenkins, GitLab, pytest"},
     {"ext": "sarif", "label": "SARIF", "hint": "Для GitHub Code Scanning"},
+    {"ext": "pdf", "label": "PDF", "hint": "Отчёт для рассылки и存档"},
 )
 
 # Сколько символов имени файла разрешаем: длиннее браузеры и файловые
