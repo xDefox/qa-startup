@@ -212,6 +212,9 @@
             const url = await upload(selectedFiles);
             if (url) {
               urlInput.value = url;
+              // Clear file inputs so they don't get sent in final submit
+              fileInput.value = '';
+              dirInput.value = '';
               form.submit();
             } else {
               console.log('Upload failed, not submitting');
