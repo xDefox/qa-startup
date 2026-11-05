@@ -15,22 +15,43 @@
   </p>
   <form method="post" action="/sites">
     <div class="field">
-      <label for="url">Адрес вашего сайта или локальный файл/папка</label>
+      <label for="url">Адрес сайта (example.com) или загрузите локальную сборку</label>
       <div class="row" style="align-items: center;">
         <div style="flex: 3 1 280px;">
-          <input id="url" type="text" name="url" placeholder="example.com или выберите файл/папку" inputmode="url" autocomplete="url">
+          <input id="url" type="text" name="url" placeholder="https://example.com" inputmode="url" autocomplete="url">
         </div>
         <div class="actions">
           <button type="submit">Проверить сайт</button>
         </div>
-        <div class="actions">
+      </div>
+    </div>
+
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" id="local-file" accept=".html,.htm,.zip" hidden>
+      <input type="file" id="local-dir" webkitdirectory directory multiple hidden>
+      <div class="upload-zone-content" id="upload-content">
+        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <p class="upload-title">Перетащите папку сборки или файл сюда</p>
+        <p class="upload-hint">Или нажмите для выбора</p>
+        <div class="upload-actions">
           <label class="btn-like secondary" for="local-file">Выбрать файл</label>
-          <input id="local-file" type="file" accept=".html,.htm" hidden>
-        </div>
-        <div class="actions">
           <label class="btn-like secondary" for="local-dir">Выбрать папку</label>
-          <input id="local-dir" type="file" webkitdirectory directory multiple hidden>
         </div>
+      </div>
+      <div class="upload-selected" id="upload-selected" hidden>
+        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span id="upload-count">0 файлов</span>
+        <button type="button" class="btn-like secondary" id="upload-clear">Очистить</button>
+      </div>
+      <div class="upload-progress" id="upload-progress" hidden>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <span class="progress-text" id="progress-text">Загрузка…</span>
       </div>
     </div>
     <div class="row">
@@ -90,18 +111,118 @@
       const urlInput = document.getElementById('url');
       const fileInput = document.getElementById('local-file');
       const dirInput = document.getElementById('local-dir');
-      async function upload(files){
-        if(!files || !files.length) return;
-        const fd = new FormData();
-        for(let i=0;i<files.length;i++){ fd.append('files', files[i]); fd.append('paths', files[i].webkitRelativePath || files[i].name); }
-        try {
-          const res = await fetch('/upload', {method:'POST', body: fd});
-          const data = await res.json();
-          if(data && data.url){ urlInput.value = data.url; form.submit(); }
-        } catch(e){}
+      const uploadZone = document.getElementById('upload-zone');
+      const uploadContent = document.getElementById('upload-content');
+      const uploadSelected = document.getElementById('upload-selected');
+      const uploadCount = document.getElementById('upload-count');
+      const uploadClear = document.getElementById('upload-clear');
+      const uploadProgress = document.getElementById('upload-progress');
+      const progressFill = document.getElementById('progress-fill');
+      const progressText = document.getElementById('progress-text');
+
+      let selectedFiles = [];
+
+      function showSelected(files) {
+        selectedFiles = Array.from(files);
+        uploadContent.hidden = true;
+        uploadSelected.hidden = false;
+        uploadCount.textContent = selectedFiles.length + ' ' + 
+          (selectedFiles.length === 1 ? 'файл' : 
+           selectedFiles.length < 5 ? 'файла' : 'файлов');
       }
-      fileInput?.addEventListener('change', e=>upload(e.target.files));
-      dirInput?.addEventListener('change', e=>upload(e.target.files));
+
+      function clearSelection() {
+        selectedFiles = [];
+        fileInput.value = '';
+        dirInput.value = '';
+        uploadContent.hidden = false;
+        uploadSelected.hidden = true;
+      }
+
+      async function upload(files) {
+        if (!files || !files.length) return;
+        const fd = new FormData();
+        for (let i = 0; i < files.length; i++) {
+          fd.append('files', files[i]);
+          fd.append('paths', files[i].webkitRelativePath || files[i].name);
+        }
+        uploadSelected.hidden = true;
+        uploadProgress.hidden = false;
+        progressFill.style.width = '0%';
+        progressText.textContent = 'Загрузка…';
+        try {
+          // Use XHR for progress
+          await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/upload');
+            xhr.upload.addEventListener('progress', e => {
+              if (e.lengthComputable) {
+                const pct = Math.round((e.loaded / e.total) * 100);
+                progressFill.style.width = pct + '%';
+                progressText.textContent = 'Загрузка: ' + pct + '%';
+              }
+            });
+            xhr.addEventListener('load', () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                  const data = JSON.parse(xhr.responseText);
+                  if (data && data.url) {
+                    urlInput.value = data.url;
+                    form.submit();
+                  }
+                } catch {}
+                resolve();
+              } else {
+                reject(new Error('Upload failed: ' + xhr.status));
+              }
+            });
+            xhr.addEventListener('error', () => reject(new Error('Network error')));
+            xhr.send(fd);
+          });
+        } catch (e) {
+          uploadProgress.hidden = true;
+          uploadContent.hidden = false;
+          console.error(e);
+        }
+      }
+
+      // File input changes
+      fileInput?.addEventListener('change', e => {
+        if (e.target.files.length) showSelected(e.target.files);
+      });
+      dirInput?.addEventListener('change', e => {
+        if (e.target.files.length) showSelected(e.target.files);
+      });
+
+      // Clear button
+      uploadClear?.addEventListener('click', clearSelection);
+
+      // Drag and drop
+      ['dragenter', 'dragover'].forEach(evt => {
+        uploadZone.addEventListener(evt, e => {
+          e.preventDefault();
+          e.stopPropagation();
+          uploadZone.classList.add('drag-over');
+        });
+      });
+      ['dragleave', 'drop'].forEach(evt => {
+        uploadZone.addEventListener(evt, e => {
+          e.preventDefault();
+          e.stopPropagation();
+          uploadZone.classList.remove('drag-over');
+        });
+      });
+      uploadZone.addEventListener('drop', e => {
+        const files = e.dataTransfer.files;
+        if (files.length) showSelected(files);
+      });
+
+      // Click on zone opens file dialog
+      uploadZone.addEventListener('click', e => {
+        if (e.target === uploadZone || e.target.closest('.upload-zone-content')) {
+          fileInput.click();
+        }
+      });
     })();
     (function(){
       const toggle = document.getElementById('auth-enabled');
