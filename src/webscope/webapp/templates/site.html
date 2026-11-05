@@ -390,6 +390,45 @@
     });
   })();
 
+  // FP (false positive) toggle button handler
+  (function () {
+    document.querySelectorAll('.btn-fp').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        const findingId = this.dataset.findingId;
+        const currentFp = this.dataset.fp === 'true';
+        const newFp = !currentFp;
+        
+        // Optimistic UI update
+        this.dataset.fp = newFp.toString();
+        this.textContent = newFp ? '✓ Ложная находка' : '🚫 Это ложная находка';
+        this.disabled = true;
+        
+        try {
+          const response = await fetch('/api/findings/' + findingId + '/fp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fp: newFp }),
+            credentials: 'same-origin'
+          });
+          if (!response.ok) throw new Error('Server error');
+          // Optionally show toast
+          if (window.showToast) {
+            window.showToast(newFp ? 'Находка отмечена как ложная' : 'Находка восстановлена', 'success');
+          }
+        } catch (error) {
+          // Revert on error
+          this.dataset.fp = currentFp.toString();
+          this.textContent = currentFp ? '✓ Ложная находка' : '🚫 Это ложная находка';
+          if (window.showToast) {
+            window.showToast('Ошибка: ' + error.message, 'error');
+          }
+        } finally {
+          this.disabled = false;
+        }
+      });
+    });
+  })();
+
   function setFindingsView(mode) {
     // Таблица и список — две панели внутри одной карточки; кнопки без текста,
     // чтобы не спорить с темой и читаться как иконки (как переключатель темы).
