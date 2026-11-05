@@ -467,6 +467,8 @@ _AXE_EQUIVALENTS = {
     "document-title": ["content/missing-title"],
     "page-has-heading-one": ["content/no-h1"],
     "label": ["forms/control-without-label"],
+    # WCAG 2.2 2.5.8 Target Size (Minimum) — axe-core 4.8+
+    "target-size": ["viewport/target-size"],
 }
 
 # Правила уровня документа: на странице ровно один экземпляр, элемента нет,

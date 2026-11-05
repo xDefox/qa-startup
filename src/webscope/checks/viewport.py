@@ -107,7 +107,10 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
                         details={"viewport": width},
                     )
 
-            # Размер целей касания проверяем только на мобильном вьюпорте, чтобы не плодить дубли.
+            # Размер целей касания (WCAG 2.2 2.5.8) теперь ловится через axe-core
+            # (правило target-size, tag wcag22aa). Наша проверка viewport/target-size
+            # оставлена как эквивалент для дедупликации (см. _AXE_EQUIVALENTS в scanner.py).
+            # Если axe недоступен — fallback на свою проверку.
             if width == VIEWPORTS[0][0]:
                 for target in data.get("smallTargets") or []:
                     add(
