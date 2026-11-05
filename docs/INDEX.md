@@ -30,7 +30,7 @@
 | **/legacy/** | ОLD-версии всех md-файлов (AUDIT.md, BRANDBOOK.md, economic-audit.md, economic-persona.md, LECTURE.md, PLAN_SECURITY.md, ECONOMIC_JUSTIFICATION_RU.md). Ссылки в INDEX.md не ведут сюда. |
 
 ### /docs/ARCHITECTURE.md → §6 PLAN.md (структура src/)
-### /docs/ECONOMICS.md → §3 economics (тарифы $12/$59/$149)
+### /docs/ECONOMICS.md → §3 economics (Free 5 находок; Starter $19 / Pro $59 / Business $199)
 ### /docs/SECURITY.md → §2 аудит P0 (S1–S7 закрыты)
 ### /docs/ROADMAP.md → §9 дорожная карта (Milestone 0–5)
 ### /docs/BRANDING.md → BRANDBOOK.md (дизайн-токены)
@@ -78,8 +78,9 @@
 | Версия | Дата | Статус |
 |---|---|---|
 | **v0.3.1** | 2026-10-29 | FP-фиксы 2.4–2.8, работает CLI/MCP/веб/хранилище/алерты/спиннер/брендбук |
-| **AUDIT fix** | 2026-10-30 | S1–S7, B1–B5 — все закрыты, CI зеленый, 170 тестов |
-| **ECONOMICS** | 2026-11-02 | тарифы одобрены: $12/59/149, ARPU ~$18, CAC ~$30, LTV/CAC ~5×, churn≤12% |
+| **AUDIT fix** | 2026-10-30 | S1–S7, B1–B5 — все закрыты, CI зеленый, 170 тестов (на тот момент) |
+| **ECONOMICS (архив)** | 2026-11-02 | старые тарифы $12/59/149; заменены моделью «5 находок» 2026-11-04 |
+| **Pitch/economics v2** | 2026-11-05 | 307 тестов; Free 5 находок, Starter $19 / Pro $59 / Business $199; дек 3 мин + Q&A 5 мин |
 | **Docs clean** | 2026-11-03 | Корневая папка `qa-startup/` очищена от лишних файлов (перемещены в `docs/legacy/` и `scripts/`/`data/`) |
 
 ---

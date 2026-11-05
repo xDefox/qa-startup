@@ -67,9 +67,9 @@
 
 | Jab | Task | State |
 |---|---|---|
-| Pricing tiers $12/$59/$149 | Approved 2026-11-02 | ✅ |
-| Unit economics ARPU~$18, CAC~$30, churn≤12%, LTV/CAC~5× | Approved | ✅ |
-| Economic justification document (Russian) | ECONOMIC_JUSTIFICATION_RU.md | ✅ |
+| Pricing tiers: Free 5 находок; Starter $19 / Pro $59 / Business $199 | Approved 2026-11-04 | ✅ |
+| Unit economics ARPU $19–25, CAC~$30, churn≤12%, LTV/CAC~5× | Approved 2026-11-04 | ✅ |
+| Economic justification document (Russian) | ../ECONOMICS.md | ✅ |
 | Economic audit (penalties, rooms) | economic-audit.md, economic-persona.md | ✅ |
 | Demand validation (pilot criteria) | Milestone 5 PLAN | ⏳ |
 
