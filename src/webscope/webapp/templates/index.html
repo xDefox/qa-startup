@@ -15,7 +15,7 @@
   </p>
   <form method="post" action="/sites">
     <div class="field">
-      <label for="url">Адрес сайта (example.com) или загрузите локальную сборку</label>
+      <label for="url">Адрес сайта или загрузите локальную сборку</label>
       <div class="row" style="align-items: center;">
         <div style="flex: 3 1 280px;">
           <input id="url" type="text" name="url" placeholder="https://example.com" inputmode="url" autocomplete="url">
@@ -36,10 +36,10 @@
           <line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
         <p class="upload-title">Перетащите папку сборки или файл сюда</p>
-        <p class="upload-hint">Или нажмите для выбора</p>
+        <p class="upload-hint">Или нажмите кнопку ниже</p>
         <div class="upload-actions">
-          <label class="btn-like secondary" for="local-file">Выбрать файл</label>
-          <label class="btn-like secondary" for="local-dir">Выбрать папку</label>
+          <label class="btn-like secondary" for="local-file"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:-2px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Файл</label>
+          <label class="btn-like secondary" for="local-dir"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:-2px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Папку</label>
         </div>
       </div>
       <div class="upload-selected" id="upload-selected" hidden>
@@ -75,11 +75,13 @@
           {% endfor %}
         </select>
       </div>
+      <div class="field" style="align-self: flex-end;">
+        <label class="check-row" for="auth-enabled" style="margin-bottom: 0;">
+          <input type="checkbox" id="auth-enabled" name="auth_enabled" value="1">
+          <span>Нужен вход</span>
+        </label>
+      </div>
     </div>
-    <label class="check-row" for="auth-enabled">
-      <input type="checkbox" id="auth-enabled" name="auth_enabled" value="1">
-      <span>Нужна авторизация</span>
-    </label>
     <div class="auth-block" id="auth-block" hidden>
       <p class="muted small">Сайт защищён логином и паролем — войдём перед проверкой.</p>
       <div class="row">

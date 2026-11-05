@@ -340,7 +340,7 @@ def test_index_renders_auth_checkbox(web) -> None:
     client, _ = web
     response = client.get("/")
     assert response.status_code == 200
-    assert "Нужна авторизация" in response.text
+    assert "Нужен вход" in response.text
     assert 'name="auth_enabled"' in response.text
     assert 'name="auth_login"' in response.text
     assert 'name="auth_password"' in response.text
