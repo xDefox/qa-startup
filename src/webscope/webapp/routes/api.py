@@ -5,10 +5,11 @@ from __future__ import annotations
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
-from ..deps import get_site_or_404, scan_limit_response, trigger
-from ..services.site_service import create_organization, delete_site as delete_site_service, get_organization, get_organizations, list_sites as list_sites_service, update_site as update_site_service
-from ..state import AppState, get_state
 from ...scoring import is_false_positive
+from ..deps import get_site_or_404, scan_limit_response, trigger
+from ..services.site_service import create_organization, get_organizations
+from ..services.site_service import list_sites as list_sites_service
+from ..state import AppState, get_state
 
 router = APIRouter(tags=["api"])
 
@@ -114,7 +115,7 @@ async def api_update_organization(org_id: int, request: Request, state: AppState
 def api_delete_organization(org_id: int, state: AppState = Depends(get_state)):
     """Удаляет организацию (если нет привязанных сайтов)."""
     # Проверяем, есть ли сайты в организации
-    sites = list_sites(state.storage, organization_id=org_id)
+    sites = list_sites_service(state.storage, organization_id=org_id)
     if sites:
         return JSONResponse({"detail": "Нельзя удалить организацию с сайтами"}, status_code=400)
     with state.storage._conn() as conn:

@@ -4,12 +4,16 @@
 Запуск:  python3 pitch/build_deck.py
 Результат: pitch/webscope-pitch.deckcraft + .pptx + .pdf
 
-Визуальная система: белый лист, чёрная типографика, один сигнальный красный,
-серифные заголовки + моноширинные метки. Без карточек, скруглений и теней.
+Визуальная система — docs/BRANDING.md: мягкий фон #F6F7F9, белые карточки,
+синий акцент #2563EB, шкала серьёзности, системный шрифт (Liberation Sans/Mono).
+
+CLI ищется по порядку: $DECKCRAFT_CLI, распакованный AppImage, PATH.
 """
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -17,41 +21,66 @@ from pathlib import Path
 from PIL import ImageFont
 
 ROOT = Path(__file__).resolve().parent
-CLI = Path("/tmp/squashfs-root/usr/bin/deckcraft-cli")
+
+
+def _find_cli() -> Path:
+    if env := os.environ.get("DECKCRAFT_CLI"):
+        return Path(env)
+    extracted = Path("/tmp/squashfs-root/usr/bin/deckcraft-cli")
+    if extracted.exists():
+        return extracted
+    found = shutil.which("deckcraft-cli")
+    return Path(found) if found else extracted
+
+
+CLI = _find_cli()
 OUT = ROOT / "webscope-pitch"
 
 # ---------------------------------------------------------------- palette
-INK = "#101215"          # 18.8:1 на белом
-PAPER = "#FFFFFF"
-SOFT = "#F4F5F7"         # нейтральная подложка, не пастель
-LINE = "#C9CDD3"
-LINE_SOFT = "#E2E5E9"
-MUTED = "#3C434D"        # 10:1 на белом
-LABEL = "#5A626D"        # 6.2:1 на белом
-RED = "#C9280B"          # 5.5:1 на белом, 5.1:1 на SOFT
-RED_ON_DARK = "#FF5A3C"  # 6.1:1 на INK
-GREEN = "#0B6B3A"        # 6.6:1 на белом
+# Палитра — docs/BRANDING.md (единый источник правды интерфейса).
+INK = "#1C2333"          # основной текст, 13.6:1 на белом
+PAPER = "#FFFFFF"        # карточки
+SOFT = "#F6F7F9"         # фон страницы
+LINE = "#E4E7EC"         # границы
+LINE_SOFT = "#EEF0F3"
+MUTED = "#5B6474"        # вторичный текст, 6.1:1 на белом
+LABEL = "#5B6474"        # подписи, 6.1:1 на белом
+ACCENT = "#2563EB"       # ссылки, кнопки, акцент
+ACCENT_HOVER = "#1D4ED8"
+OK = "#087443"           # «отлично»
+CRITICAL = "#B42318"     # шкала серьёзности: блокирует клик
+SERIOUS = "#D97706"      # мешает клиенту
+MODERATE = "#B54708"
+MINOR = "#667085"        # мелочь
+# Обратная совместимость со старым генератором: акцент вместо «сигнального красного».
+RED = ACCENT
+RED_ON_DARK = "#4F9BFF"  # акцент на тёмной теме
+GREEN = OK
 WHITE = "#FFFFFF"
-DARK_BODY = "#D6D9DE"    # 13.3:1 на INK
-DARK_MUTED = "#A7ADB7"   # 8.3:1 на INK
-DARK_LINE = "#343A42"
+DARK_BG = "#0B1026"      # тёмная тема брендбука
+DARK_CARD = "#101625"
+DARK_BODY = "#FFFFFF"
+DARK_MUTED = "#9AA2B4"   # 7.9:1 на DARK_BG
+DARK_LINE = "#1E2740"
 
 # ---------------------------------------------------------------- fonts
+# Брендбук: системный стек без веб-шрифтов. На этой машине Arial-совместимый
+# системный шрифт — Liberation Sans, моноширинный — Liberation Mono.
 FONTS = {
     "sans": (
-        "Noto Sans",
-        "/usr/share/fonts/noto/NotoSans-Regular.ttf",
-        "/usr/share/fonts/noto/NotoSans-Bold.ttf",
+        "Liberation Sans",
+        "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
     ),
     "serif": (
-        "Noto Serif",
-        "/usr/share/fonts/noto/NotoSerif-Regular.ttf",
-        "/usr/share/fonts/noto/NotoSerif-Bold.ttf",
+        "Liberation Sans",
+        "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
     ),
     "mono": (
-        "Noto Sans Mono",
-        "/usr/share/fonts/noto/NotoSansMono-Regular.ttf",
-        "/usr/share/fonts/noto/NotoSansMono-Bold.ttf",
+        "Liberation Mono",
+        "/usr/share/fonts/liberation/LiberationMono-Regular.ttf",
+        "/usr/share/fonts/liberation/LiberationMono-Bold.ttf",
     ),
 }
 
@@ -67,7 +96,7 @@ _font_cache: dict[tuple[str, int], ImageFont.FreeTypeFont] = {}
 def measure(text: str, size: float, bold: bool = False, font: str = "sans") -> float:
     _, regular, heavy = FONTS[font]
     path = heavy if bold else regular
-    key = (path, int(round(size)))
+    key = (path, round(size))
     handle = _font_cache.get(key)
     if handle is None:
         handle = ImageFont.truetype(path, key[1])
@@ -136,7 +165,7 @@ class Deck:
         font: str = "sans",
         warn: bool = True,
     ) -> None:
-        x, y, w, h = rect
+        _, _, w, h = rect
         lines = estimate_lines(body, size, w, bold, font)
         need = lines * size * line * 1.18
         if warn and need > h * 1.08:
@@ -175,17 +204,41 @@ class Deck:
     def rule(self, x: float, y: float, w: float, color: str = LINE, width: float = 0.75) -> None:
         self.box((x, y, w, width), color)
 
+    def card(
+        self,
+        rect: tuple[float, float, float, float],
+        fill: str = PAPER,
+        line_color: str = LINE,
+        radius: float = 0.055,
+        shadow: bool = True,
+    ) -> None:
+        """Карточка брендбука: скругление 14px, тонкая граница, мягкая тень."""
+        self.add("shape.insert", {"preset": "roundRect", "rect": list(rect), "text": ""})
+        self.add("shape.fill", {"color": fill})
+        self.add("shape.line", {"color": line_color, "width": 1})
+        self.add("shape.adjust", {"index": 0, "value": radius})
+        if shadow:
+            self.add(
+                "shape.effects",
+                {
+                    "shadow": {"color": "0F172A", "blur": 40, "dist": 8, "dir": 90},
+                    "shadowProps": {"transparency": 0.88},
+                },
+            )
+        else:
+            self.add("shape.effects", {"shadow": "none"})
+
     # -- type styles ------------------------------------------------------
     def kicker(self, text: str, dark: bool = False) -> None:
         self.text(
             text,
             (M, 32, 700, 12),
-            8.5,
+            9.5,
             DARK_MUTED if dark else LABEL,
             True,
-            spacing=1.0,
+            spacing=0.8,
             caps=True,
-            font="mono",
+            font="sans",
             line=1.0,
         )
         self.rule(M, 52, W - 2 * M, DARK_LINE if dark else LINE, 0.75)
@@ -205,16 +258,17 @@ class Deck:
             color,
             True,
             line=1.02,
+            spacing=-size * 0.02,
             font="serif",
         )
 
     def footer(self, dark: bool = False) -> None:
         color = DARK_MUTED if dark else LABEL
-        self.text("webscope", (M, 508, 320, 12), 8, color, font="mono", line=1.0)
+        self.text("webscope", (M, 508, 320, 12), 9, color, font="sans", line=1.0)
         self.text(
             f"{self.page:02d} / {TOTAL}",
             (W - M - 90, 508, 90, 12),
-            8,
+            9,
             color,
             align="right",
             font="mono",
@@ -222,7 +276,7 @@ class Deck:
         )
 
     def label(self, text: str, x: float, y: float, w: float = 260, color: str = LABEL) -> None:
-        self.text(text, (x, y, w, 12), 8, color, True, spacing=0.8, caps=True, font="mono", line=1.0)
+        self.text(text, (x, y, w, 12), 9.5, color, True, spacing=0.8, caps=True, font="sans", line=1.0)
 
 
 # ---------------------------------------------------------------- slides
@@ -491,7 +545,8 @@ def build() -> Deck:
         notes=(
             "Разовая проверка — товар, её заменяет бесплатный Lighthouse. Платить будут за "
             "непрерывность: еженедельный прогон, дифф с прошлым, алерт. Это причина подписки. "
-            "Единица оплаты — сайт, а не пользователь. Цена Solo — 12 долларов в месяц."
+            "Единица оплаты — находки: первые 5 бесплатно, Starter — 19 долларов за 200 находок "
+            "в месяц и 5 сайтов."
         ),
     )
     d.kicker("05  /  МОДЕЛЬ ПРОДУКТА")
@@ -528,7 +583,7 @@ def build() -> Deck:
         font="serif",
     )
     right_items = [
-        "$12/мес за сайт",
+        "$19/мес за 200 находок",
         "Дифф: что сломалось с прошлого раза",
         "Алерт в Telegram или на почту",
         "История и тренд — видно, что чинят",
@@ -570,16 +625,20 @@ def build() -> Deck:
             "ОСНОВНОЙ СЕГМЕНТ",
             "Локальные услуги, торговля, e-commerce. Сайт приносит заявки, своего разработчика нет.",
             ["кафе, салоны, ремонт, магазины", "заявка с сайта — основной канал", "нет техкоманды"],
+            "Starter $19/мес",
+            "200 находок/мес · 5 сайтов",
         ),
         (
             "ИП и самозанятые",
             "ВТОРОЙ СЕГМЕНТ",
             "Лендинг, портфолио, одна страница. Настраивают сами, документацию не читают.",
             ["лендинг или визитка", "нужна проверка в один клик", "платят из личных денег"],
+            "Free $0",
+            "5 находок · 1 сайт",
         ),
     ]
     x = M
-    for title, tag, body, bullets in segs:
+    for title, tag, body, bullets, price, price_note in segs:
         d.rule(x, 170, 380, INK, 1.0)
         d.label(tag, x, 184, 380, RED if tag == "ОСНОВНОЙ СЕГМЕНТ" else LABEL)
         d.text(title, (x, 202, 380, 28), 20, INK, True, line=1.1, font="serif")
@@ -588,8 +647,8 @@ def build() -> Deck:
             by = 306 + j * 26
             d.box((x, by + 6, 5, 5), RED)
             d.text(bullet, (x + 16, by, 340, 18), 10, MUTED, line=1.2)
-        d.text("Starter $19/мес", (x, 392, 100, 26), 16, RED, True, font="mono", line=1.0)
-        d.label("200 находок/мес · 5 сайтов", x + 110, 398, 270, LABEL)
+        d.text(price, (x, 388, 140, 40), 15, RED, True, font="mono", line=1.0)
+        d.label(price_note, x + 150, 398, 230, LABEL)
         x += 452
     d.text(
         "Веб-студии и фрилансеры — не приоритет: длинный цикл продажи и чужие клиенты. Вернёмся после стабильного MVP.",
@@ -605,14 +664,14 @@ def build() -> Deck:
         PAPER,
         notes=(
             "Фокус — малый бизнес и ИП. 1,2 млн установок WordPress и Tilda в России — оценка "
-            "Inclient, 2026; 250 тысяч — те, у кого есть заявки и бюджет. 80 платящих сайтов — "
+            "Inclient, 2026; 250 тысяч — те, у кого есть заявки и бюджет. 80 платящих аккаунтов — "
             "сценарий, не прогноз; консервативный — 40. TAM и SAM в деньгах — оценка сверху."
         ),
     )
     d.kicker("07  /  РЫНОК")
     d.headline("Рынок — малый бизнес и ИП.", size=34, w=600)
     d.text(
-        "Верхняя оценка — весь рынок; сценарий — 80 сайтов, а не миллиарды.",
+        "Верхняя оценка — весь рынок; сценарий — 80 аккаунтов, а не миллиарды.",
         (M, 132, 600, 18),
         11.5,
         MUTED,
@@ -620,9 +679,9 @@ def build() -> Deck:
     )
     d.label("В ДЕНЬГАХ", 704, 146, 192, LABEL)
     rows = [
-        ("TAM", "1,2 млн", "сайтов на WordPress и Tilda в РФ — оценка, Inclient 2026", "$170 млн/год", "оценка сверху"),
-        ("SAM", "250 тыс.", "принимают заявки и могут платить — оценка ~20%", "$36 млн/год", "оценка"),
-        ("SOM", "80", "платящих сайтов малого бизнеса и ИП к дек. 2027 — сценарий", "$17 тыс. ARR", "сценарий"),
+        ("TAM", "1,2 млн", "сайтов на WordPress и Tilda в РФ — оценка, Inclient 2026", "$274 млн/год", "оценка сверху"),
+        ("SAM", "250 тыс.", "принимают заявки и могут платить — оценка ~20%", "$57 млн/год", "оценка"),
+        ("SOM", "80", "платящих аккаунтов малого бизнеса и ИП к дек. 2027 — сценарий", "$18 тыс. ARR", "сценарий"),
     ]
     y = 172
     for tag, count, desc, money, note in rows:
@@ -677,7 +736,7 @@ def build() -> Deck:
     rows = [
         ("Что проверяет", "метрики и правила", "всё, вручную", "сервер отвечает", "клики, формы, заявки"),
         ("Когда", "разово", "раз в 2–3 недели", "24/7, поверхностно", "еженедельно + дифф"),
-        ("Цена", "$0", "$200–3 000", "$6–35/мес", "$12/мес за сайт"),
+        ("Цена", "$0", "$200–3 000", "$6–35/мес", "Starter $19/мес"),
         ("Язык отчёта", "технический", "экспертный", "технический", "владельца сайта"),
     ]
     d.box((xs[4], y0 + 40, widths[4], 232), SOFT)
@@ -763,25 +822,25 @@ def build() -> Deck:
         PAPER,
         notes=(
             "Только статус продукта: что уже собрано и работает, без бизнес-метрик. "
-            "Цифры: 66 автотестов, 6 проверок, около 3 секунд на страницу. "
+            "Цифры: 307 тестов, 7 проверок, форматы JSON, SARIF, JUnit, HTML. "
             "Следующий шаг — точность на реальных сайтах и установка без ручной настройки."
         ),
     )
     d.kicker("10  /  СДЕЛАНО")
     d.headline("Что уже работает.")
     checks = [
-        "6 проверок + детектор блокировки кликов",
+        "7 проверок, включая блокировку кликов",
         "Краулер, история, диффы и алерты",
         "CLI, MCP-сервер и веб-интерфейс",
         "Форматы: JSON, SARIF, JUnit, HTML, plain",
         "CI: сборка, тесты, экспорт",
     ]
-    y = 190
+    y = 186
     for item in checks:
         d.box((M, y + 6, 5, 5), RED)
         d.text(item, (M + 16, y - 1, 430, 20), 11.5, INK, line=1.25)
-        y += 34
-    kpis = [("66", "автотестов"), ("6", "проверок"), ("≈3 с", "на страницу")]
+        y += 32
+    kpis = [("307", "тестов"), ("7", "проверок"), ("6", "форматов отчёта")]
     x = 560
     for i, (value, caption) in enumerate(kpis):
         if i:
@@ -815,16 +874,16 @@ def build() -> Deck:
     d.headline("Десять клиентов покрывают\nинфраструктуру.", size=36)
     d.text(
         "Без зарплат. Это нижняя граница, а не модель роста.",
-        (M, 158, 760, 18),
+        (M, 168, 760, 18),
         11,
         MUTED,
         line=1.2,
     )
     tiers = [
-        ("Free", "$0", "1 сайт · разовая проверка"),
-        ("Solo", "$12/мес", "1 сайт · еженедельно · алерты"),
-        ("Studio", "$59/мес", "10 сайтов · брендированный отчёт"),
-        ("Agency", "$149/мес", "40 сайтов · API · white-label"),
+        ("Free", "$0", "5 находок · 1 сайт"),
+        ("Starter", "$19/мес", "200 находок · 5 сайтов"),
+        ("Pro", "$59/мес", "1000 находок · 25 сайтов"),
+        ("Business", "$199/мес", "5000 находок · 100 сайтов"),
     ]
     y = 196
     for name, price, body in tiers:
@@ -834,11 +893,11 @@ def build() -> Deck:
         d.rule(M, y + 28, 460, LINE_SOFT, 0.75)
         y += 42
     metrics = [
-        ("ARPU", "$18/мес"),
+        ("ARPU", "$19–25/мес"),
         ("ВАЛОВАЯ МАРЖА", "≈ 85%"),
         ("CAC", "≈ $30"),
         ("ОТТОК", "12%/мес"),
-        ("LTV / CAC", "≈ 4×"),
+        ("LTV / CAC", "≈ 5×"),
         ("БЕЗУБЫТОЧНОСТЬ", "10 клиентов"),
     ]
     mx, my = 548, 196
@@ -853,10 +912,10 @@ def build() -> Deck:
     d.label("БЮДЖЕТ ЗАПУСКА", M, 384, 200)
     d.text("$800  +  4 недели full-time", (M, 400, 460, 24), 14, RED, True, font="mono", line=1.0)
     d.label("СЦЕНАРИЙ ДО ДЕК 2027", 548, 384, 240)
-    d.text("80 сайтов · MRR $1 440", (548, 400, 348, 22), 12.5, INK, True, line=1.2)
+    d.text("80 аккаунтов · MRR $1 520", (548, 400, 348, 22), 12.5, INK, True, line=1.2)
     d.text("выручка 2027 ≈ $9 тыс.", (548, 424, 348, 16), 9, MUTED, font="mono", line=1.0)
     d.text(
-        "* 10 клиентов при ARPU $18 и марже 85%; постоянные ≈ $150/мес (инфраструктура, LLM, почта, бухгалтерия), без зарплат.\n"
+        "* 10 клиентов при Starter $19 и марже 85%: 150 / (19 × 0,85) ≈ 9,3. Постоянные ≈ $150/мес (инфраструктура, LLM, почта, бухгалтерия), без зарплат.\n"
         "ARPU, маржа, CAC и отток — гипотезы; уточним по факту.\n"
         "Цены в USD, оплата в BYN по курсу.",
         (M, 452, 832, 48),
@@ -979,15 +1038,15 @@ def build() -> Deck:
     d.new_slide(
         PAPER,
         notes=(
-            "Базовый сценарий — 80 платящих сайтов к декабрю 2027, MRR 1 440 долларов. "
+            "Базовый сценарий — 80 платящих аккаунтов к декабрю 2027, MRR 1 520 долларов. "
             "TAM и SAM в деньгах — оценка сверху, не прогноз. Консервативный вариант — 40 сайтов. "
-            "Затраты 2027 — около 4 тысяч долларов без зарплат."
+            "Затраты 2027 — около 2–3 тысяч долларов без зарплат."
         ),
     )
     d.kicker("ПРИЛОЖЕНИЕ Б")
     d.headline("Сценарий по клиентам и выручке", size=30, y=64)
     d.text(
-        "Базовый сценарий — 80 платящих сайтов к декабрю 2027; консервативный — 40.",
+        "Базовый сценарий — 80 платящих аккаунтов к декабрю 2027; консервативный — 40.",
         (M, 102, 760, 16),
         9.5,
         LABEL,
@@ -997,7 +1056,7 @@ def build() -> Deck:
     base_y, max_h, max_v = 340, 180, 80
     bar_w, gap = 58, 44
     start_x = 96
-    d.label("ПЛАТЯЩИХ САЙТОВ", M, 120, 300)
+    d.label("ПЛАТЯЩИХ АККАУНТОВ", M, 120, 300)
     d.rule(M, base_y, 600, LINE, 0.75)
     for i, (label, value) in enumerate(data):
         bh = max(8, max_h * value / max_v)
@@ -1009,8 +1068,8 @@ def build() -> Deck:
     sx = 620
     d.label("СЦЕНАРИИ", sx, 150, 276)
     scen = [
-        ("Базовый · 80 сайтов", "MRR $1 440"),
-        ("Консервативный · 40", "MRR $720"),
+        ("Базовый · 80 аккаунтов", "MRR $1 520"),
+        ("Консервативный · 40", "MRR $760"),
     ]
     y = 172
     for name, value in scen:
@@ -1019,15 +1078,15 @@ def build() -> Deck:
         d.rule(sx, y + 24, 276, LINE_SOFT, 0.75)
         y += 38
     d.text(
-        "Безубыточность: 10 клиентов при ARPU $18 — только инфраструктура.\n"
-        "С временем основателя ($500/мес) — ≈ 43 клиента.",
+        "Безубыточность: 10 клиентов при Starter $19 — только инфраструктура.\n"
+        "С временем основателя ($500/мес) — ≈ 41 клиент.",
         (sx, 262, 276, 54),
         8.5,
         LABEL,
         line=1.4,
     )
     d.text(
-        "80 к декабрю 2027  →  MRR $1 440  →  выручка 2027 ≈ $9 тыс.",
+        "80 к декабрю 2027  →  MRR $1 520  →  выручка 2027 ≈ $9 тыс.",
         (M, 368, 620, 20),
         11.5,
         INK,
@@ -1035,14 +1094,14 @@ def build() -> Deck:
         line=1.2,
     )
     d.text(
-        "Допущения: ARPU $18, отток 12%/мес, CAC $30 — гипотезы. Затраты 2027 ≈ $4 тыс. без зарплат.",
+        "Допущения: ARPU $19–25, отток 12%/мес, CAC $30 — гипотезы. Затраты 2027 ≈ $2–3 тыс. без зарплат.",
         (M, 398, 832, 18),
         9,
         LABEL,
         line=1.3,
     )
     d.text(
-        "TAM $170 млн/год  ·  SAM $36 млн/год  ·  SOM $17 тыс. ARR — оценки сверху, не прогноз.",
+        "TAM $274 млн/год  ·  SAM $57 млн/год  ·  SOM $18 тыс. ARR — оценки сверху, не прогноз.",
         (M, 434, 832, 18),
         8.5,
         LABEL,
@@ -1115,7 +1174,7 @@ def main() -> int:
     for cmd in deck.cmds:
         args += ["--cmd", cmd]
     args += ["--save", str(OUT.with_suffix(".deckcraft"))]
-    result = subprocess.run(args, capture_output=True, text=True)
+    result = subprocess.run(args, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         print(result.stdout[-3000:])
         print(result.stderr[-3000:], file=sys.stderr)
@@ -1129,7 +1188,7 @@ def main() -> int:
     for fmt in ("pptx", "pdf"):
         target = OUT.with_suffix(f".{fmt}")
         args = [str(CLI), "convert", str(OUT.with_suffix(".deckcraft")), str(target)]
-        subprocess.run(args, capture_output=True, text=True)
+        subprocess.run(args, capture_output=True, text=True, check=False)
         print(f"{fmt}: {'ok' if target.exists() else 'FAIL'}")
     return 0
 

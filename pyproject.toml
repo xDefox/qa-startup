@@ -49,6 +49,8 @@ webscope = ["vendor/*.js"]
 [tool.ruff]
 line-length = 120
 target-version = "py313"
+# Старый генератор презентации оставлен только для истории, не используется.
+extend-exclude = ["pitch/build_deck_v1.py"]
 
 [tool.ruff.lint.per-file-ignores]
 # File(...)/Form(...)/Depends(...) в дефолтах — идиоматичный FastAPI-паттерн

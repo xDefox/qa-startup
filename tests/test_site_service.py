@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -129,15 +129,14 @@ def test_list_sites_filter_by_organization(storage: Storage) -> None:
     # Фильтр по умолчанию ищт organization_id IS NULL OR organization_id = 0
 
 
-def test_list_sites_default_filter_excludes_org_sites(storage: Storage) -> None:
-    """По умолчанию list_sites() не показывает сайты с organization_id > 0."""
+def test_list_sites_default_returns_all_sites(storage: Storage) -> None:
+    """Без фильтра list_sites() показывает сайты всех организаций."""
     org = create_organization(storage, name="Test Org", owner_email="test@test.com")
-    create_site(storage, url="https://org-site.com/", organization_id=org.id)
+    site = create_site(storage, url="https://org-site.com/", organization_id=org.id)
 
-    # Сайты без организации (organization_id = 0 или NULL)
     sites = list_sites(storage)
-    # Новые сайты имеют organization_id > 0, поэтому их нет в дефолтном списке
-    assert len(sites) == 0
+
+    assert [item.id for item in sites] == [site.id]
 
 
 def test_update_site(storage: Storage) -> None:

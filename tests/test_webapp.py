@@ -373,6 +373,31 @@ def test_api_returns_findings(client: TestClient) -> None:
     assert payload["findings"][0]["rule"] == "content/image-alt"
 
 
+def test_delete_organization_with_sites_is_rejected(client: TestClient) -> None:
+    site_id = _create_site(client)
+    sites = client.get("/api/sites").json()["sites"]
+    assert [item["id"] for item in sites] == [site_id]
+    org_id = sites[0]["organization_id"]
+
+    response = client.delete(f"/api/organizations/{org_id}")
+
+    assert response.status_code == 400
+    assert "сайт" in response.json()["detail"].lower()
+
+
+def test_delete_empty_organization(client: TestClient) -> None:
+    created = client.post(
+        "/api/organizations",
+        json={"name": "Пустая", "owner_email": "owner@example.com"},
+    )
+    assert created.status_code == 200
+
+    response = client.delete(f"/api/organizations/{created.json()['id']}")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
 def test_site_page_keeps_previous_report_after_failure(client: TestClient) -> None:
     site_id = _create_site(client)
     storage: Storage = client.app.state.webscope.storage

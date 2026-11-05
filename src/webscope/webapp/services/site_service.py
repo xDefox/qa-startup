@@ -7,10 +7,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Optional
 
-from ..storage import Storage, _site_from_row, Site
-from ...auth_vault import encrypt as vault_encrypt, decrypt as vault_decrypt
+from ...auth_vault import decrypt as vault_decrypt
+from ...auth_vault import encrypt as vault_encrypt
+from ..storage import Site, Storage, _site_from_row
 
 
 def now_iso() -> str:
@@ -56,7 +56,7 @@ def create_organization(
     return Organization(id=org_id, name=name, owner_email=owner_email, created_at=now_iso())
 
 
-def get_organization(storage: Storage, org_id: int) -> Optional[Organization]:
+def get_organization(storage: Storage, org_id: int) -> Organization | None:
     """Получает организацию по ID."""
     with storage._conn() as conn:
         row = conn.execute(
@@ -175,9 +175,7 @@ def list_sites(
             ).fetchall()
     else:
         with storage._conn() as connection:
-            rows = connection.execute(
-                "SELECT * FROM sites WHERE organization_id IS NULL OR organization_id = 0 ORDER BY id"
-            ).fetchall()
+            rows = connection.execute("SELECT * FROM sites ORDER BY id").fetchall()
     return [_site_from_row(row) for row in rows]
 
 
