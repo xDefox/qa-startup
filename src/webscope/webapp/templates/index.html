@@ -269,9 +269,16 @@
         if (e.target.files.length) showSelected(e.target.files);
       });
 
-      // Form submit - if files selected, upload first
+      // Form submit - validate, then upload if files selected
       form?.addEventListener('submit', async (e) => {
-        console.log('Form submit, selectedFiles:', selectedFiles.length);
+        console.log('Form submit, selectedFiles:', selectedFiles.length, 'url:', urlInput.value);
+        // Validate: need either URL or selected files
+        const hasUrl = urlInput.value.trim().length > 0;
+        if (!hasUrl && selectedFiles.length === 0) {
+          e.preventDefault();
+          alert('Укажите адрес сайта или выберите папку/файл для загрузки');
+          return;
+        }
         // Always prevent default if files are selected - we'll handle submission
         if (selectedFiles.length > 0) {
           e.preventDefault();
