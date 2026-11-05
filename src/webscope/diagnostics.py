@@ -117,3 +117,61 @@ def diagnose_http_error(url: str, status: int) -> str:
     """Переводит HTTP-статус ошибки в причину."""
     reason, hint = _HTTP_HINTS.get(status, (f"сервер вернул ошибку {status}", "проверьте адрес и доступность страницы"))
     return f"Не удалось открыть {url}: {reason} (HTTP {status}). {hint}."
+
+
+# --- Bot protection detection ---
+_BOT_PROTECTION_INDICATORS = [
+    # Cloudflare
+    ("cloudflare", "Cloudflare"),
+    ("within.website", "Cloudflare Bot Protection"),
+    ("__cf_chl", "Cloudflare Challenge"),
+    ("cf-challenge", "Cloudflare Challenge"),
+    ("ray id", "Cloudflare Ray ID"),
+    ("checking your browser", "Cloudflare Browser Check"),
+    ("cf-turnstile", "Cloudflare Turnstile"),
+    # Anubis
+    ("anubis", "Anubis Bot Protection"),
+    ("protected by anubis", "Anubis Bot Protection"),
+    # Generic bot checks
+    ("making sure you're not a bot", "Bot Protection (Anubis/Cloudflare)"),
+    ("checking your browser", "Bot Protection"),
+    ("ddos protection", "DDoS Protection"),
+    # Other WAFs
+    ("sucuri", "Sucuri WAF"),
+    ("incapsula", "Imperva Incapsula"),
+    ("akamai", "Akamai Bot Manager"),
+    ("fastly", "Fastly WAF"),
+    # CAPTCHAs
+    ("recaptcha", "reCAPTCHA"),
+    ("hcaptcha", "hCaptcha"),
+    ("turnstile", "Cloudflare Turnstile"),
+]
+
+
+def detect_bot_protection(page, url: str) -> str | None:
+    """Проверяет страницу на признаки ботозащиты (Cloudflare, WAF и др.).
+    Возвращает название защиты, если найдена, иначе None."""
+    try:
+        # Быстрая проверка через текст страницы
+        text = page.evaluate("document.body.innerText.toLowerCase()")
+        for indicator, name in _BOT_PROTECTION_INDICATORS:
+            if indicator in text:
+                return name
+        # Проверка title
+        title = page.evaluate("document.title.toLowerCase()")
+        for indicator, name in _BOT_PROTECTION_INDICATORS:
+            if indicator in title:
+                return name
+    except Exception:
+        pass
+    return None
+
+
+def diagnose_bot_protection(url: str, protection_name: str) -> str:
+    """Формирует сообщение об ошибке при обнаружении ботозащиты."""
+    return (
+        f"Не удалось открыть {url}: обнаружена ботозащита ({protection_name}). "
+        "Сканер не может обойти проверку браузера автоматически. "
+        "Возможные решения: используйте Basic Auth вместо формы входа, "
+        "уберите ботозащиту для IP сканера, или проверяйте публичные страницы без авторизации."
+    )

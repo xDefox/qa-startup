@@ -22,7 +22,7 @@ from .checks.js import JS_UTILS
 from .context import ScanContext
 from .crawler import CrawlResult, PageTarget, crawl, fetch_robots, representative_pages, squash_ws
 from .credscope import auth_origins, scoped_cookie_header
-from .diagnostics import diagnose_http_error, diagnose_navigation_error
+from .diagnostics import diagnose_http_error, diagnose_navigation_error, detect_bot_protection, diagnose_bot_protection
 from .models import AuthCredentials, Finding, ScanResult, Severity, sort_findings
 from .netguard import GuardedTransport, is_forbidden_address, url_targets_private_network
 from .pages import page_notes
@@ -313,6 +313,11 @@ def _form_login(page, auth: AuthCredentials, *, start_url: str, timeout_ms: int)
     if response is not None and response.status >= 400:
         raise ScanError(diagnose_http_error(target, response.status))
 
+    # Проверка на ботозащиту (Cloudflare, WAF и др.)
+    bot_protection = detect_bot_protection(page, target)
+    if bot_protection:
+        raise ScanError(diagnose_bot_protection(target, bot_protection))
+
     passwords = page.locator(_PASSWORD_INPUT)
     if passwords.count() == 0:
         raise ScanError(
@@ -590,6 +595,11 @@ def _scan_page(
             page.wait_for_load_state("networkidle", timeout=min(5000, timeout_ms))
         except PlaywrightError:
             pass  # networkidle недостижим на SPA с long-poll — это не ошибка
+
+        # Проверка на ботозащиту (Cloudflare, WAF и др.)
+        bot_protection = detect_bot_protection(page, url)
+        if bot_protection:
+            raise ScanError(diagnose_bot_protection(url, bot_protection))
 
         page.add_script_tag(content=JS_UTILS)
 
