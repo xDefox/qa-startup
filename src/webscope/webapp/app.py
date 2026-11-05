@@ -35,7 +35,7 @@ from .limits import RateLimiter, rate_limit, rate_window_seconds
 from .routes import api, auth, dashboard, pages, reports
 from .routes import uploads as upload_routes
 from .scheduler import Monitor, ScanOptions, Scheduler, default_scanner
-from .services.site_service import migrate_add_organization_id
+from .services.site_service import migrate_add_organization_id, ensure_default_organization
 from .state import STATE_KEY, AppState
 from .storage import Storage
 from .uploads import LOCAL_DIR, SandboxedLocalFiles
@@ -69,6 +69,8 @@ def create_app(
     storage = Storage(db_path)
     # Миграция мультиарендности: добавляем organization_id колонку к существующим БД
     migrate_add_organization_id(storage)
+    # Гарантируем дефолтную организацию (для форм и совместимости)
+    ensure_default_organization(storage)
     # каталог загруженных сборок: по умолчанию общий, тесты передают свой
     upload_dir = Path(local_dir) if local_dir is not None else LOCAL_DIR
     upload_dir.mkdir(parents=True, exist_ok=True)

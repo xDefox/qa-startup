@@ -71,7 +71,7 @@
         <label for="organization">Организация</label>
         <select id="organization" name="organization_id">
           {% for org in organizations %}
-          <option value="{{ org.id }}"{% if org.id == 0 %} selected{% endif %}>{{ org.name }}</option>
+          <option value="{{ org.id }}"{% if loop.first %} selected{% endif %}>{{ org.name }}</option>
           {% endfor %}
         </select>
       </div>
@@ -142,7 +142,7 @@
       }
 
       async function upload(files) {
-        if (!files || !files.length) return;
+        if (!files || !files.length) return null;
         const fd = new FormData();
         for (let i = 0; i < files.length; i++) {
           fd.append('files', files[i]);
@@ -153,8 +153,7 @@
         progressFill.style.width = '0%';
         progressText.textContent = 'Загрузка…';
         try {
-          // Use XHR for progress
-          await new Promise((resolve, reject) => {
+          const data = await new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhr.open('POST', '/upload');
             xhr.upload.addEventListener('progress', e => {
@@ -169,11 +168,13 @@
                 try {
                   const data = JSON.parse(xhr.responseText);
                   if (data && data.url) {
-                    urlInput.value = data.url;
-                    form.submit();
+                    resolve(data.url);
+                  } else {
+                    reject(new Error('Нет URL в ответе')); 
                   }
-                } catch {}
-                resolve();
+                } catch {
+                  reject(new Error('Ошибка парсинга ответа'));
+                }
               } else {
                 reject(new Error('Upload failed: ' + xhr.status));
               }
@@ -181,19 +182,47 @@
             xhr.addEventListener('error', () => reject(new Error('Network error')));
             xhr.send(fd);
           });
+          return data;
         } catch (e) {
           uploadProgress.hidden = true;
           uploadContent.hidden = false;
-          console.error(e);
+          console.error('Upload error:', e);
+          alert('Ошибка загрузки: ' + e.message);
+          return null;
         }
       }
 
       // File input changes
       fileInput?.addEventListener('change', e => {
+        console.log('fileInput change:', e.target.files.length);
         if (e.target.files.length) showSelected(e.target.files);
       });
       dirInput?.addEventListener('change', e => {
+        console.log('dirInput change:', e.target.files.length);
         if (e.target.files.length) showSelected(e.target.files);
+      });
+
+      // Form submit - if files selected, upload first
+      form?.addEventListener('submit', async (e) => {
+        console.log('Form submit, selectedFiles:', selectedFiles.length);
+        // Always prevent default if files are selected - we'll handle submission
+        if (selectedFiles.length > 0) {
+          e.preventDefault();
+          try {
+            const url = await upload(selectedFiles);
+            if (url) {
+              urlInput.value = url;
+              form.submit();
+            } else {
+              console.log('Upload failed, not submitting');
+            }
+          } catch (err) {
+            console.error('Upload error:', err);
+            alert('Ошибка загрузки: ' + err.message);
+          }
+        } else {
+          console.log('No files selected, normal submit');
+        }
       });
 
       // Clear button
