@@ -343,8 +343,8 @@ def build() -> bd.Deck:
     xs = [M]
     for w in widths[:-1]:
         xs.append(xs[-1] + w)
-    y0 = 152
-    d.box((M, y0, 832, 34), INK)
+    y0 = 158
+    d.box((M, y0, 832, 36), INK)
     d.box((xs[4], y0, widths[4], 4), RED_ON_DARK)
     heads = ["", "Lighthouse", "Ручной аудит", "Uptime", "webscope"]
     for i, name in enumerate(heads):
@@ -353,7 +353,7 @@ def build() -> bd.Deck:
         d.text(
             name,
             (xs[i] + 10, y0 + 10, widths[i] - 20, 18),
-            10,
+            10.5,
             WHITE,
             i == 4,
             line=1.1,
@@ -364,34 +364,27 @@ def build() -> bd.Deck:
         ("Цена", "$0", "$200–3 000", "$6–35/мес", "Starter $19/мес"),
         ("Язык", "технический", "экспертный", "технический", "владельца сайта"),
     ]
-    y = y0 + 34
+    y = y0 + 36
     for row in rows:
-        d.text(row[0], (xs[0] + 10, y + 10, widths[0] - 16, 34), 9.5, LABEL, True, line=1.3)
+        d.text(row[0], (xs[0] + 10, y + 12, widths[0] - 16, 40), 10.5, LABEL, True, line=1.3)
         for i in range(1, 5):
             strong = i == 4
             d.text(
                 row[i],
-                (xs[i] + 10, y + 10, widths[i] - 18, 36),
-                9.5,
+                (xs[i] + 10, y + 12, widths[i] - 18, 44),
+                10.5,
                 INK if strong else MUTED,
                 strong,
-                line=1.35,
+                line=1.3,
             )
-        d.rule(M, y + 54, 832, LINE_SOFT, 0.75)
-        y += 54
+        d.rule(M, y + 56, 832, LINE_SOFT, 0.75)
+        y += 58
     d.text(
         "Преимущество: детерминированный движок · диффы · готовое ТЗ.",
-        (M, 420, 832, 18),
-        11,
+        (M, 442, 832, 18),
+        11.5,
         ACCENT,
         True,
-    )
-    d.text(
-        "Starter: 200 находок/мес и 5 сайтов. Free: 5 находок, 1 сайт.",
-        (M, 444, 832, 16),
-        9.5,
-        MUTED,
-        line=1.2,
     )
     d.footer()
 
@@ -399,7 +392,8 @@ def build() -> bd.Deck:
     light(
         d,
         notes=(
-            "Статус: семь проверок, CLI, MCP, веб, история и диффы, 307 тестов и CI. "
+            "Статус: семь проверок, CLI, MCP, веб, история и диффы, 307 тестов, "
+            "покрытие 80 процентов, CI. "
             "Защищённые сайты проверяем: basic и вход через форму. Ложные срабатывания "
             "исключены из скора, отчётов, API и шаблона ТЗ. Границы: 2FA и капчи не берём, "
             "сложный JS покрыт не полностью, у веб-входа опциональный пароль без ролей. "
@@ -423,7 +417,7 @@ def build() -> bd.Deck:
         "Вход: basic и форма",
         "CLI, MCP и веб-интерфейс",
         "История, диффы, алерты",
-        "307 тестов и CI",
+        "307 тестов · покрытие 80% · CI",
     ]
     y = 186
     for item in works:
@@ -486,14 +480,14 @@ def build() -> bd.Deck:
         line=1.2,
     )
     metrics = [
-        ("$150/мес", "постоянные расходы"),
+        ("$150/мес", "VPS $90 · LLM $30 · почта $10 · бухгалтерия $20"),
         ("≈10 клиентов", "покрывают их"),
         ("$800", "бюджет запуска"),
     ]
     x = M
     for value, caption in metrics:
         d.text(value, (x, 160, 250, 26), 16, INK, True, font="mono", line=1.0)
-        d.text(caption, (x, 190, 250, 18), 9.5, LABEL, font="sans", line=1.2)
+        d.text(caption, (x, 190, 270, 18), 8.5, LABEL, font="sans", line=1.2)
         x += 286
     d.rule(M, 226, 832, LINE, 0.75)
     # слева — бюджет запуска
@@ -514,43 +508,37 @@ def build() -> bd.Deck:
         y += 26
     d.text("Итого", (M, y + 3, 200, 18), 10.5, INK, True, line=1.2)
     d.text("$800", (M + 280, y + 1, 100, 20), 12, ACCENT, True, font="mono", align="right", line=1.2)
-    # справа — постоянные, безубыточность, unit economics
+    # справа — unit-экономика с формулами
     d.rule(516, 246, 380, INK, 1.0)
-    d.label("ПОСТОЯННЫЕ · В МЕСЯЦ", 516, 260, 380, ACCENT)
-    d.text("≈ $150", (516, 282, 380, 30), 24, INK, True, font="mono", line=1.0)
-    d.text(
-        "Инфраструктура, LLM, почта, бухгалтерия.",
-        (516, 318, 360, 18),
-        10,
-        MUTED,
-        line=1.3,
-    )
-    d.rule(516, 344, 380, LINE, 0.75)
-    d.label("БЕЗУБЫТОЧНОСТЬ", 516, 358, 380, LABEL)
-    d.text("≈ 10 Starter", (516, 376, 380, 24), 15, INK, True, font="mono", line=1.0)
-    d.text(
-        "ARPU $19–25 · CAC ~$30 · LTV ~$150 · LTV/CAC ~5×",
-        (516, 406, 380, 16),
-        9,
-        MUTED,
-        line=1.3,
-    )
-    d.rule(516, 430, 380, LINE, 0.75)
+    d.label("UNIT-ЭКОНОМИКА · ОБОСНОВАНИЕ", 516, 260, 380, ACCENT)
+    econ = [
+        ("ARPU $19–25/мес", "Starter $19; апсейл на Pro поднимает среднее"),
+        ("CAC ~$30", "$250 теста трафика / 8 платящих из пилота"),
+        ("LTV ~$150", "8 мес удержания × $19 = $152"),
+        ("LTV/CAC ~5×", "150 / 30; здоровый SaaS — выше 3×"),
+        ("Payback ~2 мес", "30 / (19 × 0,85) ≈ 1,9"),
+    ]
+    y = 280
+    for value, basis in econ:
+        d.text(value, (516, y, 380, 16), 11, INK, True, font="mono", line=1.1)
+        d.text(basis, (516, y + 15, 380, 16), 9.5, MUTED, line=1.15)
+        d.rule(516, y + 30, 380, LINE_SOFT, 0.75)
+        y += 32
     d.text(
         "80 аккаунтов → MRR $1 520 · выручка 2027 ≈ $9 тыс.",
-        (516, 444, 380, 30),
+        (516, 446, 380, 28),
         9.5,
         INK,
         True,
-        line=1.3,
+        line=1.25,
     )
     d.text(
         "Основание: ECONOMICS.md. ARPU, CAC и отток — гипотезы; уточним по факту. "
         "Цены в USD, оплата в BYN по курсу.",
-        (M, 476, 832, 28),
+        (M, 480, 832, 26),
         8.5,
         LABEL,
-        line=1.25,
+        line=1.2,
     )
     d.footer()
 
@@ -568,7 +556,7 @@ def build() -> bd.Deck:
     d.kicker("08  /  ПЛАН")
     d.headline("До декабря — довести ядро.", size=32)
     d.text(
-        "Сделано: FP исключены из скора, отчётов, API и ТЗ; 307 тестов.",
+        "Сделано: FP исключены из скора, отчётов, API и ТЗ; 307 тестов, покрытие 80%.",
         (M, 124, 832, 18),
         11.5,
         MUTED,
