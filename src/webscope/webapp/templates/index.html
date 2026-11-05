@@ -6,6 +6,9 @@
 <div class="error">{{ error }}</div>
 {% endif %}
 
+<!-- Toast container -->
+<div id="toast-container" aria-live="polite"></div>
+
 <div class="card hero">
   <h1>Проверьте свой сайт — бесплатно</h1>
   <p>
@@ -254,7 +257,11 @@
           console.error('Upload error:', e);
           uploadProgress.hidden = true;
           uploadContent.hidden = false;
-          alert('Ошибка загрузки: ' + e.message);
+          if (window.showToast) {
+            window.showToast('Ошибка загрузки: ' + e.message, 'error');
+          } else {
+            alert('Ошибка загрузки: ' + e.message);
+          }
           return null;
         }
       }
@@ -276,7 +283,11 @@
         const hasUrl = urlInput.value.trim().length > 0;
         if (!hasUrl && selectedFiles.length === 0) {
           e.preventDefault();
-          alert('Укажите адрес сайта или выберите папку/файл для загрузки');
+          if (window.showToast) {
+            window.showToast('Укажите адрес сайта или выберите папку/файл для загрузки', 'warning');
+          } else {
+            alert('Укажите адрес сайта или выберите папку/файл для загрузки');
+          }
           return;
         }
         // Always prevent default if files are selected - we'll handle submission
@@ -295,7 +306,11 @@
             }
           } catch (err) {
             console.error('Upload error:', err);
-            alert('Ошибка загрузки: ' + err.message);
+            if (window.showToast) {
+              window.showToast('Ошибка загрузки: ' + err.message, 'error');
+            } else {
+              alert('Ошибка загрузки: ' + err.message);
+            }
           }
         } else {
           console.log('No files selected, normal submit');
