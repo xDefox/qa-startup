@@ -13,7 +13,7 @@
     подписей, кнопок без названия, ошибок в консоли и прокрутки вбок на телефоне.
     Покажем оценку и скажем, что исправить в первую очередь.
   </p>
-  <form method="post" action="/sites">
+  <form method="post" action="/sites" id="site-form">
     <div class="field">
       <label for="url">Адрес сайта или загрузите локальную сборку</label>
       <div class="row" style="align-items: center;">
@@ -26,33 +26,88 @@
       </div>
     </div>
 
-    <div class="upload-zone" id="upload-zone">
-      <input type="file" id="local-file" accept=".html,.htm,.zip" hidden>
-      <input type="file" id="local-dir" webkitdirectory directory multiple hidden>
-      <div class="upload-zone-content" id="upload-content">
-        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="17 8 12 3 7 8"/>
-          <line x1="12" y1="3" x2="12" y2="15"/>
-        </svg>
-        <p class="upload-title">Перетащите папку сборки или файл сюда</p>
-        <p class="upload-hint">Или нажмите кнопку ниже</p>
-        <div class="upload-actions">
-          <label class="btn-like secondary" for="local-file"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:-2px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Файл</label>
-          <label class="btn-like secondary" for="local-dir"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:-2px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Папку</label>
+    <div class="row">
+      <div class="field">
+        <label for="email">Куда присылать отчёты (необязательно)</label>
+        <input id="email" type="email" name="email" placeholder="you@example.com" autocomplete="email" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="schedule">Как часто проверять</label>
+        <select id="schedule" name="schedule">
+          {% for value, label in schedules.items() %}
+          <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="organization">Организация</label>
+        <select id="organization" name="organization_id">
+          {% for org in organizations %}
+          <option value="{{ org.id }}"{% if loop.first %} selected{% endif %}>{{ org.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field" style="align-self: flex-end;">
+        <label class="check-row" for="auth-enabled" style="margin-bottom: 0;">
+          <input type="checkbox" id="auth-enabled" name="auth_enabled" value="1">
+          <span>Нужен вход</span>
+        </label>
+      </div>
+    </div>
+    <div class="auth-block" id="auth-block" hidden>
+      <p class="muted small">Сайт защищён логином и паролем — войдём перед проверкой.</p>
+      <div class="row">
+        <div class="field">
+          <label for="auth_kind">Как защищён сайт</label>
+          <select id="auth_kind" name="auth_kind">
+            <option value="basic">Пароль на весь сайт (Basic)</option>
+            <option value="form">Форма входа на странице</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="auth_login">Логин</label>
+          <input id="auth_login" type="text" name="auth_login" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="auth_password">Пароль</label>
+          <input id="auth_password" type="password" name="auth_password" autocomplete="new-password">
         </div>
       </div>
-      <div class="upload-selected" id="upload-selected" hidden>
-        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <polyline points="20 6 9 17 4 12"/>
-        </svg>
-        <span id="upload-count">0 файлов</span>
-        <button type="button" class="btn-like secondary" id="upload-clear">Очистить</button>
+      <div class="field" id="auth-login-url-field" hidden>
+        <label for="auth_login_url">Адрес страницы входа (если отличается от сайта)</label>
+        <input id="auth_login_url" type="text" name="auth_login_url" placeholder="example.com/wp-admin" spellcheck="false">
       </div>
-      <div class="upload-progress" id="upload-progress" hidden>
-        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-        <span class="progress-text" id="progress-text">Загрузка…</span>
+    </div>
+  </form>
+
+  <!-- File inputs OUTSIDE the form - used only for /upload -->
+  <input type="file" id="local-file" accept=".html,.htm,.zip" hidden>
+  <input type="file" id="local-dir" webkitdirectory directory multiple hidden>
+
+  <div class="upload-zone" id="upload-zone">
+    <div class="upload-zone-content" id="upload-content">
+      <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <p class="upload-title">Перетащите папку сборки или файл сюда</p>
+      <p class="upload-hint">Или нажмите кнопку ниже</p>
+      <div class="upload-actions">
+        <label class="btn-like secondary" for="local-file"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:-2px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Файл</label>
+        <label class="btn-like secondary" for="local-dir"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:-2px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Папку</label>
       </div>
+    </div>
+    <div class="upload-selected" id="upload-selected" hidden>
+      <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+      <span id="upload-count">0 файлов</span>
+      <button type="button" class="btn-like secondary" id="upload-clear">Очистить</button>
+    </div>
+    <div class="upload-progress" id="upload-progress" hidden>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <span class="progress-text" id="progress-text">Загрузка…</span>
     </div>
     <div class="row">
       <div class="field">
@@ -109,7 +164,7 @@
   </form>
   <script>
     (function(){
-      const form = document.querySelector('.hero form');
+      const form = document.getElementById('site-form');
       const urlInput = document.getElementById('url');
       const fileInput = document.getElementById('local-file');
       const dirInput = document.getElementById('local-dir');
@@ -121,6 +176,9 @@
       const uploadProgress = document.getElementById('upload-progress');
       const progressFill = document.getElementById('progress-fill');
       const progressText = document.getElementById('progress-text');
+
+      // Debug: check all elements exist
+      console.log('Init elements:', {form: !!form, urlInput: !!urlInput, fileInput: !!fileInput, dirInput: !!dirInput, uploadZone: !!uploadZone, uploadContent: !!uploadContent, uploadSelected: !!uploadSelected, uploadCount: !!uploadCount, uploadClear: !!uploadClear, uploadProgress: !!uploadProgress, progressFill: !!progressFill, progressText: !!progressText});
 
       let selectedFiles = [];
 
@@ -142,6 +200,7 @@
       }
 
       async function upload(files) {
+        console.log('upload() called with:', files ? files.length : 0, 'files');
         if (!files || !files.length) return null;
         const fd = new FormData();
         for (let i = 0; i < files.length; i++) {
@@ -164,29 +223,37 @@
               }
             });
             xhr.addEventListener('load', () => {
+              console.log('XHR load, status:', xhr.status);
               if (xhr.status >= 200 && xhr.status < 300) {
                 try {
                   const data = JSON.parse(xhr.responseText);
+                  console.log('XHR response:', data);
                   if (data && data.url) {
                     resolve(data.url);
                   } else {
                     reject(new Error('Нет URL в ответе')); 
                   }
-                } catch {
+                } catch (e) {
+                  console.error('Parse error:', e);
                   reject(new Error('Ошибка парсинга ответа'));
                 }
               } else {
+                console.error('XHR error status:', xhr.status, xhr.responseText);
                 reject(new Error('Upload failed: ' + xhr.status));
               }
             });
-            xhr.addEventListener('error', () => reject(new Error('Network error')));
+            xhr.addEventListener('error', () => {
+              console.error('XHR network error');
+              reject(new Error('Network error'));
+            });
             xhr.send(fd);
           });
+          console.log('upload() resolved with:', data);
           return data;
         } catch (e) {
+          console.error('Upload error:', e);
           uploadProgress.hidden = true;
           uploadContent.hidden = false;
-          console.error('Upload error:', e);
           alert('Ошибка загрузки: ' + e.message);
           return null;
         }
