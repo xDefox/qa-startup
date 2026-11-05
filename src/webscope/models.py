@@ -74,6 +74,7 @@ class Finding:
     source: str = "webscope"
     details: dict[str, Any] = field(default_factory=dict)
     fp: bool = False  # False positive — ложное срабатывание, исключается из скора и отчётов
+    id: int | None = None  # database ID for FP marking
 
     @property
     def fingerprint(self) -> str:

@@ -569,20 +569,20 @@ class Storage:
                 severity = Severity(row.severity)
             except ValueError:
                 severity = Severity.MODERATE
-            result.append(
-                ScanFinding(
-                    rule=row.rule,
-                    severity=severity,
-                    title=row.title,
-                    message=row.message,
-                    url=row.url,
-                    selector=row.selector,
-                    snippet=row.snippet,
-                    help_url=row.help_url,
-                    source=row.source or "webscope",
-                    details=row.details,
-                )
+            finding = ScanFinding(
+                rule=row.rule,
+                severity=severity,
+                title=row.title,
+                message=row.message,
+                url=row.url,
+                selector=row.selector,
+                snippet=row.snippet,
+                help_url=row.help_url,
+                source=row.source or "webscope",
+                details=row.details,
             )
+            finding.id = row.id
+            result.append(finding)
         return result
 
     def severity_counts(self, run_ids: list[int]) -> dict[int, dict[str, int]]:

@@ -68,6 +68,7 @@ def problem_view(group: dict) -> dict:
         "source": source,
         "help_url": getattr(rep, "help_url", None) or "",
         "details": details,  # <-- added for FP button and template access
+        "id": getattr(rep, "id", None),  # database ID for FP button
     }
 
 
