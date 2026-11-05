@@ -219,8 +219,10 @@
         if (files.length) showSelected(files);
       });
 
-      // Click on zone opens file dialog
+      // Click on zone opens file dialog (but not on buttons/labels)
       uploadZone.addEventListener('click', e => {
+        // Don't trigger if clicked on a label/button inside
+        if (e.target.closest('label, button')) return;
         if (e.target === uploadZone || e.target.closest('.upload-zone-content')) {
           fileInput.click();
         }
