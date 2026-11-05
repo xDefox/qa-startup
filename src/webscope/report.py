@@ -303,8 +303,16 @@ WCAG и не являются юридическим заключением о �
 def render_pdf(result: ScanResult) -> str:
     """PDF-отчёт — автономный файл (fpdf2), можно скачать или открыть в браузере."""
     from fpdf import FPDF
-    from .scoring import compute_score, group_by_rule, is_site_defect, is_false_positive, plain_impact, score_label, top_actions
-    from .pages import page_notes
+
+    from .scoring import (
+        compute_score,
+        group_by_rule,
+        is_false_positive,
+        is_site_defect,
+        plain_impact,
+        score_label,
+        top_actions,
+    )
 
     score = compute_score(result.findings)
     own = [finding for finding in result.findings if is_site_defect(finding) and not is_false_positive(finding)]
@@ -367,7 +375,15 @@ def render_pdf(result: ScanResult) -> str:
 
 def render_plain(result: ScanResult) -> str:
     """Отчёт для владельца сайта: без терминов, с баллом и планом действий."""
-    from .scoring import compute_score, group_by_rule, is_site_defect, is_false_positive, plain_impact, score_label, top_actions
+    from .scoring import (
+        compute_score,
+        group_by_rule,
+        is_false_positive,
+        is_site_defect,
+        plain_impact,
+        score_label,
+        top_actions,
+    )
 
     score = compute_score(result.findings)
     own = [finding for finding in result.findings if is_site_defect(finding) and not is_false_positive(finding)]

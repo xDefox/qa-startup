@@ -239,8 +239,8 @@ API (JSON) для интеграций: `/api/sites`, `/api/sites/{id}`, `/api/s
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev,web]"
 
-pytest -m "not browser" -q      # 254 теста, браузер не нужен
-pytest -m "browser" -q          # 21 тест в реальном Chromium: нужен
+pytest -m "not browser" -q      # 285 тестов, браузер не нужен
+pytest -m "browser" -q          # 23 теста в реальном Chromium: нужен
                                 # `playwright install chromium`
 ruff check . && ruff format --check .
 ```

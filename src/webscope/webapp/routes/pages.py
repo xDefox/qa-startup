@@ -10,11 +10,16 @@ from ..forms import auth_fields
 from ..report_files import DOWNLOAD_FORMATS, default_report_stem, download_filename, human_date
 from ..services.site_service import (
     create_organization,
-    create_site as create_site_service,
-    delete_site as delete_site_service,
     get_organization,
     get_organizations,
-    list_sites as list_sites_service,
+)
+from ..services.site_service import (
+    create_site as create_site_service,
+)
+from ..services.site_service import (
+    delete_site as delete_site_service,
+)
+from ..services.site_service import (
     update_site as update_site_service,
 )
 from ..state import AppState, get_state

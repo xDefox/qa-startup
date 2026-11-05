@@ -122,11 +122,10 @@ def test_list_sites_filter_by_organization(storage: Storage) -> None:
     assert len(sites_org2) == 1
     assert sites_org2[0].organization_id == org2.id
 
-    # Без фильтра — все сайты с organization_id=0 или NULL (backward compat)
-    # Сайты, созданные через site_service, имеют organisation_id > 0,
-    # поэтому без фильтра их не будет (это ожидаемое поведение для новых сайтов)
+    # Без фильтра — все сайты, независимо от организации
     all_sites = list_sites(storage)
-    # Фильтр по умолчанию ищт organization_id IS NULL OR organization_id = 0
+    assert len(all_sites) == 3
+    assert {s.organization_id for s in all_sites} == {org1.id, org2.id}
 
 
 def test_list_sites_default_returns_all_sites(storage: Storage) -> None:
@@ -235,7 +234,7 @@ def test_organization_created_at_format(storage: Storage) -> None:
     """created_at возвращается в ISO формате."""
     org = create_organization(storage, name="Test Org", owner_email="test@test.com")
     # Должно парситься как datetime
-    dt = datetime.fromisoformat(org.created_at.replace("Z", "+00:00"))
+    dt = datetime.fromisoformat(org.created_at)
     assert dt.tzinfo is not None or dt.year >= 2024
 
 
@@ -243,5 +242,5 @@ def test_site_created_at_format(storage: Storage) -> None:
     """created_at сайта возвращается в ISO формате."""
     org = create_organization(storage, name="Test Org", owner_email="test@test.com")
     site = create_site(storage, url="https://example.com/", organization_id=org.id)
-    dt = datetime.fromisoformat(site.created_at.replace("Z", "+00:00"))
+    dt = datetime.fromisoformat(site.created_at)
     assert dt.year >= 2024

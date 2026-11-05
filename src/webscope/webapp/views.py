@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from ..models import ScanResult, Severity
 from ..pages import page_notes
-from ..scoring import group_by_rule, is_site_defect, is_false_positive, plain_impact, score_label, top_actions
+from ..scoring import group_by_rule, is_false_positive, is_site_defect, plain_impact, score_label, top_actions
 from .storage import Run, Storage
 
 BLOCKER_RULE = "interaction/button-blocked"

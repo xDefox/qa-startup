@@ -17,7 +17,6 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from fastapi.responses import PlainTextResponse
 from fastapi.templating import Jinja2Templates
 
@@ -36,9 +35,9 @@ from .limits import RateLimiter, rate_limit, rate_window_seconds
 from .routes import api, auth, dashboard, pages, reports
 from .routes import uploads as upload_routes
 from .scheduler import Monitor, ScanOptions, Scheduler, default_scanner
+from .services.site_service import migrate_add_organization_id
 from .state import STATE_KEY, AppState
 from .storage import Storage
-from .services.site_service import ensure_default_organization, migrate_add_organization_id
 from .uploads import LOCAL_DIR, SandboxedLocalFiles
 
 LOGGER = logging.getLogger("webscope.webapp")

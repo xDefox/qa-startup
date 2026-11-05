@@ -14,7 +14,7 @@
 - ✅ Создана таблица `organizations` (id, name, owner_email, created_at)
 - ✅ Обновлен SCHEMA
 - ✅ Добавлены константы MULTI_TENANCY_MIGRATION
-- ✅ Все 267 тестов проходят
+- ✅ 307 passed, 1 skipped
 
 ### 3. Структура архитектуры
 **Файл:** `PLAN_WORK.md` (новый)
@@ -25,7 +25,7 @@
 ## Текущее состояние
 
 ```
-✅ 267 тестов проходят (без browser)
+✅ 285 тестов без browser; 307 всего (1 skipped)
 ✅ organization_id в storage.py
 ✅ организация support начат в site_service.py
 ✅ Все изменения backward-compatible (DEFAULT 0)

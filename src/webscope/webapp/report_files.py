@@ -12,7 +12,7 @@ import re
 from datetime import datetime
 from urllib.parse import quote, urlsplit
 
-from ..report import render_html, render_json, render_junit, render_plain, render_pdf, render_sarif
+from ..report import render_html, render_json, render_junit, render_pdf, render_plain, render_sarif
 from .storage import Run, Site
 
 # Форматы отчёта: расширение в URL, MIME-тип и подпись для кнопки «скачать».
