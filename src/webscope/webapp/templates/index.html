@@ -216,16 +216,37 @@
           (selectedFiles.length === 1 ? 'файл' : 
            selectedFiles.length < 5 ? 'файла' : 'файлов');
         
-        // Build file list
+        // Build file list with remove buttons
         const fileList = selectedFiles.map((f, i) =>
-          '<div class="upload-file-item">' +
+          '<div class="upload-file-item" data-index="' + i + '">' +
             '<span class="upload-file-name" title="' + (f.webkitRelativePath || f.name).replace(/"/g, '"') + '">' +
               (i + 1) + '. ' + (f.webkitRelativePath || f.name) +
             '</span>' +
+            '<button type="button" class="upload-file-remove" aria-label="Удалить файл" data-index="' + i + '">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>' +
+            '</button>' +
           '</div>'
         ).join('');
         
         uploadCount.innerHTML = countText + '<div class="upload-file-list">' + fileList + '</div>';
+        
+        // Attach remove handlers
+        uploadCount.querySelectorAll('.upload-file-remove').forEach(btn => {
+          btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const idx = parseInt(this.dataset.index, 10);
+            removeFile(idx);
+          });
+        });
+      }
+      
+      function removeFile(index) {
+        selectedFiles.splice(index, 1);
+        if (selectedFiles.length === 0) {
+          clearSelection();
+        } else {
+          showSelected(selectedFiles); // Re-render with updated indices
+        }
       }
 
       function clearSelection() {
