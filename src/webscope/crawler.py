@@ -72,6 +72,36 @@ _NON_HTML_SUFFIXES = (
 _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
 _HEX_RE = re.compile(r"^[0-9a-f]{16,}$", re.IGNORECASE)
 
+# Fallback User-Agents for 403/401 retries
+_FALLBACK_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+]
+
+
+def _fetch_with_retry(
+    client: httpx.Client,
+    url: str,
+    user_agent: str,
+    max_retries: int = 3,
+) -> httpx.Response | None:
+    """Fetch URL with retry on 403/401 using different User-Agents."""
+    for attempt in range(max_retries):
+        headers = {"User-Agent": user_agent if attempt == 0 else _FALLBACK_USER_AGENTS[(attempt - 1) % len(_FALLBACK_USER_AGENTS)]}
+        try:
+            response = client.get(url, headers=headers, timeout=10.0)
+            if response.status_code < 400:
+                return response
+            if response.status_code in (403, 401) and attempt < max_retries - 1:
+                continue  # try next UA
+            return response
+        except httpx.HTTPError:
+            if attempt == max_retries - 1:
+                raise
+    return None
+
 
 @dataclass
 class PageTarget:
@@ -314,9 +344,9 @@ def crawl(
         # Главная страница — источник ссылок, если sitemap нет.
         homepage_loaded = False
         try:
-            homepage = client.get(root_url)
-            if homepage.status_code >= 400:
-                result.skipped.append({"url": root_url, "reason": f"HTTP {homepage.status_code}"})
+            homepage = _fetch_with_retry(client, root_url, user_agent)
+            if homepage is None or homepage.status_code >= 400:
+                result.skipped.append({"url": root_url, "reason": f"HTTP {homepage.status_code if homepage else 'failed after retries'}"})
                 homepage_html = ""
             else:
                 homepage_html = homepage.text
@@ -360,9 +390,9 @@ def crawl(
 
             if depth > 0:
                 try:
-                    response = client.get(url)
-                    if response.status_code >= 400:
-                        result.skipped.append({"url": url, "reason": f"HTTP {response.status_code}"})
+                    response = _fetch_with_retry(client, url, user_agent)
+                    if response is None or response.status_code >= 400:
+                        result.skipped.append({"url": url, "reason": f"HTTP {response.status_code if response else 'failed after retries'}"})
                         continue
                     html = response.text
                 except httpx.HTTPError as exc:

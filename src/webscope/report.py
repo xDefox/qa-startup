@@ -314,7 +314,7 @@ def render_pdf(result: ScanResult) -> str:
         top_actions,
     )
 
-    score = compute_score(result.findings)
+    score = compute_score(result.findings, result.pages_scanned)
     own = [finding for finding in result.findings if is_site_defect(finding) and not is_false_positive(finding)]
     fu = result.final_url or result.url
 
@@ -385,7 +385,7 @@ def render_plain(result: ScanResult) -> str:
         top_actions,
     )
 
-    score = compute_score(result.findings)
+    score = compute_score(result.findings, result.pages_scanned)
     own = [finding for finding in result.findings if is_site_defect(finding) and not is_false_positive(finding)]
     fp_count = sum(1 for f in result.findings if is_false_positive(f))
     lines: list[str] = []

@@ -145,7 +145,7 @@ def snapshot_from_result(result: ScanResult) -> Snapshot:
     return Snapshot(
         url=result.final_url or result.url,
         taken_at=result.generated_at,
-        score=compute_score(result.findings),
+        score=compute_score(result.findings, result.pages_scanned),
         pages_scanned=result.pages_scanned,
         findings=[finding.to_dict() for finding in result.findings],
     )

@@ -585,26 +585,49 @@ def _scan_page(
     page.on("response", on_response)
 
     try:
-        try:
-            response = page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-        except PlaywrightError as exc:
-            raise ScanError(diagnose_navigation_error(url, exc, timeout_ms=timeout_ms)) from exc
-        if response is not None and response.status >= 400:
-            raise ScanError(diagnose_http_error(url, response.status))
+        # Navigation with retry for 403/429
+        max_retries = 2
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                if attempt > 0:
+                    page.close()
+                    page = _launch_chromium(playwright, headless).new_page()
+                try:
+                    response = page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+                except PlaywrightError as exc:
+                    last_error = ScanError(diagnose_navigation_error(url, exc, timeout_ms=timeout_ms))
+                    continue
+                if response is not None and response.status in (403, 429):
+                    last_error = ScanError(diagnose_http_error(url, response.status))
+                    if attempt < max_retries:
+                        time.sleep(1 + attempt)
+                        continue
+                    raise last_error
+                if response is not None and response.status >= 400:
+                    raise ScanError(diagnose_http_error(url, response.status))
+                break
+            except ScanError:
+                raise
+            except Exception as e:
+                last_error = ScanError(f"Navigation failed: {e}")
+                if attempt >= max_retries:
+                    raise last_error
+
         try:
             page.wait_for_load_state("networkidle", timeout=min(5000, timeout_ms))
         except PlaywrightError:
-            pass  # networkidle недостижим на SPA с long-poll — это не ошибка
+            pass
 
-        # Проверка на ботозащиту (Cloudflare, WAF и др.)
-        bot_protection = detect_bot_protection(page, url)
-        if bot_protection:
-            raise ScanError(diagnose_bot_protection(url, bot_protection))
-
-        page.add_script_tag(content=JS_UTILS)
+        page.evaluate(JS_UTILS)  # bypasses CSP
 
         archetype = _collect_archetype(page)
         notes: list[str] = page_notes(url, page.url)
+        # Проверка на ботозащиту — не фатально
+        bot_protection = detect_bot_protection(page, url)
+        if bot_protection:
+            notes.append(f"Bot protection: {bot_protection}")
+        
         ctx = ScanContext(
             url=url,
             final_url=page.url,
@@ -785,6 +808,7 @@ def scan_site(
     max_pages: int = 30,
     max_depth: int = 2,
     respect_robots: bool = True,
+    ignore_robots: bool = False,
     all_pages: bool = False,
     checks: Sequence[str] | None = None,
     timeout_ms: int = 30_000,
@@ -837,7 +861,7 @@ def scan_site(
         root_url,
         max_pages=max_pages,
         max_depth=max_depth,
-        respect_robots=respect_robots,
+        respect_robots=respect_robots and not ignore_robots,
         user_agent=user_agent,
         headers=crawl_headers or None,
         allow_private=allow_private,

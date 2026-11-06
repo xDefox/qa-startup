@@ -21,7 +21,9 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
     if not AXE_PATH.exists():  # pragma: no cover - защита от сборки без vendor/
         return []
 
-    page.add_script_tag(path=str(AXE_PATH))  # type: ignore[attr-defined]
+    # Read axe-core content and inject via evaluate to bypass CSP
+    axe_content = AXE_PATH.read_text(encoding='utf-8')
+    page.evaluate(axe_content)
     raw = page.evaluate(  # type: ignore[attr-defined]
         """async (tags) => {
             const result = await axe.run(document, {

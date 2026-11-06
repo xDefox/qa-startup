@@ -11,19 +11,54 @@
     {% set best = scores | max %}
     {% set worst = scores | min %}
     <div style="margin: 18px 0 24px;">
-      <svg viewBox="0 0 600 120" width="100%" height="120" preserveAspectRatio="none" role="img" aria-label="Динамика оценки">
-        {% set count = runs | length %}
-        {% set step = 600 / (count - 1) if count > 1 else 0 %}
-        <polyline fill="none" stroke="#2563eb" stroke-width="2"
-          points="{% for run in runs %}{{ loop.index0 * step }},{{ 110 - (run.score or 0) * 0.9 }}{% if not loop.last %} {% endif %}{% endfor %}" />
-        {% for run in runs %}
-        <circle cx="{{ loop.index0 * step }}" cy="{{ 110 - (run.score or 0) * 0.9 }}" r="3.5" fill="#2563eb">
-          <title>{{ run.finished_at[:16].replace('T', ' ') }} — {{ run.score }}/100</title>
-        </circle>
-        {% endfor %}
-      </svg>
+      <canvas id="scoreChart" height="120" aria-label="Динамика оценки"></canvas>
       <div class="muted small">Оценка по прогонам: от {{ worst }} до {{ best }}</div>
     </div>
+    <script>
+      (function() {
+        const labels = [{% for run in runs %}'{{ run.finished_at[:16].replace('T', ' ') if run.finished_at else run.started_at[:16].replace('T', ' ') }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+        const data = [{% for run in runs %}{{ run.score or 0 }}{% if not loop.last %}, {% endif %}{% endfor %}];
+        const ctx = document.getElementById('scoreChart').getContext('2d');
+        new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Оценка',
+              data: data,
+              borderColor: '#2563eb',
+              backgroundColor: 'rgba(37, 99, 235, 0.1)',
+              fill: true,
+              tension: 0.3,
+              pointRadius: 4,
+              pointHoverRadius: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function(ctx) { return ctx.parsed.y + '/100'; }
+                }
+              }
+            },
+            scales: {
+              x: {
+                ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 8 }
+              },
+              y: {
+                min: 0,
+                max: 100,
+                ticks: { callback: function(v) { return v; } }
+              }
+            }
+          }
+        });
+      })();
+    </script>
 
     <table>
       <thead>

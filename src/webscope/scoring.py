@@ -5,6 +5,7 @@
 """
 
 from __future__ import annotations
+import math
 
 from collections import defaultdict
 
@@ -332,27 +333,82 @@ def is_false_positive(finding: Finding) -> bool:
     return finding.is_fp
 
 
-def compute_score(findings: list[Finding]) -> int:
+def compute_score(findings: list[Finding], pages_scanned: int = 1) -> int:
     """Итоговый балл «здоровья» сайта: 0–100.
 
-    Считается по уникальным правилам, а не по числу страниц: если один и тот же
-    дефект повторяется на 30 страницах каталога, это одна проблема, а не тридцать.
-    Иначе балл скачет в зависимости от размера сайта и перестаёт быть понятным.
-
-    Ложные срабатывания (FP) исключаются из расчёта.
+    Улучшения v2:
+    - Нормализация по количеству страниц: штраф делится на log2(pages+1)
+    - Взвешивание по типу правила: a11y > forms > links > content > minor
+    - Порог шума: правила на < 2 страницах (если не critical/serious) не штрафуются
+    - Ложные срабатывания (FP) исключаются из расчёта.
     """
     own = [finding for finding in findings if is_site_defect(finding) and not is_diagnostic(finding) and not is_false_positive(finding)]
     if not own:
         return 100
 
+    # Нормализатор по страницам: log2(pages+1) — мягкий рост
+    # 1 стр = 1.0, 2 = 1.58, 5 = 2.58, 10 = 3.46, 50 = 5.67
+    page_norm = math.log2(max(1, pages_scanned) + 1)
+
+    # Взвешивание правил по категории (влияние на UX)
+    RULE_CATEGORY_WEIGHT = {
+        # Accessibility — критический UX impact
+        "aria-": 1.5, "color-contrast": 1.5, "link-name": 1.4, "image-alt": 1.4,
+        "label": 1.3, "heading-order": 1.2, "region": 1.2, "landmark": 1.2,
+        # Forms — прямой impact на конверсию
+        "form": 1.3, "control-without-label": 1.3, "email-without-autocomplete": 1.1,
+        # Links — навигация
+        "link": 1.1, "target-blank": 1.0, "empty-href": 1.1,
+        # Content/HTML — техническое качество
+        "duplicate-id": 1.1, "empty-link-name": 1.0, "missing-": 0.9,
+        # Console — часто шум
+        "console/": 0.5,
+        # Viewport — UX но часто намеренно
+        "viewport/": 0.8,
+    }
+
+    def _rule_weight(rule: str) -> float:
+        for prefix, weight in RULE_CATEGORY_WEIGHT.items():
+            if rule.startswith(prefix):
+                return weight
+        return 1.0  # default
+
+    # Считаем страницы на правило
+    rule_pages: dict[str, int] = {}
+    for f in own:
+        rule_pages[f.rule] = rule_pages.get(f.rule, 0) + 1
+
+    # Находим худшую severity на правило
     worst: dict[str, Severity] = {}
     for finding in own:
         current = worst.get(finding.rule)
         if current is None or finding.severity.rank < current.rank:
             worst[finding.rule] = finding.severity
 
-    penalty = sum(_WEIGHTS[severity] for severity in worst.values())
-    return max(0, min(100, 100 - penalty))
+    # Считаем штраф с учётом весов и нормализации
+    total_penalty = 0.0
+    for rule, severity in worst.items():
+        base = _WEIGHTS[severity]
+        cat_weight = _rule_weight(rule)
+        pages = rule_pages.get(rule, 1)
+        
+        # Игнорируем шум: правило на 1 странице только если MINOR
+        if pages < 2 and severity == Severity.MINOR:
+            continue
+        
+        penalty = base * cat_weight
+        total_penalty += penalty
+
+    # Нормализуем по страницам
+    total_penalty = total_penalty / page_norm
+    
+    return max(0, min(100, int(100 - total_penalty)))
+
+
+# Backward compatibility
+def compute_score_legacy(findings: list[Finding]) -> int:
+    """Старый алгоритм (без pages_scanned)."""
+    return compute_score(findings, pages_scanned=1)
 
 
 def score_label(score: int) -> str:

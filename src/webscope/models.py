@@ -152,7 +152,7 @@ class ScanResult:
         """Оценка «здоровья» 0–100 (логика — в scoring.compute_score)."""
         from .scoring import compute_score
 
-        return compute_score(self.findings)
+        return compute_score(self.findings, self.pages_scanned)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -194,4 +194,12 @@ class AuthCredentials:
 
 def sort_findings(findings: list[Finding]) -> list[Finding]:
     """Сортирует находки: сначала по серьёзности, затем по правилу и странице."""
-    return sorted(findings, key=lambda f: (f.severity.rank, f.rule, f.url, f.selector or ""))
+    def _to_str(v):
+        if isinstance(v, list):
+            while isinstance(v, list) and v:
+                v = v[0]
+            return str(v) if v else ''
+        return str(v)
+    def _rule_key(f):
+        return (f.severity.rank, _to_str(f.rule), _to_str(f.url), _to_str(f.selector))
+    return sorted(findings, key=_rule_key)
