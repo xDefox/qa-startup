@@ -29,6 +29,12 @@ from ..views import SCHEDULE_LABELS, build_report_view
 router = APIRouter()
 
 
+@router.get("/landing", response_class=HTMLResponse)
+def landing(request: Request, state: AppState = Depends(get_state)):
+    """Публичная лендинг-страница — доступна без входа."""
+    return _page(state, request, "landing.html", {})
+
+
 def _page(state: AppState, request: Request, template: str, context: dict, **kwargs):
     """Отрисовка шаблона с ленивым импортом Jinja2Templates только для типов."""
     return state.templates.TemplateResponse(request, template, context, **kwargs)

@@ -28,7 +28,7 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 
 # Что доступно без входа: сам вход, healthcheck и раздача загруженных файлов
 # (её открывает браузер-сканер без cookie; содержимое песочницы — см. app.py).
-PUBLIC_PREFIXES = ("/auth/", "/healthz", "/__local/")
+PUBLIC_PREFIXES = ("/auth/", "/healthz", "/__local/", "/landing")
 
 
 def auth_configured() -> bool:

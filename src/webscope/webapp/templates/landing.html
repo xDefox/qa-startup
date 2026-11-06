@@ -1,0 +1,569 @@
+{% extends "base.html" %}
+{% block title %}webscope — проверка кликов, форм и заявок на сайте{% endblock %}
+{% block content %}
+
+<!-- Hero Section -->
+<section class="landing-hero">
+  <div class="landing-container">
+    <h1>Сайт открывается.<br>Заявка — нет.</h1>
+    <p class="landing-subtitle">
+      webscope проверяет клики, формы и консоль браузера —<br>
+      чтобы вы узнали о поломке раньше клиента.
+    </p>
+    <div class="landing-cta">
+      <a href="/sites/new" class="btn btn-primary btn-lg">Проверить сайт бесплатно</a>
+      <a href="#how-it-works" class="btn btn-secondary btn-lg">Как это работает</a>
+    </div>
+    <p class="landing-trust">5 находок бесплатно · без карты · запуск за 30 секунд</p>
+  </div>
+</section>
+
+<!-- Problem Section -->
+<section id="problem" class="landing-section landing-problem">
+  <div class="landing-container">
+    <h2>Проблема: сайт меняется каждую неделю. Проверяют — раз в год.</h2>
+    <div class="problem-grid">
+      <div class="problem-card">
+        <div class="problem-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="3" width="20" height="14" rx="2"/>
+            <path d="M8 21h8M12 17v4"/>
+          </svg>
+        </div>
+        <h3>Кнопку нельзя нажать</h3>
+        <p>Баннер, модалка или фиксированный блок перекрывает CTA. Клиент жмёт — ничего не происходит.</p>
+      </div>
+      <div class="problem-card">
+        <div class="problem-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <h3>Форма не доходит</h3>
+        <p>Ошибка JS, неверный endpoint или отправка в пустоту — заявка теряется бесследно.</p>
+      </div>
+      <div class="problem-card">
+        <div class="problem-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <h3>Сломалось после релиза</h3>
+        <p>Обновили сайт — отвалился скрипт или стили. Владелец узнаёт из жалобы клиента.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Solution Section -->
+<section id="how-it-works" class="landing-section landing-solution">
+  <div class="landing-container">
+    <h2>Что делает webscope</h2>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-number">1</div>
+        <h3>Обходим как клиент</h3>
+        <p>Реальный браузер (Playwright) открывает страницы, кликает, скроллит, заполняет формы.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-number">2</div>
+        <h3>Ловим ошибки в консоли и сети</h3>
+        <p>JS-исключения, неудачные запросы, ошибки ресурсов — всё, что не видно в Lighthouse.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-number">3</div>
+        <h3>Проверяем клики и доступность</h3>
+        <p>Перекрытые элементы, невидимые ссылки, поля без подписей, цель клика меньше 44×44px.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-number">4</div>
+        <h3>Даём отчёт владельцу + ТЗ разработчику</h3>
+        <p>Оценка 0–100, три приоритетных действия, селектор, фрагмент кода и что именно поправить.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Report Preview -->
+<section class="landing-section landing-report">
+  <div class="landing-container">
+    <h2>Как выглядит отчёт</h2>
+    <div class="report-preview">
+      <div class="report-mock">
+        <div class="report-header">
+          <span class="report-score success">87/100</span>
+          <span class="report-label">Хорошо</span>
+        </div>
+        <div class="report-actions">
+          <h4>Что сделать в первую очередь:</h4>
+          <ol>
+            <li><strong>Кнопку нельзя нажать</strong> — её перекрывает баннер. <code>#cta</code> — убрать перекрывающий элемент или поднять z-index.</li>
+            <li><strong>Недостаточный контраст</strong> — текст на фоне не читается. <code>.price</code> — увеличить контраст до 4.5:1.</li>
+            <li><strong>Поле без подписи</strong> — скринридер не прочитает. <code>input[name="email"]</code> — добавить <label>.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Comparison -->
+<section class="landing-section landing-compare">
+  <div class="landing-container">
+    <h2>Почему не Lighthouse / uptime / ручной аудит?</h2>
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Lighthouse</th>
+          <th>Ручной аудит</th>
+          <th>Uptime-мониторинг</th>
+          <th class="highlight-col">webscope</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Что проверяет</td>
+          <td>Метрики и правила</td>
+          <td>Всё, вручную</td>
+          <td>Сервер отвечает</td>
+          <td class="highlight-col"><strong>Клики, формы, заявки</strong></td>
+        </tr>
+        <tr>
+          <td>Когда</td>
+          <td>Разово</td>
+          <td>Раз в 2–3 недели</td>
+          <td>24/7, поверхностно</td>
+          <td class="highlight-col"><strong>Еженедельно + дифф</strong></td>
+        </tr>
+        <tr>
+          <td>Язык отчёта</td>
+          <td>Технический</td>
+          <td>Экспертный</td>
+          <td>Технический</td>
+          <td class="highlight-col"><strong>Владельца сайта</strong></td>
+        </tr>
+        <tr>
+          <td>Цена</td>
+          <td>$0</td>
+          <td>$200–3 000</td>
+          <td>$6–35/мес</td>
+          <td class="highlight-col"><strong>Starter $19/мес</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Plans -->
+<section class="landing-section landing-plans">
+  <div class="landing-container">
+    <h2>Простой выбор</h2>
+    <div class="plans-grid">
+      <div class="plan-card">
+        <div class="plan-name">Free</div>
+        <div class="plan-price">$0 <span>/ навсегда</span></div>
+        <ul class="plan-features">
+          <li>5 находок всего</li>
+          <li>1 сайт</li>
+          <li>Ручной запуск</li>
+          <li>PDF/JSON отчёты</li>
+        </ul>
+        <a href="/sites/new" class="btn btn-outline btn-block">Начать</a>
+      </div>
+      <div class="plan-card popular">
+        <div class="plan-badge">Популярный</div>
+        <div class="plan-name">Starter</div>
+        <div class="plan-price">$19 <span>/ мес</span></div>
+        <ul class="plan-features">
+          <li>200 находок/мес</li>
+          <li>5 сайтов</li>
+          <li>Еженедельные проверки</li>
+          <li>Дифф с прошлым прогоном</li>
+          <li>Telegram/Email алерты</li>
+          <li>Приоритетная очередь</li>
+        </ul>
+        <a href="/sites/new" class="btn btn-primary btn-block">Попробовать</a>
+      </div>
+      <div class="plan-card">
+        <div class="plan-name">Pro</div>
+        <div class="plan-price">$59 <span>/ мес</span></div>
+        <ul class="plan-features">
+          <li>1 000 находок/мес</li>
+          <li>25 сайтов</li>
+          <li>Все Starter фичи</li>
+          <li>SARIF для GitHub</li>
+          <li>API доступ</li>
+          <li>Свои правила</li>
+        </ul>
+        <a href="/sites/new" class="btn btn-outline btn-block">Связаться</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Security -->
+<section class="landing-section landing-security">
+  <div class="landing-container">
+    <h2>Безопасность — не опция, а основа</h2>
+    <div class="security-grid">
+      <div class="security-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <h4>SSRF защита</h4>
+        <p>Только http/https, private IP заблокированы. Сканер не достучится до внутренней сети.</p>
+      </div>
+      <div class="security-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <h4>Креды — только хосту сайта</h4>
+        <p>Authorization и Cookie уходят только на домен проверяемого сайта, не на CDN и трекеры.</p>
+      </div>
+      <div class="security-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <h4>robots.txt уважается</h4>
+        <p>По умолчанию сканер соблюдает robots.txt. Отключается галочкой для своих сайтов.</p>
+      </div>
+      <div class="security-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <h4>Пароли локально</h4>
+        <p>Креденшеалы для входа хранятся зашифрованно (Fernet), только для авторизации при проверке.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="landing-section landing-cta-section">
+  <div class="landing-container">
+    <h2>Сайт ломается тихо. Давайте слышать это первыми.</h2>
+    <p class="landing-cta-text">Первые 5 находок бесплатно. Без карты. Запуск за 30 секунд.</p>
+    <a href="/sites/new" class="btn btn-primary btn-lg">Проверить мой сайт</a>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<style>
+  /* Landing page styles */
+  .landing-hero {
+    padding: 80px 0 60px;
+    text-align: center;
+    background: linear-gradient(180deg, var(--bg) 0%, var(--card-bg) 100%);
+  }
+  .landing-hero h1 {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    line-height: 1.2;
+    margin-bottom: 1rem;
+    font-weight: 700;
+  }
+  .landing-subtitle {
+    font-size: clamp(1.1rem, 2.5vw, 1.4rem);
+    color: var(--muted);
+    margin-bottom: 2rem;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .landing-cta {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+  }
+  .landing-trust {
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  
+  .landing-section {
+    padding: 60px 0;
+  }
+  .landing-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+  .landing-section h2 {
+    text-align: center;
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    margin-bottom: 3rem;
+  }
+  
+  /* Problem */
+  .landing-problem {
+    background: var(--card-bg);
+  }
+  .problem-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+  }
+  .problem-card {
+    padding: 2rem;
+    background: var(--bg);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+  .problem-icon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 1rem;
+    color: var(--primary);
+  }
+  .problem-card h3 {
+    margin-bottom: 0.5rem;
+  }
+  .problem-card p {
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  
+  /* Solution */
+  .steps-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
+  }
+  .step-card {
+    padding: 2rem;
+    background: var(--card-bg);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    position: relative;
+  }
+  .step-number {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+  }
+  .step-card h3 {
+    margin-bottom: 0.5rem;
+  }
+  .step-card p {
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  
+  /* Report Preview */
+  .landing-report {
+    background: var(--card-bg);
+  }
+  .report-preview {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .report-mock {
+    background: var(--bg);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    padding: 2rem;
+  }
+  .report-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .report-score {
+    font-size: 2rem;
+    font-weight: 700;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+  }
+  .report-score.success {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--success);
+  }
+  .report-label {
+    color: var(--muted);
+  }
+  .report-actions ol {
+    padding-left: 1.2rem;
+  }
+  .report-actions li {
+    margin-bottom: 0.75rem;
+    line-height: 1.5;
+  }
+  .report-actions code {
+    background: var(--bg);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85em;
+  }
+  
+  /* Comparison */
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  .compare-table th,
+  .compare-table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .compare-table th {
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .compare-table tr:last-child td {
+    border-bottom: none;
+  }
+  .compare-table tr:hover td {
+    background: var(--card-bg);
+  }
+  .highlight-col {
+    background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.05));
+    font-weight: 500;
+  }
+  
+  /* Plans */
+  .plans-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    align-items: stretch;
+  }
+  .plan-card {
+    padding: 2rem;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .plan-card.popular {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+  }
+  .plan-badge {
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--primary);
+    color: white;
+    padding: 0.25rem 1rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .plan-name {
+    font-weight: 600;
+    font-size: 1.2rem;
+    margin-bottom: 0.5rem;
+  }
+  .plan-price {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+  }
+  .plan-price span {
+    font-size: 1rem;
+    font-weight: 400;
+    color: var(--muted);
+  }
+  .plan-features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1.5rem;
+    flex: 1;
+  }
+  .plan-features li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .plan-features li:last-child {
+    border-bottom: none;
+  }
+  .plan-features li::before {
+    content: "✓";
+    color: var(--success);
+    font-weight: bold;
+  }
+  .btn-block {
+    width: 100%;
+    text-align: center;
+  }
+  
+  /* Security */
+  .security-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+  }
+  .security-item {
+    padding: 1.5rem;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    text-align: center;
+  }
+  .security-item svg {
+    width: 40px;
+    height: 40px;
+    color: var(--primary);
+    margin-bottom: 1rem;
+  }
+  .security-item h4 {
+    margin-bottom: 0.5rem;
+  }
+  .security-item p {
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  
+  /* CTA Section */
+  .landing-cta-section {
+    background: var(--card-bg);
+    text-align: center;
+    padding: 80px 0;
+  }
+  .landing-cta-section h2 {
+    margin-bottom: 1rem;
+  }
+  .landing-cta-text {
+    color: var(--muted);
+    margin-bottom: 2rem;
+    font-size: 1.1rem;
+  }
+  
+  /* Responsive */
+  @media (max-width: 640px) {
+    .landing-hero {
+      padding: 60px 0 40px;
+    }
+    .landing-section {
+      padding: 40px 0;
+    }
+  }
+</style>
+{% endblock %}
