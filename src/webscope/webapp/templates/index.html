@@ -401,6 +401,7 @@
       </div>
       {% if item.run and item.run.status == 'ok' %}
       <div class="site-row-score">{{ item.run.score }}/100</div>
+      <a class="site-row-history" href="/sites/{{ item.site.id }}/history" title="История проверок">📜</a>
       {% elif item.run and item.run.status == 'error' %}
       <div class="site-row-score status-error" title="{{ item.run.error or '' }}">!</div>
       {% else %}
