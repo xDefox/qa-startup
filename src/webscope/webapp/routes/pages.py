@@ -148,6 +148,9 @@ def site_page(request: Request, site_id: int, state: AppState = Depends(get_stat
     last_error = newest.error if newest and newest.status == "error" else None
     view = build_report_view(state.storage, last) if last else None
 
+    # Все успешные прогоны для dropdown выбора итерации
+    runs = [run for run in state.storage.list_runs(site.id, limit=60) if run.status == "ok"]
+
     org = get_organization(state.storage, site.organization_id) if site.organization_id else None
     organization_name = org.name if org else None
 
@@ -166,6 +169,8 @@ def site_page(request: Request, site_id: int, state: AppState = Depends(get_stat
             "download_default_name": default_report_stem(site, last) if last else None,
             "download_date": human_date(last.started_at) if last else None,
             "organization_name": organization_name,
+            "runs": runs,
+            "current_run_id": last.id if last else None,
         },
     )
 

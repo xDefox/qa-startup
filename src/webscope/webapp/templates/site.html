@@ -63,7 +63,7 @@
       <button type="submit">Проверить ещё раз</button>
     </form>
     <div class="actions">
-      <a class="pill" href="/sites/{{ site.id }}/history" style="font-weight: 600;">📜 История проверок</a>
+      <a class="pill" href="/sites/{{ site.id }}/history">История проверок</a>
     </div>
     <div class="actions">
       <a class="pill" href="/sites/{{ site.id }}/settings">Настройки</a>
@@ -130,6 +130,18 @@
       <h2 class="findings-title">Все находки ({{ view.total }})</h2>
       {% if view.has_external %}
       <span class="muted small" style="font-weight:400;">из них в чужих виджетах: {{ view.external_total }}</span>
+      {% endif %}
+      {% if runs and runs|length > 1 %}
+      <div class="run-selector" style="margin: 8px 0;">
+        <label for="run-select" class="muted small">Итерация:</label>
+        <select id="run-select" class="run-select" onchange="window.location.href='/sites/{{ site.id }}/runs/' + this.value">
+          {% for run in runs %}
+          <option value="{{ run.id }}" {% if run.id == current_run_id %}selected{% endif %}>
+            {{ run.finished_at[:16].replace('T', ' ') if run.finished_at else run.started_at[:16].replace('T', ' ') }} · {{ run.score }}/100 · {{ run.pages_scanned }} стр.
+          </option>
+          {% endfor %}
+        </select>
+      </div>
       {% endif %}
       <span class="view-toggle" role="group" aria-label="Как показать находки">
         <button type="button" class="view-btn" data-view="list" aria-label="Списком" title="Списком" aria-pressed="true">
