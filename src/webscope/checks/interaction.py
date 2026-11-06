@@ -88,7 +88,11 @@ COLLECT = r"""
       let blocked = false;
       let blocker = null;
       if (topEl && topEl !== el && !el.contains(topEl)) {
-        if (sameHrefReachable(topEl, el.href || '')) {
+        // Если у блокера pointer-events: none — клики проходят сквозь, это не блокер
+        const blockerStyle = getComputedStyle(topEl);
+        if (blockerStyle.pointerEvents === 'none') {
+          blocked = false;
+        } else if (sameHrefReachable(topEl, el.href || '')) {
           // Клик доходит до ссылки с той же целью — кнопка работает.
           blocked = false;
         } else if (interactive(topEl) && wrapperTransparent(topEl)) {

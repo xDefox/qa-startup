@@ -77,7 +77,7 @@
         {% for run in runs %}
         {% set bucket = counts.get(run.id, {}) %}
         <tr>
-          <td>{{ run.finished_at[:16].replace('T', ' ') if run.finished_at else run.started_at[:16].replace('T', ' ') }}</td>
+          <td><a href="/sites/{{ site.id }}/runs/{{ run.id }}">{{ run.finished_at[:16].replace('T', ' ') if run.finished_at else run.started_at[:16].replace('T', ' ') }}</a></td>
           <td>{% if run.status == 'ok' %}Ок{% elif run.status == 'error' %}Ошибка{% else %}{{ run.status }}{% endif %}</td>
           <td class="num">{% if run.status == 'ok' %}<b>{{ run.score }}</b>{% else %}—{% endif %}</td>
           <td class="num">{% if run.status == 'ok' %}{{ bucket.get('critical', 0) }}{% else %}—{% endif %}</td>

@@ -188,6 +188,37 @@ def site_history(request: Request, site_id: int, state: AppState = Depends(get_s
     return _page(state, request, "history.html", {"site": site, "runs": runs, "counts": counts})
 
 
+@router.get("/sites/{site_id}/runs/{run_id}", response_class=HTMLResponse)
+def run_detail(request: Request, site_id: int, run_id: int, state: AppState = Depends(get_state)):
+    """Детальный отчёт конкретного прогона."""
+    site = get_site_or_404(state, site_id)
+    run = state.storage.get_run(run_id)
+    if not run or run.site_id != site.id:
+        raise HTTPException(status_code=404, detail="Прогон не найден")
+    
+    findings = state.storage.get_findings(run.id)
+    # Создаём временный ScanResult для рендеринга
+    from ..models import ScanResult
+    result = ScanResult(
+        url=site.url,
+        final_url=run.final_url,
+        title=run.title,
+        archetype=run.archetype,
+        findings=findings,
+        duration_ms=run.duration_ms,
+        pages_scanned=run.pages_scanned,
+        notes=run.notes or [],
+    )
+    view = build_report_view(result, state.storage)
+    return _page(state, request, "site.html", {
+        "site": site,
+        "result": result,
+        "view": view,
+        "run": run,
+        "is_history": True,
+    })
+
+
 @router.get("/sites/{site_id}/settings", response_class=HTMLResponse)
 def site_settings(request: Request, site_id: int, state: AppState = Depends(get_state), saved: bool = False):
     site = get_site_or_404(state, site_id)
