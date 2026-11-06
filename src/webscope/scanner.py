@@ -877,10 +877,24 @@ def scan_site(
 
     with sync_playwright() as playwright:
         browser = _launch_chromium(playwright, headless)
+        # Realistic browser headers to bypass 403/anti-bot measures
+        extra_headers = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Language": "en-US,en;q=0.9,ru;q=0.8",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        }
         context = browser.new_context(
             viewport={"width": 1280, "height": 800},
             user_agent=user_agent,
             ignore_https_errors=False,
+            extra_http_headers=extra_headers,
             # basic-креды — только origin'ам сайта: extra_http_headers шлёт
             # Authorization на каждый запрос контекста, включая чужие CDN
             http_credentials=_browser_http_credentials(auth, root_url),

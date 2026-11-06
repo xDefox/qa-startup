@@ -300,7 +300,7 @@ WCAG и не являются юридическим заключением о �
 </html>"""
 
 
-def render_pdf(result: ScanResult) -> str:
+def render_pdf(result: ScanResult) -> bytes:
     """PDF-отчёт — автономный файл (fpdf2), можно скачать или открыть в браузере."""
     from fpdf import FPDF
 
@@ -319,58 +319,287 @@ def render_pdf(result: ScanResult) -> str:
     fu = result.final_url or result.url
 
     pdf = FPDF()
+    # Add Unicode font for Cyrillic support
+    pdf.add_font("LiberationSans", "", "/usr/share/fonts/liberation/LiberationSans-Regular.ttf", uni=True)
+    pdf.add_font("LiberationSans", "B", "/usr/share/fonts/liberation/LiberationSans-Bold.ttf", uni=True)
+    pdf.add_font("LiberationSans", "I", "/usr/share/fonts/liberation/LiberationSans-Italic.ttf", uni=True)
+    pdf.add_font("LiberationSans", "BI", "/usr/share/fonts/liberation/LiberationSans-BoldItalic.ttf", uni=True)
     pdf.add_page()
-    pdf.set_font("Helvetica", size=12)
+    pdf.set_font("LiberationSans", size=11)
 
-    # Заголовок
-    pdf.cell(0, 10, "webscope — отчёт по сканированию", ln=True, align="C")
-    pdf.ln(5)
-    pdf.cell(0, 10, f"URL: {fu}", ln=True)
+    # Color constants
+    COLOR_PRIMARY = (37, 99, 235)      # Blue
+    COLOR_SUCCESS = (34, 197, 94)      # Green
+    COLOR_WARNING = (234, 179, 8)      # Yellow
+    COLOR_DANGER = (239, 68, 68)       # Red
+    COLOR_GRAY = (107, 114, 128)       # Gray
+    COLOR_LIGHT_BG = (243, 244, 246)   # Light gray background
+    COLOR_WHITE = (255, 255, 255)
+
+    def section_title(title: str):
+        pdf.set_font("LiberationSans", "B", 14)
+        pdf.set_text_color(*COLOR_PRIMARY)
+        pdf.cell(0, 10, title, ln=True)
+        pdf.set_draw_color(*COLOR_PRIMARY)
+        pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+        pdf.ln(4)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("LiberationSans", size=11)
+
+    def subsection_title(title: str):
+        pdf.set_font("LiberationSans", "B", 12)
+        pdf.set_text_color(*COLOR_GRAY)
+        pdf.cell(0, 8, title, ln=True)
+        pdf.ln(2)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("LiberationSans", size=11)
+
+    def body_text(text: str):
+        pdf.multi_cell(0, 6, text)
+        pdf.ln(2)
+
+    def severity_badge(severity: str) -> tuple:
+        """Return (bg_color, text_color) for severity."""
+        if severity == "critical":
+            return COLOR_DANGER, COLOR_WHITE
+        elif severity == "serious":
+            return (249, 115, 22), COLOR_WHITE  # Orange
+        elif severity == "moderate":
+            return COLOR_WARNING, (0, 0, 0)
+        else:
+            return COLOR_GRAY, COLOR_WHITE
+
+    # ========== HEADER ==========
+    pdf.set_fill_color(*COLOR_PRIMARY)
+    pdf.rect(0, 0, pdf.w, 45, "F")
+    pdf.set_y(8)
+    pdf.set_font("LiberationSans", "B", 22)
+    pdf.set_text_color(*COLOR_WHITE)
+    pdf.cell(0, 12, "webscope", ln=True, align="C")
+    pdf.set_font("LiberationSans", size=11)
+    pdf.cell(0, 8, "Отчёт по сканированию качества сайта", ln=True, align="C")
+    pdf.ln(6)
+    pdf.set_text_color(0, 0, 0)
+
+    # ========== SITE INFO ==========
+    section_title("Информация о сайте")
+    pdf.set_font("LiberationSans", "B", 11)
+    pdf.cell(25, 7, "URL:")
+    pdf.set_font("LiberationSans", size=11)
+    pdf.cell(0, 7, fu, ln=True)
     if result.title:
-        pdf.cell(0, 10, f"Название: {result.title}", ln=True)
-    pdf.ln(5)
+        pdf.set_font("LiberationSans", "B", 11)
+        pdf.cell(25, 7, "Название:")
+        pdf.set_font("LiberationSans", size=11)
+        pdf.cell(0, 7, result.title, ln=True)
+    pdf.set_font("LiberationSans", "B", 11)
+    pdf.cell(25, 7, "Дата:")
+    pdf.set_font("LiberationSans", size=11)
+    from datetime import datetime, UTC
+    pdf.cell(0, 7, datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"), ln=True)
+    pdf.ln(3)
 
-    # Сводка
-    fp_count = sum(1 for f in result.findings if is_false_positive(f))
-    pdf.cell(0, 10, f"Оценка: {score}/100 — {score_label(score)}", ln=True)
-    if fp_count:
-        pdf.cell(0, 10, f"Ложных срабатываний (FP): {fp_count} — исключены из оценки", ln=True)
-    pdf.cell(0, 10, f"Проверено страниц: {result.pages_scanned}", ln=True)
-    pdf.ln(5)
-
-    # Найденные проблемы
-    own = [f for f in result.findings if is_site_defect(f) and not is_false_positive(f)]
-    if not own:
-        pdf.cell(0, 10, "Проблем не найдено.", ln=True)
+    # ========== SCORE SUMMARY ==========
+    section_title("Сводка результатов")
+    
+    # Score box
+    pdf.set_fill_color(*COLOR_LIGHT_BG)
+    pdf.rect(pdf.l_margin, pdf.get_y(), pdf.w - pdf.l_margin - pdf.r_margin, 28, "F")
+    pdf.set_xy(pdf.l_margin + 5, pdf.get_y() + 3)
+    
+    # Score circle simulation
+    if score >= 80:
+        score_color = COLOR_SUCCESS
+    elif score >= 60:
+        score_color = COLOR_WARNING
+    elif score >= 40:
+        score_color = (249, 115, 22)
     else:
-        # Топ-3 действия
+        score_color = COLOR_DANGER
+    
+    pdf.set_font("LiberationSans", "B", 10)
+    pdf.set_text_color(*COLOR_GRAY)
+    pdf.cell(40, 7, "ОЦЕНКА САЙТА", ln=True)
+    pdf.set_x(pdf.l_margin + 5)
+    pdf.set_font("LiberationSans", "B", 36)
+    pdf.set_text_color(*score_color)
+    pdf.cell(40, 18, f"{score}/100", ln=True)
+    pdf.set_x(pdf.l_margin + 5)
+    pdf.set_font("LiberationSans", size=10)
+    pdf.set_text_color(*COLOR_GRAY)
+    pdf.cell(0, 6, score_label(score), ln=True)
+    pdf.ln(6)
+    pdf.set_text_color(0, 0, 0)
+
+    # Metrics row
+    fp_count = sum(1 for f in result.findings if is_false_positive(f))
+    critical_count = sum(1 for f in own if f.severity.value == "critical")
+    serious_count = sum(1 for f in own if f.severity.value == "serious")
+    moderate_count = sum(1 for f in own if f.severity.value == "moderate")
+    minor_count = sum(1 for f in own if f.severity.value == "minor")
+
+    col_w = (pdf.w - pdf.l_margin - pdf.r_margin) / 5
+    metrics = [
+        ("Страниц", str(result.pages_scanned), COLOR_PRIMARY),
+        ("Всего проблем", str(len(own)), COLOR_GRAY),
+        ("Критично", str(critical_count), COLOR_DANGER),
+        ("Существенно", str(serious_count), (249, 115, 22)),
+        ("Желательно", str(moderate_count), COLOR_WARNING),
+    ]
+    
+    for i, (label, value, color) in enumerate(metrics):
+        x = pdf.l_margin + i * col_w
+        pdf.set_xy(x, pdf.get_y())
+        pdf.set_fill_color(*COLOR_LIGHT_BG)
+        pdf.rect(x, pdf.get_y(), col_w, 16, "F")
+        pdf.set_xy(x, pdf.get_y() + 2)
+        pdf.set_font("LiberationSans", size=8)
+        pdf.set_text_color(*COLOR_GRAY)
+        pdf.cell(col_w, 5, label, align="C")
+        pdf.set_xy(x, pdf.get_y() + 5)
+        pdf.set_font("LiberationSans", "B", 14)
+        pdf.set_text_color(*color)
+        pdf.cell(col_w, 8, value, align="C")
+    pdf.ln(18)
+    pdf.set_text_color(0, 0, 0)
+
+    if fp_count:
+        pdf.set_font("LiberationSans", "I", 10)
+        pdf.set_text_color(*COLOR_GRAY)
+        pdf.cell(0, 7, f"Ложных срабатываний (FP): {fp_count} — исключены из оценки", ln=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(3)
+
+    # ========== TOP ACTIONS ==========
+    if own:
         actions = top_actions(own, limit=3)
         if actions:
-            pdf.cell(0, 10, "ЧТО СДЕЛАТЬ В ПЕРВУЮ ОЧЕРЕДЬ", ln=True)
+            section_title("Приоритетные действия (Топ-3)")
             for index, finding in enumerate(actions, start=1):
                 meaning, fix = plain_impact(finding)
-                pdf.cell(0, 10, f"  {index}. {meaning}", ln=True)
-                pdf.cell(0, 10, f"     Что сделать: {fix}", ln=True)
+                
+                # Action card background
+                y_start = pdf.get_y()
+                pdf.set_fill_color(*COLOR_LIGHT_BG)
+                pdf.rect(pdf.l_margin, y_start, pdf.w - pdf.l_margin - pdf.r_margin, 28, "F")
+                pdf.set_xy(pdf.l_margin + 3, y_start + 2)
+                
+                # Number badge
+                pdf.set_font("LiberationSans", "B", 10)
+                pdf.set_fill_color(*COLOR_PRIMARY)
+                pdf.set_text_color(*COLOR_WHITE)
+                pdf.cell(8, 6, f" {index} ", fill=True, align="C")
+                pdf.set_text_color(0, 0, 0)
+                pdf.set_font("LiberationSans", "B", 11)
+                pdf.cell(0, 6, f" {meaning}", ln=True)
+                
+                pdf.set_x(pdf.l_margin + 12)
+                pdf.set_font("LiberationSans", size=10)
+                pdf.set_text_color(*COLOR_GRAY)
+                pdf.multi_cell(pdf.w - pdf.l_margin - pdf.r_margin - 12, 5, f"Что сделать: {fix}")
+                
                 if finding.url:
-                    pdf.cell(0, 10, f"     Страница: {finding.url}", ln=True)
-            pdf.ln(5)
+                    pdf.set_x(pdf.l_margin + 12)
+                    pdf.set_font("LiberationSans", "I", 9)
+                    pdf.cell(0, 5, f"Страница: {finding.url}", ln=True)
+                pdf.ln(4)
+                pdf.set_text_color(0, 0, 0)
+            pdf.ln(3)
 
-        # Блокирующие клики
+        # ========== FINDINGS TABLE BY SEVERITY ==========
+        section_title("Детальный список проблем")
+
+        # Group by severity
+        from collections import defaultdict
+        by_severity = defaultdict(list)
+        for f in own:
+            by_severity[f.severity.value].append(f)
+
+        severity_order = ["critical", "serious", "moderate", "minor"]
+        severity_labels = {
+            "critical": "Критичные",
+            "serious": "Существенные",
+            "moderate": "Желательные",
+            "minor": "Мелкие",
+        }
+
+        for sev in severity_order:
+            findings_sev = by_severity.get(sev, [])
+            if not findings_sev:
+                continue
+
+            subsection_title(f"{severity_labels[sev]} ({len(findings_sev)})")
+
+            # Table header
+            pdf.set_font("LiberationSans", "B", 9)
+            pdf.set_fill_color(*COLOR_LIGHT_BG)
+            col_rule = (pdf.w - pdf.l_margin - pdf.r_margin) * 0.35
+            col_page = (pdf.w - pdf.l_margin - pdf.r_margin) * 0.25
+            col_desc = (pdf.w - pdf.l_margin - pdf.r_margin) * 0.40
+            
+            pdf.cell(col_rule, 7, "Правило", border=1, fill=True, align="C")
+            pdf.cell(col_page, 7, "Страница", border=1, fill=True, align="C")
+            pdf.cell(col_desc, 7, "Описание", border=1, fill=True, align="C")
+            pdf.ln()
+
+            # Table rows
+            pdf.set_font("LiberationSans", size=8)
+            for f in findings_sev[:15]:  # Limit to 15 per severity
+                rule_short = f.rule
+                if len(rule_short) > 28:
+                    rule_short = rule_short[:25] + "..."
+                page_url = f.url or "-"
+                if len(page_url) > 25:
+                    page_url = page_url[:22] + "..."
+                desc = f.message
+                if len(desc) > 45:
+                    desc = desc[:42] + "..."
+
+                bg_color = COLOR_LIGHT_BG if findings_sev.index(f) % 2 == 0 else COLOR_WHITE
+                pdf.set_fill_color(*bg_color)
+                pdf.cell(col_rule, 6, rule_short, border=1, fill=True)
+                pdf.cell(col_page, 6, page_url, border=1, fill=True)
+                pdf.cell(col_desc, 6, desc, border=1, fill=True)
+                pdf.ln()
+
+            if len(findings_sev) > 15:
+                pdf.set_font("LiberationSans", "I", 8)
+                pdf.set_text_color(*COLOR_GRAY)
+                pdf.cell(0, 5, f"  ... и ещё {len(findings_sev) - 15} проблем этой категории", ln=True)
+                pdf.set_text_color(0, 0, 0)
+            pdf.ln(4)
+
+        # ========== BLOCKING CLICKS ==========
         blockers = group_by_rule([f for f in own if f.rule == "interaction/button-blocked"])
         if blockers:
-            pdf.cell(0, 10, "БЛОКИРУЕТ КЛИКИ — нельзя нажать кнопку/ссылку (критично)", ln=True)
+            section_title("Блокирующие клики — нельзя нажать кнопку/ссылку (критично)")
             for group in blockers:
                 meaning, fix = group["meaning"], group["fix"]
-                pdf.cell(0, 10, f"  • {meaning}", ln=True)
+                body_text(f"• {meaning}")
                 if group["examples"]:
-                    pdf.cell(0, 10, f"    Где: {group['examples'][0]}", ln=True)
-                pdf.cell(0, 10, f"    Что сделать: {fix}", ln=True)
+                    body_text(f"  Где: {group['examples'][0]}")
+                body_text(f"  Что сделать: {fix}")
+            pdf.ln(3)
 
-    pdf.ln(5)
-    pdf.cell(0, 10, "Отчёт сформирован автоматически.", ln=True)
-    pdf.cell(0, 10, "Автоматизированные проверки покрывают лишь часть критериев WCAG.", ln=True)
+    else:
+        section_title("Результат")
+        pdf.set_font("LiberationSans", "B", 14)
+        pdf.set_text_color(*COLOR_SUCCESS)
+        pdf.cell(0, 10, "Проблем не найдено — отличный результат!", ln=True, align="C")
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(5)
 
-    return pdf.output(destination="S").encode("utf-8")
+    # ========== FOOTER ==========
+    pdf.ln(10)
+    pdf.set_draw_color(*COLOR_GRAY)
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+    pdf.ln(3)
+    pdf.set_font("LiberationSans", "I", 9)
+    pdf.set_text_color(*COLOR_GRAY)
+    pdf.multi_cell(0, 5, "Отчёт сформирован автоматически системой webscope. Автоматизированные проверки покрывают лишь часть критериев WCAG — для полного аудита доступности рекомендуется ручная проверка специалистом.")
+    pdf.set_text_color(0, 0, 0)
+
+    return bytes(pdf.output())
 
 
 def render_plain(result: ScanResult) -> str:
