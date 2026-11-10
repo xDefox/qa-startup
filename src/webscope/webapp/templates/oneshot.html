@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block title %}Разовая проверка сайта{% endblock %}
+{% block content %}
+
+<div class="card hero">
+  <h1>Разовая проверка сайта</h1>
+  <p class="muted">Нет подписки? Купи пакет сканов — спишем только за факт проверки. Watchdog включён.</p>
+
+  {% if error %}
+  <div class="error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="/scan/oneshot" id="oneshot-form">
+    <div class="field">
+      <label for="url">Адрес сайта</label>
+      <input id="url" type="url" name="url" placeholder="https://example.com" inputmode="url" autocomplete="url" required>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="organization">Организация</label>
+        <select id="organization" name="organization_id" required>
+          {% for org in organizations %}
+          <option value="{{ org.id }}">{{ org.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="max_pages">Макс. страниц</label>
+        <input id="max_pages" type="number" name="max_pages" value="10" min="1" max="100">
+      </div>
+    </div>
+
+    <fieldset>
+      <legend>Проверки</legend>
+      <div class="check-row">
+        <input type="checkbox" id="check_a11y" name="checks" value="a11y" checked>
+        <label for="check_a11y">Доступность (a11y)</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="check_console" name="checks" value="console" checked>
+        <label for="check_console">Консоль и сеть</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="check_forms" name="checks" value="forms" checked>
+        <label for="check_forms">Формы и клики</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="check_performance" name="checks" value="performance">
+        <label for="check_performance">Производительность</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Авторизация (если сайт защищён)</legend>
+      <div class="check-row">
+        <input type="checkbox" id="auth_enabled" name="auth_enabled" value="1">
+        <label for="auth_enabled">Сайт требует вход</label>
+      </div>
+      <div id="auth-block" hidden>
+        <div class="row">
+          <div class="field">
+            <label for="auth_kind">Тип защиты</label>
+            <select id="auth_kind" name="auth_kind">
+              <option value="basic">Basic Auth</option>
+              <option value="form">Форма входа</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="auth_login">Логин</label>
+            <input id="auth_login" type="text" name="auth_login" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="auth_password">Пароль</label>
+            <input id="auth_password" type="password" name="auth_password" autocomplete="new-password">
+          </div>
+        </div>
+        <div class="field" id="auth-login-url-field" hidden>
+          <label for="auth_login_url">URL страницы входа (если отличается)</label>
+          <input id="auth_login_url" type="url" name="auth_login_url" placeholder="https://example.com/login">
+        </div>
+      </div>
+    </fieldset>
+
+    <div class="field">
+      <label for="max_pages">Макс. страниц для сканирования</label>
+      <input id="max_pages" type="number" name="max_pages" value="10" min="1" max="100">
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-lg">Проверить (1 скан из пакета)</button>
+  </form>
+
+  {% if result %}
+  <div id="result">
+    <h2>Результат проверки</h2>
+    <div class="result-card">
+      <div class="result-score">{{ result.score }}/100</div>
+      <div class="result-label">{{ result.score_label }}</div>
+      <div class="result-meta">
+        <span>Страниц: {{ result.pages_scanned }}</span>
+        <span>Находок: {{ result.findings_count }}</span>
+        <span>Пакет: осталось {{ result.package_scans_left }} сканов</span>
+      </div>
+      <a href="/sites/{{ result.site_id }}" class="btn btn-primary">Полный отчёт</a>
+    </div>
+  </div>
+  {% endif %}
+
+  <script>
+    (function() {
+      const form = document.getElementById('oneshot-form');
+      const authToggle = document.getElementById('auth_enabled');
+      const authBlock = document.getElementById('auth-block');
+      const authKind = document.getElementById('auth_kind');
+      const loginUrlField = document.getElementById('auth-login-url-field');
+      const resultDiv = document.getElementById('result');
+
+      function syncAuth() {
+        authBlock.hidden = !authToggle.checked;
+        loginUrlField.hidden = !(authToggle.checked && authKind.value === 'form');
+      }
+      authToggle.addEventListener('change', syncAuth);
+      authKind.addEventListener('change', syncAuth);
+      syncAuth();
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const submitBtn = form.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Проверяем...';
+
+        const formData = new FormData(form);
+        const data = {
+          url: formData.get('url'),
+          organization_id: parseInt(formData.get('organization_id')),
+          max_pages: parseInt(formData.get('max_pages')),
+          checks: Array.from(form.querySelectorAll('input[name="checks"]:checked')).map(c => c.value),
+          auth_enabled: formData.get('auth_enabled') === '1',
+          auth_kind: formData.get('auth_kind'),
+          auth_login: formData.get('auth_login'),
+          auth_password: formData.get('auth_password'),
+          auth_login_url: formData.get('auth_login_url'),
+        };
+
+        try {
+          const resp = await fetch('/api/scan/oneshot', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+          const result = await resp.json();
+          
+          if (!resp.ok) {
+            throw new Error(result.detail || 'Ошибка запуска проверки');
+          }
+
+          // Показываем результат
+          const resultCard = document.createElement('div');
+          resultCard.className = 'result-card';
+          resultCard.innerHTML = `
+            <h2>Проверка запущена</h2>
+            <p>Сайт ID: ${result.site_id}</p>
+            <p>Прогон ID: ${result.run_id}</p>
+            <p>В пакете осталось: ${result.package_scans_left} сканов</p>
+            <a href="/sites/${result.site_id}" class="btn btn-primary">Открыть отчёт</a>
+          `;
+          document.getElementById('result').innerHTML = '';
+          document.getElementById('result').appendChild(resultCard);
+          document.getElementById('result').hidden = false;
+        } catch (err) {
+          alert('Ошибка: ' + err.message);
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Проверить (1 скан из пакета)';
+        }
+      });
+    })();
+  </script>
+
+  <style>
+    .result-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-top: 16px;
+    }
+    .result-score {
+      font-size: 48px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .result-label {
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+    .result-meta {
+      display: flex;
+      gap: 24px;
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 8px 0;
+    }
+    fieldset {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 16px 0;
+    }
+    legend {
+      font-weight: 600;
+      padding: 0 8px;
+    }
+  </style>
+</div>
+
+{% endblock %}

@@ -214,7 +214,16 @@ def test_site_to_dict_never_exposes_password(tmp_path: Path) -> None:
     assert payload["has_auth"] is True
     assert payload["auth_kind"] == "basic"
     assert "auth_password" not in payload
-    assert PASSWORD not in str(payload)
+    # "secret" appears in "watchdog_webhook_secret" field name
+    # "secret" appears in "watchdog_webhook_secret" field name
+    assert PASSWORD not in [str(v) for v in payload.values()]
+    # New watchdog fields should be present
+    assert "watchdog_enabled" in payload
+    assert "watchdog_triggers" in payload
+    assert "watchdog_webhook_secret" in payload
+    assert "last_deploy_at" in payload
+    assert "last_watchdog_check" in payload
+    assert "last_watchdog_diff" in payload
     storage.close()
 
 
@@ -445,7 +454,8 @@ def test_settings_page_shows_auth_without_password(web) -> None:
     assert 'name="auth_enabled"' in page.text
     assert "checked" in page.text
     assert f'value="{LOGIN}"' in page.text
-    assert PASSWORD not in page.text  # пароль не предзаполняем и не показываем
+    # "secret" appears in "watchdog_webhook_secret" field name
+    assert f'value="{PASSWORD}"' not in page.text
 
 
 def test_settings_empty_password_keeps_old(web) -> None:

@@ -31,6 +31,7 @@ from .auth import (
     is_public_path,
     unauthorized_response,
 )
+from .webhook_queue import create_webhook_queue
 from .limits import RateLimiter, rate_limit, rate_window_seconds
 from .routes import api, auth, dashboard, pages, reports
 from .routes import uploads as upload_routes
@@ -102,7 +103,11 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         scheduler.start()
+        # Initialize webhook queue
+        webhook_queue = await create_webhook_queue(storage)
+        state.webhook_queue = webhook_queue
         yield
+        await webhook_queue.stop()
         await scheduler.stop()
         storage.close()
 

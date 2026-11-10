@@ -289,6 +289,7 @@ def crawl(
     user_agent: str = USER_AGENT,
     headers: dict[str, str] | None = None,
     allow_private: bool = False,
+    start_urls: Sequence[str] | None = None,  # Для инкрементального сканирования
 ) -> CrawlResult:
     """Обходит сайт и возвращает список страниц, сгруппированных по шаблонам.
 
@@ -369,6 +370,12 @@ def crawl(
         seeds.append(root_url)
         candidates = [seed for seed in seeds if urlparse(seed).netloc == urlparse(root_url).netloc]
         seeds = candidates or [root_url]
+
+        # Если переданы start_urls — используем их для инкрементального сканирования
+        if start_urls:
+            seeds = [url for url in start_urls if urlparse(url).netloc == urlparse(root_url).netloc]
+            if not seeds:
+                seeds = [root_url]
 
         visited: dict[str, PageTarget] = {}
         # depth=0 — только стартовая страница: её HTML уже загружен. URL из

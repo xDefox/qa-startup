@@ -34,7 +34,13 @@ CREATE TABLE IF NOT EXISTS sites (
     auth_password   TEXT,
     auth_login_url  TEXT,
     organization_id INTEGER NOT NULL DEFAULT 0,
-    created_at      TEXT NOT NULL
+    created_at      TEXT NOT NULL,
+    watchdog_enabled INTEGER NOT NULL DEFAULT 0,
+    watchdog_triggers TEXT,
+    watchdog_webhook_secret TEXT,
+    last_deploy_at TEXT,
+    last_watchdog_check TEXT,
+    last_watchdog_diff TEXT
 );
 
 CREATE TABLE IF NOT EXISTS organizations (
@@ -117,6 +123,20 @@ CREATE TABLE IF NOT EXISTS invoices (
 CREATE INDEX IF NOT EXISTS idx_subscriptions_site ON subscriptions(site_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_site ON invoices(site_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+
+CREATE TABLE IF NOT EXISTS scan_packages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    scans_total INTEGER NOT NULL,
+    scans_used INTEGER NOT NULL DEFAULT 0,
+    price_cents INTEGER NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_scan_packages_org ON scan_packages(organization_id);
+CREATE INDEX IF NOT EXISTS idx_scan_packages_status ON scan_packages(status);
 """
 
 
@@ -156,6 +176,14 @@ class Site:
     auth_password: str | None = None
     auth_login_url: str | None = None
     organization_id: int = 0
+    # Watchdog
+    watchdog_enabled: bool = False
+    watchdog_triggers: list[str] = field(default_factory=lambda: ["webhook", "content_hash"])
+    watchdog_webhook_secret: str | None = None
+    # Watchdog status tracking
+    last_deploy_at: str | None = None
+    last_watchdog_check: str | None = None
+    last_watchdog_diff: dict | None = None
 
     @property
     def has_auth(self) -> bool:
@@ -183,11 +211,21 @@ class Site:
             "interval_days": self.interval_days,
             "next_run_at": self.next_run_at,
             "created_at": self.created_at,
-            # пароль наружу не отдаём — только флаг «вход настроен»
+            # пароль наружу не отдаём — только флаг "вход настроен"
             "has_auth": self.has_auth,
             "auth_kind": self.auth_kind if self.has_auth else None,
             "organization_id": self.organization_id,
+            "watchdog_enabled": self.watchdog_enabled,
+            "watchdog_triggers": self.watchdog_triggers,
+            "watchdog_webhook_secret": self.watchdog_webhook_secret,
+            "last_deploy_at": self.last_deploy_at,
+            "last_watchdog_check": self.last_watchdog_check,
+            "last_watchdog_diff": self.last_watchdog_diff,
         }
+
+    @property
+    def has_watchdog(self) -> bool:
+        return self.watchdog_enabled and (self.watchdog_webhook_secret or "webhook" in self.watchdog_triggers)
 
 
 @dataclass
@@ -261,6 +299,49 @@ class Finding:
         """
         return self.details.get("fp", False)
 
+
+
+
+@dataclass
+class ScanPackage:
+    """Пакет сканов (pay-per-scan)."""
+
+    id: int
+    organization_id: int
+    scans_total: int
+    scans_used: int = 0
+    price_cents: int = 0
+    currency: str = "USD"
+    status: str = "active"
+    created_at: str = ""
+    expires_at: str | None = None
+
+    @property
+    def scans_left(self) -> int:
+        return max(0, self.scans_total - self.scans_used)
+
+    @property
+    def is_active(self) -> bool:
+        if self.status != "active":
+            return False
+        if self.scans_left <= 0:
+            return False
+        return True
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "organization_id": self.organization_id,
+            "scans_total": self.scans_total,
+            "scans_used": self.scans_used,
+            "scans_left": self.scans_left,
+            "price_cents": self.price_cents,
+            "currency": self.currency,
+            "status": self.status,
+            "created_at": self.created_at,
+            "expires_at": self.expires_at,
+            "is_active": self.is_active,
+        }
 
 class Storage:
     """Тонкая обёртка над SQLite. Одно соединение на операцию — без блокировок."""
@@ -375,7 +456,7 @@ class Storage:
         return [_site_from_row(row) for row in rows]
 
     def update_site(self, site_id: int, **fields) -> None:
-        """Обновляет поля сайта (email, schedule, next_run_at, авторизация и т.п.)."""
+        """Обновляет поля сайта (email, schedule, next_run_at, авторизация, watchdog и т.п.)."""
         allowed = {
             "email",
             "telegram_chat",
@@ -386,10 +467,21 @@ class Storage:
             "auth_login",
             "auth_password",
             "auth_login_url",
+            "watchdog_enabled",
+            "watchdog_triggers",
+            "watchdog_webhook_secret",
+            "last_deploy_at",
+            "last_watchdog_check",
+            "last_watchdog_diff",
         }
         updates = {key: value for key, value in fields.items() if key in allowed}
         if "auth_password" in updates:
             updates["auth_password"] = _seal(updates["auth_password"])
+        if "watchdog_triggers" in updates and isinstance(updates["watchdog_triggers"], list):
+            updates["watchdog_triggers"] = ",".join(updates["watchdog_triggers"])
+        if "last_watchdog_diff" in updates and isinstance(updates["last_watchdog_diff"], dict):
+            import json
+            updates["last_watchdog_diff"] = json.dumps(updates["last_watchdog_diff"])
         if not updates:
             return
         assignments = ", ".join(f"{key} = ?" for key in updates)
@@ -399,6 +491,12 @@ class Storage:
                 (*updates.values(), site_id),
             )
             connection.commit()
+
+    def get_webhook_secret(self, provider: str) -> str | None:
+        """Получает секрет вебхука для провайдера (пока используем общий секрет сайта)."""
+        # В будущем можно добавить отдельную таблицу для секретов по провайдерам
+        # Пока используем общий секрет сайта
+        return None  # TODO: реализовать хранение секретов по провайдерам
 
     def delete_site(self, site_id: int) -> bool:
         """Удаляет сайт вместе с прогонами и находками (каскад по FK)."""
@@ -656,6 +754,173 @@ class Storage:
         self.update_site(site_id, next_run_at=next_run_at)
 
 
+    # --- Scan Packages (Pay-per-scan) ---
+    def create_scan_package(self, organization_id: int, scans_total: int, price_cents: int, currency: str = "USD") -> ScanPackage:
+        """Создаёт новый пакет сканов."""
+        now = now_iso()
+        with self._conn() as conn:
+            cursor = conn.execute(
+                """INSERT INTO scan_packages (
+                    organization_id, scans_total, scans_used, price_cents, currency, status, created_at
+                ) VALUES (?, ?, 0, ?, ?, "active", ?)""",
+                (organization_id, scans_total, price_cents, currency, now),
+            )
+            conn.commit()
+            pkg_id = cursor.lastrowid
+        return self.get_scan_package(pkg_id)
+
+    def get_scan_package(self, package_id: int) -> ScanPackage | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM scan_packages WHERE id = ?", (package_id,)
+            ).fetchone()
+        if not row:
+            return None
+        return ScanPackage(
+            id=row["id"],
+            organization_id=row["organization_id"],
+            scans_total=row["scans_total"],
+            scans_used=row["scans_used"],
+            price_cents=row["price_cents"],
+            currency=row["currency"],
+            status=row["status"],
+            created_at=row["created_at"],
+            expires_at=row["expires_at"] if "expires_at" in row.keys() else None,
+        )
+
+    def list_scan_packages(self, organization_id: int, active_only: bool = True) -> list[ScanPackage]:
+        with self._conn() as conn:
+            if active_only:
+                rows = conn.execute(
+                    "SELECT * FROM scan_packages WHERE organization_id = ? AND status = 'active' ORDER BY created_at DESC",
+                    (organization_id,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM scan_packages WHERE organization_id = ? ORDER BY created_at DESC",
+                    (organization_id,),
+                ).fetchall()
+        packages = []
+        for row in rows:
+            packages.append(ScanPackage(
+                id=row["id"],
+                organization_id=row["organization_id"],
+                scans_total=row["scans_total"],
+                scans_used=row["scans_used"],
+                price_cents=row["price_cents"],
+                currency=row["currency"],
+                status=row["status"],
+                created_at=row["created_at"],
+                expires_at=row["expires_at"] if "expires_at" in row.keys() else None,
+            ))
+        return packages
+
+    def consume_scan(self, package_id: int) -> ScanPackage | None:
+        """Списывает один скан из пакета. Возвращает обновлённый пакет или None, если неактивен."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM scan_packages WHERE id = ?", (package_id,)
+            ).fetchone()
+            if not row:
+                return None
+            pkg = ScanPackage(
+                id=row["id"],
+                organization_id=row["organization_id"],
+                scans_total=row["scans_total"],
+                scans_used=row["scans_used"],
+                price_cents=row["price_cents"],
+                currency=row["currency"],
+                status=row["status"],
+                created_at=row["created_at"],
+                expires_at=row["expires_at"] if "expires_at" in row.keys() else None,
+            )
+            if not pkg.is_active:
+                return None
+            new_used = pkg.scans_used + 1
+            new_status = 'active'
+            if new_used >= pkg.scans_total:
+                new_status = "exhausted"
+            conn.execute(
+                "UPDATE scan_packages SET scans_used = ?, status = ? WHERE id = ?",
+                (new_used, new_status, package_id),
+            )
+            conn.commit()
+            pkg.scans_used = new_used
+            pkg.status = new_status
+            return pkg
+
+    def get_active_package_for_org(self, organization_id: int) -> ScanPackage | None:
+        """Возвращает первый активный пакет с оставшимися сканами для организации."""
+        packages = self.list_scan_packages(organization_id, active_only=True)
+        for pkg in packages:
+            if pkg.is_active:
+                return pkg
+            return None
+
+
+
+
+    # --- Site Snapshots (Watchdog) ---
+    # --- Site Snapshots (Watchdog) ---
+    def save_site_snapshot(self, site_id: int, url: str, pages_data: dict, sitemap_urls: list[str] | None = None) -> None:
+        """Сохраняет снимок сайта для детекции изменений."""
+        import json
+        snapshot_data = {
+            "site_id": site_id,
+            "url": url,
+            "pages": pages_data,
+            "sitemap_urls": sitemap_urls or [],
+            "fetched_at": datetime.now(UTC).isoformat(),
+        }
+        with self._conn() as conn:
+            conn.execute(
+                """CREATE TABLE IF NOT EXISTS site_snapshots (
+                    site_id INTEGER PRIMARY KEY REFERENCES sites(id) ON DELETE CASCADE,
+                    url TEXT NOT NULL,
+                    snapshot_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )""",
+            )
+            conn.execute(
+                """INSERT INTO site_snapshots (site_id, url, snapshot_json, updated_at)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(site_id) DO UPDATE SET
+                       url = excluded.url,
+                       snapshot_json = excluded.snapshot_json,
+                       updated_at = excluded.updated_at""",
+                (site_id, url, json.dumps(snapshot_data), datetime.now(UTC).isoformat()),
+            )
+            conn.commit()
+
+    def get_site_snapshot(self, site_id: int) -> dict | None:
+        """Получает сохранённый снимок сайта."""
+        with self._conn() as conn:
+            # Проверяем, существует ли таблица
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='site_snapshots'"
+            ).fetchone()
+            if not row:
+                return None
+            row = conn.execute(
+                "SELECT snapshot_json FROM site_snapshots WHERE site_id = ?",
+                (site_id,),
+            ).fetchone()
+        if not row:
+            return None
+        import json
+        try:
+            return json.loads(row["snapshot_json"])
+        except json.JSONDecodeError:
+            return None
+
+    def delete_site_snapshot(self, site_id: int) -> None:
+        """Удаляет снимок сайта."""
+        with self._conn() as conn:
+            conn.execute("DELETE FROM site_snapshots WHERE site_id = ?", (site_id,))
+            conn.commit()
+
+
+
 def _finding_from_row(row: sqlite3.Row) -> Finding:
     details: dict = {}
     # колонки добавлены миграцией: у старых БД их может не быть в результате
@@ -700,6 +965,14 @@ def _site_from_row(row: sqlite3.Row) -> Site:
         auth_password=_open(row["auth_password"]) if "auth_password" in keys else None,
         auth_login_url=row["auth_login_url"] if "auth_login_url" in keys else None,
         organization_id=row["organization_id"] if "organization_id" in keys else 0,
+        # Watchdog
+        watchdog_enabled=bool(row["watchdog_enabled"]) if "watchdog_enabled" in keys else False,
+        watchdog_triggers=row["watchdog_triggers"].split(",") if "watchdog_triggers" in keys and row["watchdog_triggers"] else ["webhook", "content_hash"],
+        watchdog_webhook_secret=row["watchdog_webhook_secret"] if "watchdog_webhook_secret" in keys else None,
+        # Watchdog status tracking
+        last_deploy_at=row["last_deploy_at"] if "last_deploy_at" in keys else None,
+        last_watchdog_check=row["last_watchdog_check"] if "last_watchdog_check" in keys else None,
+        last_watchdog_diff=json.loads(row["last_watchdog_diff"]) if "last_watchdog_diff" in keys and row["last_watchdog_diff"] else None,
     )
 
 

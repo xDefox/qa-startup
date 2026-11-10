@@ -92,6 +92,117 @@
 </div>
 
 <div class="card">
+  <h2>Мои пакеты сканов</h2>
+  <p class="muted small">Пакеты не сгорают — списываются за факт сканирования. Watchdog включён в каждый пакет.</p>
+  
+  <div class="actions" style="margin-bottom: 16px;">
+    <a href="/scan/oneshot" class="btn btn-primary">Купить пакет / Разовая проверка</a>
+  </div>
+  
+  {% if packages %}
+  <div class="packages-grid">
+    {% for pkg in packages %}
+    <div class="package-card {% if not pkg.is_active %}inactive{% endif %}">
+      <div class="package-header">
+        <span class="package-scans">{{ pkg.scans_left }} / {{ pkg.scans_total }}</span>
+        <span class="package-status {% if pkg.is_active %}active{% else %}inactive{% endif %}">{{ 'Активен' if pkg.is_active else 'Исчерпан' }}</span>
+      </div>
+      <div class="package-details">
+        <div class="package-row">
+          <span>Цена:</span>
+          <span>${{ (pkg.price_cents / 100) | round(2) }} {{ pkg.currency }}</span>
+        </div>
+        <div class="package-row">
+          <span>Куплен:</span>
+          <span>{{ pkg.created_at[:10] }}</span>
+        </div>
+        <div class="package-row">
+          <span>Статус:</span>
+          <span class="status-badge {{ pkg.status }}">{{ pkg.status }}</span>
+        </div>
+      </div>
+      {% if pkg.is_active %}
+      <div class="package-actions">
+        <a href="/scan/oneshot" class="btn btn-primary btn-sm">Использовать ({{ pkg.scans_left }} сканов)</a>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Пакетов пока нет. <a href="/scan/oneshot">Купить первый пакет</a></p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Watchdog — автоматический контроль после деплоя</h2>
+  <p class="muted small">Watchdog отслеживает изменения на сайте после деплоя и сразу запускает проверку. Работает через вебхуки от CI/CD или периодическую проверку контента.</p>
+
+  <form method="post" action="/sites/{{ site.id }}/settings">
+    <div class="row">
+      <div class="field">
+        <label class="check-row" for="watchdog-enabled">
+          <input type="checkbox" id="watchdog-enabled" name="watchdog_enabled" value="1" {% if site.watchdog_enabled %}checked{% endif %}>
+          <span>Включить Watchdog</span>
+        </label>
+      </div>
+      <div class="field">
+        <label for="watchdog_triggers">Триггеры проверки</label>
+        <div class="check-row">
+          <input type="checkbox" id="trigger-webhook" name="watchdog_triggers" value="webhook" {% if 'webhook' in site.watchdog_triggers %}checked{% endif %}>
+          <label for="trigger-webhook">Вебхук от CI/CD (GitHub Actions, GitLab, Vercel и др.)</label>
+        </div>
+        <div class="check-row">
+          <input type="checkbox" id="trigger-content_hash" name="watchdog_triggers" value="content_hash" {% if 'content_hash' in site.watchdog_triggers %}checked{% endif %}>
+          <label for="trigger-content_hash">Изменение контента (хеш страниц)</label>
+        </div>
+        <div class="check-row">
+          <input type="checkbox" id="trigger-sitemap" name="watchdog_triggers" value="sitemap" {% if 'sitemap' in site.watchdog_triggers %}checked{% endif %}>
+          <label for="trigger-sitemap">Изменения в sitemap.xml</label>
+        </div>
+      </div>
+    </div>
+    <div class="field" id="webhook-secret-field" {% if not site.watchdog_enabled %}hidden{% endif %}>
+      <label for="watchdog_webhook_secret">Секрет вебхука (для верификации подписи)</label>
+      <input id="watchdog_webhook_secret" type="password" name="watchdog_webhook_secret"
+             placeholder="оставьте пустым, чтобы не менять" autocomplete="new-password">
+      <p class="muted small">Используется для верификации HMAC подписи вебхуков (GitHub, GitLab, Vercel и др.).</p>
+    </div>
+    
+    <div class="field" id="watchdog-status" {% if site.watchdog_enabled %}style="display: block;"{% else %}hidden{% endif %}>
+      <h4>Статус Watchdog</h4>
+      {% set last_deploy = site.last_deploy_at if site.last_deploy_at else 'никогда' %}
+      {% set last_check = site.last_watchdog_check if site.last_watchdog_check else 'никогда' %}
+      <div class="row">
+        <div class="field"><strong>Последний деплой:</strong> {{ last_deploy }}</div>
+        <div class="field"><strong>Последняя проверка:</strong> {{ last_check }}</div>
+      </div>
+      {% if site.last_watchdog_diff %}
+      <p class="muted small">Последняя проверка: {{ site.last_watchdog_diff.new|default(0) }} новых, {{ site.last_watchdog_diff.changed|default(0) }} изменённых, {{ site.last_watchdog_diff.removed|default(0) }} удалённых страниц.</p>
+      {% endif %}
+    </div>
+
+    <div class="actions">
+      <button type="submit" name="watchdog_save" value="1">Сохранить настройки Watchdog</button>
+    </div>
+  </form>
+  <script>
+    (function(){
+      const toggle = document.getElementById('watchdog-enabled');
+      const secretField = document.getElementById('webhook-secret-field');
+      const statusField = document.getElementById('watchdog-status');
+      function syncWatchdog(){
+        const enabled = toggle.checked;
+        secretField.hidden = !enabled;
+        statusField.hidden = !enabled;
+      }
+      toggle.addEventListener('change', syncWatchdog);
+      syncWatchdog();
+    })();
+  </script>
+</div>
+
+<div class="card">
   <h2>Удаление сайта</h2>
   <p class="muted small">
     Сайт, все прогоны и история проверок будут удалены безвозвратно.

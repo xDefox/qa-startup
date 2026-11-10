@@ -31,9 +31,9 @@
     --accent: #4f9bff;
     --accent-hover: #6aa8ff;
     --critical: #f87171;
-    --serious: #f59e0b;
+    --serious: #fbbf24;
     --serious-ink: #92400e;
-    --moderate: #f59e0b;
+    --moderate: #fb923c;
     --minor: #9aa2b4;
     --ok: #22c55e;
     color-scheme: dark;
@@ -48,9 +48,9 @@
       --accent: #4f9bff;
       --accent-hover: #6aa8ff;
       --critical: #f87171;
-      --serious: #f59e0b;
+      --serious: #fbbf24;
       --serious-ink: #92400e;
-      --moderate: #f59e0b;
+      --moderate: #fb923c;
       --minor: #9aa2b4;
       --ok: #22c55e;
       color-scheme: dark;
@@ -65,6 +65,8 @@
     font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    max-width: 100vw;
+    overflow-x: hidden;
   }
   a { color: var(--accent); text-underline-offset: 2px; }
   a:hover { color: var(--accent-hover); }
@@ -86,6 +88,104 @@
     align-items: center;
     gap: 12px;
   }
+  .top-nav {
+    display: flex;
+    gap: 8px;
+    margin-left: 24px;
+    padding-left: 24px;
+    border-left: 1px solid var(--line);
+  }
+  .top-nav .nav-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 8px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: color 120ms ease, background-color 120ms ease;
+  }
+  .top-nav .nav-link:hover {
+    color: var(--ink);
+    background: var(--bg);
+  }
+  .top-nav .nav-link.active {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
+  .mobile-menu-toggle {
+    display: none;
+    background: none;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    color: var(--ink);
+    border-radius: 8px;
+    transition: background-color 120ms ease;
+  }
+  .mobile-menu-toggle:hover {
+    background: var(--bg);
+  }
+  .mobile-menu-toggle svg {
+    width: 24px;
+    height: 24px;
+    stroke: currentColor;
+  }
+
+  .mobile-nav {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 280px;
+    max-width: 85vw;
+    background: var(--card);
+    border-left: 1px solid var(--line);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 100;
+    box-shadow: -8px 0 32px -8px rgba(15, 23, 42, 0.3);
+    animation: mobile-nav-in 200ms ease-out;
+  }
+  .mobile-nav[hidden] {
+    display: none;
+  }
+  @keyframes mobile-nav-in {
+    from { opacity: 0; transform: translateX(100%); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  .mobile-nav-link {
+    display: block;
+    padding: 14px 16px;
+    border-radius: 10px;
+    color: var(--ink);
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 500;
+    transition: background-color 120ms ease;
+  }
+  .mobile-nav-link:hover {
+    background: var(--bg);
+  }
+  .mobile-nav-link.active {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+  }
+
+  @media (max-width: 760px) {
+    .top-nav {
+      display: none;
+    }
+    .mobile-menu-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
   .top-actions .pill { font-size: 13px; }
   .top .theme-toggle {
     margin-left: 0;
@@ -93,8 +193,8 @@
     color: var(--muted);
     border: 1px solid var(--line);
     border-radius: 999px;
-    width: 38px;
-    height: 38px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     display: inline-flex;
     align-items: center;
@@ -104,6 +204,7 @@
   }
   .top .theme-toggle:hover { color: var(--ink); background: var(--card); }
   .top .theme-toggle:active { transform: scale(0.98); }
+  .top .theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .theme-icon {
     display: inline-flex;
     align-items: center;
@@ -119,20 +220,21 @@
     transition: background-color 240ms ease, color 240ms ease, border-color 240ms ease, fill 240ms ease, stroke 240ms ease !important;
     transition-delay: 0s !important;
   }
-  main { max-width: 940px; margin: 0 auto; padding: 28px 20px 60px; }
+  main { width: 100%; max-width: 1200px; margin: 0 auto; padding: 28px 24px 60px; }
   .card {
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: 14px;
     padding: 22px 24px;
     margin-bottom: 18px;
-    box-shadow: 0 1px 1px rgba(15, 23, 42, 0.01), 0 10px 30px -20px rgba(15, 23, 42, 0.8);
+    box-shadow: 0 1px 1px rgba(15, 23, 42, 0.01), 0 10px 30px -20px rgba(15, 23, 42, 0.06);
   }
-  h1 { font-size: 30px; line-height: 1.25; letter-spacing: -0.02em; margin: 0 0 12px; text-wrap: balance; }
-  h2 { font-size: 21px; letter-spacing: -0.01em; margin: 0 0 14px; text-wrap: balance; }
-  h3 { font-size: 16px; margin: 0 0 8px; text-wrap: balance; }
-  p { margin: 0 0 12px; }
+  h1 { font-size: clamp(1.75rem, 4vw, 2.25rem); line-height: 1.25; letter-spacing: -0.02em; margin: 0 0 12px; text-wrap: balance; }
+  h2 { font-size: clamp(1.375rem, 3vw, 1.625rem); letter-spacing: -0.01em; margin: 0 0 14px; text-wrap: balance; }
+  h3 { font-size: clamp(1.125rem, 2vw, 1.25rem); margin: 0 0 8px; text-wrap: balance; }
+  p { font-size: clamp(0.9375rem, 1.5vw, 1rem); line-height: 1.7; margin: 0 0 12px; }
   .muted { color: var(--muted); }
+  .text-body { max-width: 65ch; }
   .status-error { color: var(--critical); }
   .small { font-size: 14px; }
   input[type=text], input[type=email], input[type=password], select {
@@ -175,11 +277,44 @@
   button:active, .btn-like:active { background: #1e40af; }
   button.secondary, .btn-like.secondary { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
   button.secondary:hover, .btn-like.secondary:hover { background: var(--bg); color: var(--ink); }
+
+  .hero-cta,
+  .landing-cta {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 24px;
+  }
+  .btn-lg {
+    padding: 16px 32px;
+    font-size: 18px;
+    font-weight: 700;
+    border-radius: 12px;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary {
+    background: var(--card);
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .btn-secondary:hover { background: var(--bg); color: var(--ink); }
   button.danger { background: var(--card); color: #b42318; border: 1px solid #f2b8b5; }
   button.danger:hover { background: #fee4e2; color: #b42318; }
   .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
   .row > * { flex: 1 1 180px; }
   .row > .actions { flex: 0 0 auto; }
+
+  @media (max-width: 480px) {
+    .row { flex-direction: column; align-items: stretch; }
+    .row > * { flex: 1 1 100%; }
+    .row > .actions { width: 100%; }
+    .row > .actions .btn-like { width: 100%; }
+  }
   /* Панель «Сохранить отчёт»: всплывает поверх таблицы находок (fixed +
      высокий z-index), но ничего не перекрывает целиком — список и таблица
      остаются видны, вид находок не меняется. */
@@ -383,8 +518,8 @@
     color: var(--muted);
     border: 1px solid var(--line);
     border-radius: 999px;
-    width: 38px;
-    height: 38px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     display: inline-flex;
     align-items: center;
@@ -397,6 +532,7 @@
   .view-btn:active,
   .icon-btn:active { transform: scale(0.98); }
   .view-btn:focus-visible,
+  .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .view-btn svg,
   .icon-btn svg { width: 18px; height: 18px; display: block; }
@@ -766,8 +902,15 @@
 </style>
 </head>
 <body>
-<header class="top">
   <div class="logo"><a href="/">webscope<span>.</span></a></div>
+  <nav class="top-nav" aria-label="Главная навигация">
+    <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">Главная</a>
+    <a href="/landing" class="nav-link {% if request.path == '/landing' %}active{% endif %}">Лендинг</a>
+    <a href="/sites" class="nav-link {% if request.path.startswith('/sites') and not request.path.startswith('/sites/') %}active{% endif %}">Сайты</a>
+    {% if auth_enabled %}
+    <a href="/dashboard" class="nav-link {% if request.path.startswith('/dashboard') %}active{% endif %}">Дашборд</a>
+    {% endif %}
+  </nav>
   <div class="top-actions">
     {% if auth_enabled %}
     <a class="pill" href="/auth/logout">Выйти</a>
@@ -775,7 +918,18 @@
     <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Сменить тему">
       <span class="theme-icon" aria-hidden="true"></span>
     </button>
+    <button type="button" id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Меню" aria-expanded="false" aria-controls="mobile-nav">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+    </button>
   </div>
+  <nav id="mobile-nav" class="mobile-nav" aria-label="Мобильная навигация" hidden>
+    <a href="/" class="mobile-nav-link">Главная</a>
+    <a href="/landing" class="mobile-nav-link">Лендинг</a>
+    <a href="/sites" class="mobile-nav-link">Сайты</a>
+    {% if auth_enabled %}
+    <a href="/dashboard" class="mobile-nav-link">Дашборд</a>
+    {% endif %}
+  </nav>
 </header>
 <main>
   {% block content %}{% endblock %}
@@ -814,6 +968,46 @@
       isDark = !isDark;
       localStorage.setItem(key, isDark ? 'dark' : 'light');
       applyTheme(isDark);
+    });
+  })();
+</script>
+
+<script>
+  // Mobile menu toggle
+  (function(){
+    const toggle = document.getElementById('mobile-menu-toggle');
+    const nav = document.getElementById('mobile-nav');
+    if (!toggle || !nav) return;
+
+    function openNav() {
+      nav.hidden = false;
+      toggle.setAttribute('aria-expanded', 'true');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeNav() {
+      nav.hidden = true;
+      toggle.setAttribute('aria-expanded', 'false');
+      document.body.style.overflow = '';
+    }
+    toggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (nav.hidden) {
+        openNav();
+      } else {
+        closeNav();
+      }
+    });
+    // Close on link click
+    nav.querySelectorAll('.mobile-nav-link').forEach(function(link) {
+      link.addEventListener('click', closeNav);
+    });
+    // Close on backdrop click
+    nav.addEventListener('click', function(e) {
+      if (e.target === nav) closeNav();
+    });
+    // Close on Escape
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && !nav.hidden) closeNav();
     });
   })();
 </script>

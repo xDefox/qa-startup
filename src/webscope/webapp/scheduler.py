@@ -41,6 +41,8 @@ class ScanOptions:
     timeout_s: float | None = None
     # вход на защищённый сайт: подставляется из настроек сайта перед прогоном
     auth: AuthCredentials | None = None
+    # инкрементальное сканирование: если задано — проверяем только эти URL
+    target_urls: list[str] | None = None
 
 
 @dataclass
@@ -67,6 +69,7 @@ def default_scanner(url: str, options: ScanOptions) -> CrawlOutcome:
         checks=options.checks,
         auth=options.auth,
         time_budget_s=options.timeout_s,
+        start_urls=options.target_urls,
     )
     return CrawlOutcome(
         result=result,

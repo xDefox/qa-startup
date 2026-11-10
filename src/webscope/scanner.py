@@ -818,6 +818,7 @@ def scan_site(
     user_agent: str = DEFAULT_UA,
     auth: AuthCredentials | None = None,
     time_budget_s: float | None = None,
+    start_urls: Sequence[str] | None = None,  # Для инкрементального сканирования: только эти URL
 ) -> tuple[ScanResult, CrawlResult]:
     """Обходит сайт и сканирует по одной странице каждого шаблона.
 
@@ -865,6 +866,7 @@ def scan_site(
         user_agent=user_agent,
         headers=crawl_headers or None,
         allow_private=allow_private,
+        start_urls=start_urls,
     )
     targets = representative_pages(crawl_result, all_pages=all_pages)
 

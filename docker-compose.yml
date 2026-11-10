@@ -1,0 +1,57 @@
+# ============================================================
+# WebScope — docker-compose.yml
+# Production-ready composition for single-host deployment
+# ============================================================
+
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: webscope:latest
+    container_name: webscope-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - WEBSCOPE_HOST=0.0.0.0
+      - WEBSCOPE_PORT=8000
+      - WEBSCOPE_DB_PATH=/data/webscope.db
+      - WEBSCOPE_ALLOW_PRIVATE=0
+      - WEBSCOPE_PUBLIC_URL=https://demo.webscope.io
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    env_file:
+      - .env.production
+    volumes:
+      - webscope-data:/data
+      - webscope-uploads:/uploads
+      - webscope-logs:/var/log/webscope
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '1'
+
+volumes:
+  webscope-data:
+    driver: local
+  webscope-uploads:
+    driver: local
+  webscope-logs:
+    driver: local
+
+networks:
+  default:
+    name: webscope-network

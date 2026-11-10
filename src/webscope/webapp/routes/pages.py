@@ -29,10 +29,22 @@ from ..views import SCHEDULE_LABELS, build_report_view
 router = APIRouter()
 
 
-@router.get("/landing", response_class=HTMLResponse)
-def landing(request: Request, state: AppState = Depends(get_state)):
-    """Публичная лендинг-страница — доступна без входа."""
-    return _page(state, request, "landing.html", {})
+@router.get("/", response_class=HTMLResponse)
+def index(request: Request, state: AppState = Depends(get_state)):
+    """Публичная лендинг-страница — главная страница, доступна без входа."""
+    return _page(state, request, "index.html", {
+        "sites": index_cards(state),
+        "schedules": SCHEDULE_LABELS,
+        "error": None,
+        "organizations": get_organizations(state.storage),
+    })
+
+
+@router.get("/scan/oneshot", response_class=HTMLResponse)
+def scan_oneshot(request: Request, state: AppState = Depends(get_state)):
+    """Страница разовой проверки — требует авторизацию."""
+    orgs = get_organizations(state.storage)
+    return _page(state, request, "oneshot.html", {"organizations": orgs})
 
 
 def _page(state: AppState, request: Request, template: str, context: dict, **kwargs):
@@ -40,19 +52,10 @@ def _page(state: AppState, request: Request, template: str, context: dict, **kwa
     return state.templates.TemplateResponse(request, template, context, **kwargs)
 
 
-@router.get("/", response_class=HTMLResponse)
-def index(request: Request, state: AppState = Depends(get_state)):
-    return _page(
-        state,
-        request,
-        "index.html",
-        {
-            "sites": index_cards(state),
-            "schedules": SCHEDULE_LABELS,
-            "error": None,
-            "organizations": get_organizations(state.storage),
-        },
-    )
+@router.get("/scan", response_class=HTMLResponse)
+def scan_page(request: Request, state: AppState = Depends(get_state)):
+    """Страница быстрой проверки: только URL, без регистрации."""
+    return _page(state, request, "scan.html", {"error": None})
 
 
 @router.post("/sites")
@@ -81,11 +84,10 @@ def create_site(
         return _page(
             state,
             request,
-            "index.html",
+            "scan.html",
             {
-                "sites": index_cards(state),
-                "schedules": SCHEDULE_LABELS,
                 "error": str(exc),
+                "sites": index_cards(state),
             },
             status_code=400,
         )
@@ -94,19 +96,16 @@ def create_site(
         return _page(
             state,
             request,
-            "index.html",
+            "scan.html",
             {
-                "sites": index_cards(state),
-                "schedules": SCHEDULE_LABELS,
                 "error": "Включена авторизация, но не указан логин.",
+                "sites": index_cards(state),
             },
             status_code=400,
         )
 
-    # Убеждаемся, что организация существует (или создадим дефолтную)
     org = get_organization(state.storage, organization_id)
     if org is None:
-        # Создаем организацию по умолчанию
         org = create_organization(state.storage, name="Default", owner_email="")
 
     auth = auth_fields(
@@ -135,7 +134,7 @@ def create_site(
 @router.get("/sites")
 def sites_index():
     """Список сайтов живёт на главной; /sites — адрес после входа."""
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 
 @router.get("/sites/{site_id}", response_class=HTMLResponse)
@@ -228,6 +227,7 @@ def run_detail(request: Request, site_id: int, run_id: int, state: AppState = De
 def site_settings(request: Request, site_id: int, state: AppState = Depends(get_state), saved: bool = False):
     site = get_site_or_404(state, site_id)
     org = get_organization(state.storage, site.organization_id) if site.organization_id else None
+    packages = state.storage.list_scan_packages(site.organization_id) if site.organization_id else []
     return _page(
         state,
         request,
@@ -238,6 +238,7 @@ def site_settings(request: Request, site_id: int, state: AppState = Depends(get_
             "organizations": get_organizations(state.storage),
             "schedules": SCHEDULE_LABELS,
             "saved": saved,
+            "packages": packages,
         },
     )
 
@@ -255,6 +256,10 @@ def site_settings_save(
     auth_password: str = Form(""),
     auth_login_url: str = Form(""),
     organization_id: int = Form(0),
+    watchdog_enabled: str = Form(""),
+    watchdog_triggers: list[str] = Form([]),
+    watchdog_webhook_secret: str = Form(""),
+    watchdog_save: str = Form(""),
 ):
     site = get_site_or_404(state, site_id)
     schedule = schedule if schedule in SCHEDULE_LABELS else "off"
@@ -265,6 +270,9 @@ def site_settings_save(
         telegram_chat=telegram_chat.strip() or None,
         schedule=schedule,
         organization_id=organization_id,
+        watchdog_enabled=bool(watchdog_enabled),
+        watchdog_triggers=watchdog_triggers,
+        watchdog_webhook_secret=watchdog_webhook_secret.strip() or None,
         **auth_fields(
             enabled=auth_enabled,
             kind=auth_kind,

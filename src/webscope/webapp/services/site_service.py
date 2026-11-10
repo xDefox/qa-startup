@@ -83,6 +83,9 @@ def create_site(
     auth_login: str | None = None,
     auth_password: str | None = None,
     auth_login_url: str | None = None,
+    watchdog_enabled: bool = False,
+    watchdog_triggers: list[str] | None = None,
+    watchdog_webhook_secret: str | None = None,
 ) -> Site:
     """Создаёт сайт, привязанный к организации.
 
@@ -125,6 +128,9 @@ def create_site(
         auth_login_url=auth_login_url,
         created_at=now_iso(),
         organization_id=organization_id,
+        watchdog_enabled=watchdog_enabled,
+        watchdog_triggers=watchdog_triggers or ["webhook", "content_hash"],
+        watchdog_webhook_secret=watchdog_webhook_secret,
     )
 
     with storage._conn() as conn:
@@ -132,8 +138,9 @@ def create_site(
             """INSERT INTO sites 
                (url, email, telegram_chat, schedule, interval_days, 
                 auth_kind, auth_login, auth_password, auth_login_url, 
-                organization_id, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                organization_id, created_at,
+                watchdog_enabled, watchdog_triggers, watchdog_webhook_secret)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 url,
                 email,
@@ -146,6 +153,9 @@ def create_site(
                 auth_login_url,
                 organization_id,
                 now_iso(),
+                1 if watchdog_enabled else 0,
+                ",".join(watchdog_triggers) if watchdog_triggers else "webhook,content_hash",
+                watchdog_webhook_secret,
             ),
         )
         conn.commit()
@@ -211,8 +221,14 @@ def update_site(
         "auth_login",
         "auth_password",
         "auth_login_url",
+        "watchdog_enabled",
+        "watchdog_triggers",
+        "watchdog_webhook_secret",
     }
     updates = {key: value for key, value in fields.items() if key in allowed}
+
+    if "watchdog_triggers" in updates and isinstance(updates["watchdog_triggers"], list):
+        updates["watchdog_triggers"] = ",".join(updates["watchdog_triggers"])
 
     if organization_id is not None:
         updates["organization_id"] = organization_id

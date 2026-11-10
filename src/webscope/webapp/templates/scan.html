@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Быстрая проверка сайта — webscope{% endblock %}
+{% block content %}
+
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
+<!-- Toast container -->
+<div id="toast-container" aria-live="polite"></div>
+
+<div class="card hero">
+  <h1>Быстрая проверка сайта</h1>
+  <p class="muted">
+    Вставьте адрес — проверим доступность, формы, консоль и мобильную вёрстку.
+    Бесплатно, без карты, результат за 30–60 секунд.
+  </p>
+
+  <form method="post" action="/sites" id="scan-form">
+    <div class="field">
+      <label for="url">Адрес сайта</label>
+      <div class="row" style="align-items: center;">
+        <div style="flex: 3 1 280px;">
+          <input id="url" type="url" name="url" placeholder="https://example.com" inputmode="url" autocomplete="url" required>
+        </div>
+        <div class="actions">
+          <button type="submit" class="btn btn-primary btn-lg" id="scan-submit">Проверить сайт</button>
+        </div>
+      </div>
+    </div>
+    <p class="muted small">Проверяем: a11y (axe-core, WCAG 2.2 AA), консоль и сеть, формы и клики, мобильная вёрстка. Результат — оценка 0–100 и топ-3 задачи.</p>
+  </form>
+
+  <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line);">
+    <h2 style="margin-bottom: 8px;">Что проверяем</h2>
+    <div class="steps">
+      <div class="step"><b>Доступность (a11y)</b><span class="muted small">axe-core: WCAG 2.2 AA, контраст, ARIA, заголовки.</span></div>
+      <div class="step"><b>Консоль и сеть</b><span class="muted small">JS-ошибки, упавшие запросы (4xx/5xx), uncaught exceptions.</span></div>
+      <div class="step"><b>Формы и клики</b><span class="muted small">Поля без label, кнопки без имени, перекрытые элементы.</span></div>
+      <div class="step"><b>Мобильная вёрстка</b><span class="muted small">Горизонтальный скролл на 320/768px, таргеты < 44×44px.</span></div>
+    </div>
+  </div>
+
+  <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line);">
+    <h2 style="margin-bottom: 8px;">Хотите проверять регулярно?</h2>
+    <p class="muted">Добавьте сайт в мониторинг — получите еженедельные отчёты, диффы и алерты в Telegram/Email.</p>
+    <a href="/auth/login?next=/sites/new" class="btn btn-primary">Добавить сайт в кабинет</a>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const form = document.getElementById('scan-form');
+    const submitBtn = document.getElementById('scan-submit');
+    if (!form) return;
+
+    form.addEventListener('submit', async (e) => {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Проверяем…';
+      submitBtn.classList.add('btn-secondary');
+      submitBtn.classList.remove('btn-primary');
+    });
+  })();
+</script>
+
+{% endblock %}
