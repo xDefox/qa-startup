@@ -18,9 +18,12 @@ from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import __version__
+from ..models import Finding, ScanResult, Severity
+from ..webapp.scheduler import CrawlOutcome
 from .alerts import notify
 from .auth import (
     SAFE_METHODS,
@@ -31,19 +34,57 @@ from .auth import (
     is_public_path,
     unauthorized_response,
 )
-from .webhook_queue import create_webhook_queue
 from .limits import RateLimiter, rate_limit, rate_window_seconds
 from .routes import api, auth, dashboard, pages, reports
 from .routes import uploads as upload_routes
 from .scheduler import Monitor, ScanOptions, Scheduler, default_scanner
-from .services.site_service import migrate_add_organization_id, ensure_default_organization
+from .services.site_service import ensure_default_organization, migrate_add_organization_id
 from .state import STATE_KEY, AppState
 from .storage import Storage
 from .uploads import LOCAL_DIR, SandboxedLocalFiles
-
-LOGGER = logging.getLogger("webscope.webapp")
+from .webhook_queue import create_webhook_queue
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+
+def _mock_scanner(url: str, options: ScanOptions) -> CrawlOutcome:
+    """Мок-сканер для тестов: возвращает детерминированный результат мгновенно."""
+    from ..models import Finding, ScanResult, Severity
+    findings = [
+        Finding(
+            rule="content/image-alt",
+            severity=Severity.SERIOUS,
+            title="Изображение без alt",
+            message="У <img> нет атрибута alt",
+            url=url,
+            selector="main > img",
+            snippet="<img src='/logo.png'>",
+            help_url="https://www.w3.org/WAI/WCAG22/Understanding/non-text-content.html",
+            source="webscope.content",
+            details={"evidence": "001_content_image_alt.png"},
+        ),
+        Finding(
+            rule="forms/control-without-label",
+            severity=Severity.MODERATE,
+            title="Поле без подписи",
+            message="У поля нет <label>",
+            url=url,
+            selector="input[name='email']",
+            snippet="<input name='email'>",
+            help_url="https://www.w3.org/WAI/WCAG22/Understanding/label-in-name.html",
+            source="webscope.forms",
+            details={},
+        ),
+    ]
+    result = ScanResult(
+        url=url,
+        final_url=url,
+        title="Test Site",
+        findings=findings,
+        duration_ms=5000,
+        pages_scanned=3,
+    )
+    return CrawlOutcome(result)
 
 
 def create_app(
@@ -76,7 +117,11 @@ def create_app(
     upload_dir = Path(local_dir) if local_dir is not None else LOCAL_DIR
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    base_scanner = scanner_func or default_scanner
+    # Используем мок-сканер если задан WEBSCOPE_MOCK_SCANNER=1
+    if os.environ.get("WEBSCOPE_MOCK_SCANNER") == "1":
+        base_scanner = _mock_scanner
+    else:
+        base_scanner = scanner_func or default_scanner
 
     def scanner_with_local(url: str, options: ScanOptions):
         """Проверка залитых через веб локальных файлов.
@@ -143,6 +188,28 @@ def create_app(
         response = await call_next(request)
         return apply_headers(response)
 
+    @app.middleware("http")
+    async def csp_middleware(request: Request, call_next):
+        """Content Security Policy header for security."""
+        response = await call_next(request)
+        # Skip CSP for sandboxed local files - they set their own CSP
+        if request.url.path.startswith("/__local/"):
+            return response
+        # CSP enforce mode - all inline styles/scripts moved to static files
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self' https://cdn.jsdelivr.net; "
+            "style-src 'self'; "
+            "img-src 'self' data:; "
+            "font-src 'self'; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self';"
+        )
+        response.headers["Content-Security-Policy"] = csp
+        return response
+
     # порядок важен: страницы объявляются раньше API, чтобы `/sites` не перехватил
     # ничего лишнего, а `/api/sites/{site_id}` не затенил отчёты
     app.include_router(auth.router)
@@ -151,6 +218,10 @@ def create_app(
     app.include_router(api.router)
     app.include_router(reports.router)
     app.include_router(upload_routes.router)
+
+    # Serve static files (CSS, JS)
+    static_dir = Path(__file__).parent / "static"
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     try:
         app.mount("/__local", SandboxedLocalFiles(directory=str(upload_dir), html=True), name="local_static")

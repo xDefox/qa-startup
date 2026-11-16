@@ -30,6 +30,7 @@ web = [
     # cryptography — шифрование паролей к защищённым сайтам
     "python-multipart>=0.0.9",
     "cryptography>=43",
+    "stripe>=8.0.0",
 ]
 
 [project.scripts]
@@ -60,6 +61,8 @@ extend-exclude = ["pitch/build_deck_v1.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 markers = [
     "browser: тесты, требующие установленного браузера (Playwright Chromium)",
+    "e2e: end-to-end тесты с Playwright (требуют запущенного сервера)",
 ]

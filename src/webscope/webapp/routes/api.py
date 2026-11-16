@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
@@ -10,9 +12,10 @@ from ..deps import get_site_or_404, scan_limit_response, trigger
 from ..services.site_service import create_organization, get_organizations
 from ..services.site_service import list_sites as list_sites_service
 from ..state import AppState, get_state
-from ..webhook_queue import WebhookEvent, create_webhook_queue
+from ..webhook_queue import WebhookEvent
 
 router = APIRouter(tags=["api"])
+LOGGER = logging.getLogger("webscope.api")
 
 
 @router.get("/api/sites")
@@ -161,50 +164,128 @@ async def api_buy_package(
     request: Request,
     state: AppState = Depends(get_state),
 ):
-    """Покупка пакета сканов (мок оплаты).
+    """Покупка пакета сканов (через Stripe Checkout или ЮKassa).
     
     Body: {
         "organization_id": int,
         "package_type": "starter" | "pro" | "agency",  # 10, 50, 100 scans
-        "payment_method": "mock" | "stripe" | "yookassa"  # пока только mock
+        "payment_method": "stripe" | "yookassa" | "mock"  # stripe/юkassa для продакшена, mock для тестов
+        "success_url": "https://example.com/success",  # опционально
+        "cancel_url": "https://example.com/cancel",  # опционально
     }
     """
     body = await request.json()
     organization_id = body.get("organization_id")
     package_type = body.get("package_type", "starter")
-    payment_method = body.get("payment_method", "mock")
+    payment_method = body.get("payment_method", "stripe")
+    success_url = body.get("success_url")
+    cancel_url = body.get("cancel_url")
 
     if not organization_id:
         return JSONResponse({"detail": "organization_id обязателен"}, status_code=400)
 
     # Пакеты: starter=10 ($29), pro=50 ($99), agency=100 ($179)
     packages_config = {
-        "starter": {"scans": 10, "price_cents": 2900},
-        "pro": {"scans": 50, "price_cents": 9900},
-        "agency": {"scans": 100, "price_cents": 17900},
+        "starter": {"scans": 10, "price_cents": 2900, "stripe_price_id_env": "STRIPE_PRICE_STARTER"},
+        "pro": {"scans": 50, "price_cents": 9900, "stripe_price_id_env": "STRIPE_PRICE_PRO"},
+        "agency": {"scans": 100, "price_cents": 17900, "stripe_price_id_env": "STRIPE_PRICE_AGENCY"},
     }
     if package_type not in packages_config:
         return JSONResponse({"detail": "Неизвестный тип пакета"}, status_code=400)
 
     config = packages_config[package_type]
+    
+    # Получаем организацию для получения email клиента
+    from ..services.site_service import get_organization
+    org = get_organization(state.storage, organization_id)
+    if not org:
+        return JSONResponse({"detail": "Организация не найдена"}, status_code=404)
 
-    # TODO: Реальная оплата через Stripe/ЮKassa
-    if payment_method != "mock":
-        return JSONResponse({"detail": "Платёжный метод пока не поддерживается"}, status_code=400)
+    # Mock режим для тестов
+    if payment_method == "mock":
+        pkg = state.storage.create_scan_package(
+            organization_id=organization_id,
+            scans_total=config["scans"],
+            price_cents=config["price_cents"],
+            currency="USD",
+        )
+        return {
+            "status": "ok",
+            "package": pkg.to_dict(),
+            "message": f"Пакет на {config['scans']} сканов куплен за ${config['price_cents']/100:.2f} (mock)",
+        }
 
-    # Создаём пакет
-    pkg = state.storage.create_scan_package(
-        organization_id=organization_id,
-        scans_total=config["scans"],
-        price_cents=config["price_cents"],
-        currency="USD",
-    )
+    # Stripe режим
+    if payment_method == "stripe":
+        from ..stripe_integration import get_stripe_client
+        client = get_stripe_client()
+        if not client.is_configured:
+            return JSONResponse({"detail": "Stripe не настроен на сервере"}, status_code=503)
 
-    return {
-        "status": "ok",
-        "package": pkg.to_dict(),
-        "message": f"Пакет на {config['scans']} сканов куплен за ${config['price_cents']/100:.2f}",
-    }
+        import os
+        price_id = os.environ.get(config["stripe_price_id_env"])
+        if not price_id:
+            return JSONResponse({"detail": f"Stripe price ID для {package_type} не настроен"}, status_code=503)
+
+        customer_email = org.owner_email or f"org-{organization_id}@webscope.local"
+        customer = client.create_customer(email=customer_email, name=org.name, metadata={"organization_id": str(organization_id)})
+        if not customer:
+            return JSONResponse({"detail": "Не удалось создать Stripe customer"}, status_code=500)
+
+        success_url = success_url or f"{request.base_url}dashboard?payment=success"
+        cancel_url = cancel_url or f"{request.base_url}dashboard?payment=cancelled"
+        
+        session = client.create_checkout_session(
+            customer_id=customer.id,
+            price_id=price_id,
+            success_url=success_url + "?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url=cancel_url,
+            mode="subscription",
+            metadata={"organization_id": str(organization_id), "package_type": package_type},
+        )
+        
+        if not session:
+            return JSONResponse({"detail": "Не удалось создать Stripe Checkout сессию"}, status_code=500)
+
+        return {
+            "status": "ok",
+            "checkout_url": session.url,
+            "session_id": session.id,
+            "message": f"Перейдите по ссылке для оплаты пакета {package_type}",
+        }
+
+    # ЮKassa режим
+    if payment_method == "yookassa":
+        from ..yookassa_integration import get_yookassa_client
+        client = await get_yookassa_client()
+        if not client.is_configured:
+            return JSONResponse({"detail": "ЮKassa не настроена на сервере"}, status_code=503)
+
+        import os
+        # Конвертируем в рубли (примерно $1 = 100 RUB)
+        amount_rub = int(config["price_cents"] * 100 / 100)  # $1 = 100 RUB
+        
+        payment = await client.create_payment(
+            amount_cents=amount_rub * 100,  # в копейках
+            currency="RUB",
+            description=f"Пакет {package_type}: {config['scans']} сканов",
+            return_url=success_url or f"{request.base_url}dashboard?payment=success",
+            metadata={"organization_id": str(organization_id), "package_type": package_type},
+        )
+        
+        if not payment:
+            return JSONResponse({"detail": "Не удалось создать платеж в ЮKassa"}, status_code=500)
+
+        confirmation_url = payment.get("confirmation", {}).get("confirmation_url")
+        
+        return {
+            "status": "ok",
+            "checkout_url": confirmation_url,
+            "payment_id": payment.get("id"),
+            "message": f"Перейдите по ссылке для оплаты пакета {package_type} через ЮKassa",
+        }
+
+    return JSONResponse({"detail": f"Неизвестный способ оплаты: {payment_method}"}, status_code=400)
 
 
 # --- Watchdog Webhooks ---
@@ -245,10 +326,58 @@ async def webhook_generic(request: Request, state: AppState = Depends(get_state)
     return await _handle_deploy_webhook(request, state, "generic")
 
 
+@router.post("/webhook/stripe")
+async def webhook_stripe(request: Request, state: AppState = Depends(get_state)):
+    """Stripe webhook для обработки событий биллинга."""
+    from ..stripe_integration import get_stripe_client, process_stripe_webhook
+    
+    body = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+    
+    client = get_stripe_client()
+    if not client.is_configured:
+        return JSONResponse({"detail": "Stripe not configured"}, status_code=503)
+    
+    event = client.construct_webhook_event(body, sig_header or "")
+    if not event:
+        return JSONResponse({"detail": "Invalid signature"}, status_code=400)
+    
+    await process_stripe_webhook(event, state.storage)
+    return {"status": "ok"}
+
+
+@router.post("/webhook/yookassa")
+async def webhook_yookassa(request: Request, state: AppState = Depends(get_state)):
+    """ЮKassa webhook для обработки событий биллинга."""
+    from ..yookassa_integration import get_yookassa_client, process_yookassa_webhook
+    
+    body = await request.body()
+    signature = request.headers.get("x-signature")
+    
+    client = await get_yookassa_client()
+    if not client.is_configured:
+        return JSONResponse({"detail": "ЮKassa not configured"}, status_code=503)
+    
+    if not signature or not client.verify_webhook(body, signature):
+        return JSONResponse({"detail": "Invalid signature"}, status_code=400)
+    
+    import json
+    try:
+        data = json.loads(body)
+        event_type = data.get("event")
+        if not event_type:
+            return JSONResponse({"detail": "Missing event type"}, status_code=400)
+        
+        await process_yookassa_webhook(event_type, data.get("object", {}), state.storage)
+        return {"status": "ok"}
+    except json.JSONDecodeError:
+        return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
+
+
 async def _handle_deploy_webhook(request: Request, state: AppState, provider: str):
     """Обрабатывает вебхук деплоя от CI/CD провайдера (ставит в очередь для фоновой обработки)."""
-    import hmac
     import hashlib
+    import hmac
     
     body = await request.body()
     
@@ -392,8 +521,8 @@ async def api_scan_oneshot(
     )
 
     # Настройки сканирования
-    from ..scheduler import ScanOptions, Monitor
-    from dataclasses import replace
+
+    from ..scheduler import Monitor, ScanOptions
     
     scan_options = ScanOptions()
     if max_pages:
@@ -404,7 +533,7 @@ async def api_scan_oneshot(
     
     # Настройка авторизации
     if auth_enabled:
-        from ..models import AuthCredentials
+        from webscope.models import AuthCredentials
         scan_options.auth = AuthCredentials(
             kind=auth_kind,
             login=auth_login,

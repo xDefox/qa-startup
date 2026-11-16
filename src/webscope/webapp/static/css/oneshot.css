@@ -1,0 +1,50 @@
+/* ============================================================
+   Oneshot Page Styles
+   Extracted from oneshot.html for CSP compliance
+   ============================================================ */
+
+.result-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 24px;
+  margin-top: 16px;
+}
+
+.result-score {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.result-label {
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+.result-meta {
+  display: flex;
+  gap: 24px;
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+fieldset {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+legend {
+  font-weight: 600;
+  padding: 0 8px;
+}

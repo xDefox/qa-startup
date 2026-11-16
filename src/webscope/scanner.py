@@ -22,7 +22,7 @@ from .checks.js import JS_UTILS
 from .context import ScanContext
 from .crawler import CrawlResult, PageTarget, crawl, fetch_robots, representative_pages, squash_ws
 from .credscope import auth_origins, scoped_cookie_header
-from .diagnostics import diagnose_http_error, diagnose_navigation_error, detect_bot_protection, diagnose_bot_protection
+from .diagnostics import detect_bot_protection, diagnose_bot_protection, diagnose_http_error, diagnose_navigation_error
 from .models import AuthCredentials, Finding, ScanResult, Severity, sort_findings
 from .netguard import GuardedTransport, is_forbidden_address, url_targets_private_network
 from .pages import page_notes
@@ -592,7 +592,7 @@ def _scan_page(
             try:
                 if attempt > 0:
                     page.close()
-                    page = _launch_chromium(playwright, headless).new_page()
+                    page = page.context.browser.new_page()
                 try:
                     response = page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
                 except PlaywrightError as exc:
@@ -609,7 +609,7 @@ def _scan_page(
                 break
             except ScanError:
                 raise
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 last_error = ScanError(f"Navigation failed: {e}")
                 if attempt >= max_retries:
                     raise last_error

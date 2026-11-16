@@ -1,0 +1,363 @@
+/* ============================================================
+   Landing Page Styles
+   Extracted from landing.html for CSP compliance
+   ============================================================ */
+
+.landing-hero {
+  padding: 80px 0 60px;
+  text-align: center;
+  background: linear-gradient(180deg, var(--bg) 0%, var(--card) 100%);
+}
+
+.landing-hero h1 {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  line-height: 1.2;
+  margin-bottom: 1rem;
+  font-weight: 700;
+}
+
+.landing-subtitle {
+  font-size: clamp(1.1rem, 2.5vw, 1.4rem);
+  color: var(--muted);
+  margin-bottom: 2rem;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.landing-cta {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.landing-trust {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.landing-section {
+  padding: 60px 0;
+}
+
+.landing-container {
+  width: 100%;
+  max-width: none;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.landing-section h2 {
+  text-align: center;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  margin-bottom: 3rem;
+}
+
+/* Problem */
+.landing-problem {
+  background: var(--card);
+}
+
+.problem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.problem-card {
+  padding: 2rem;
+  background: var(--bg);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+
+.problem-icon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 1rem;
+  color: var(--accent);
+}
+
+.problem-card h3 {
+  margin-bottom: 0.5rem;
+}
+
+.problem-card p {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+/* Solution */
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+}
+
+.step-card {
+  padding: 2rem;
+  background: var(--card);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  position: relative;
+}
+
+.step-number {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.step-card h3 {
+  margin-bottom: 0.5rem;
+}
+
+.step-card p {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+/* Report Preview */
+.landing-report {
+  background: var(--card);
+}
+
+.report-preview {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.report-mock {
+  background: var(--bg);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  padding: 2rem;
+}
+
+.report-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.report-score {
+  font-size: 2rem;
+  font-weight: 700;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+}
+
+.report-score.success {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--ok);
+}
+
+.report-label {
+  color: var(--muted);
+}
+
+.report-actions ol {
+  padding-left: 1.2rem;
+}
+
+.report-actions li {
+  margin-bottom: 0.75rem;
+  line-height: 1.5;
+}
+
+.report-actions code {
+  background: var(--bg);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+/* Comparison */
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.compare-table th,
+.compare-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+
+.compare-table th {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.compare-table tr:last-child td {
+  border-bottom: none;
+}
+
+.compare-table tr:hover td {
+  background: var(--card);
+}
+
+.highlight-col {
+  background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.05));
+  font-weight: 500;
+}
+
+/* Plans */
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+.plan-card {
+  padding: 2rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.plan-card.popular {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.plan-badge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: white;
+  padding: 0.25rem 1rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.plan-name {
+  font-weight: 600;
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.plan-price {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+}
+
+.plan-price span {
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.plan-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.5rem;
+  flex: 1;
+}
+
+.plan-features li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.plan-features li:last-child {
+  border-bottom: none;
+}
+
+.plan-features li::before {
+  content: "✓";
+  color: var(--ok);
+  font-weight: bold;
+}
+
+.btn-block {
+  width: 100%;
+  text-align: center;
+}
+
+/* Security */
+.security-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+}
+
+.security-item {
+  padding: 1.5rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.security-item svg {
+  width: 40px;
+  height: 40px;
+  color: var(--accent);
+  margin-bottom: 1rem;
+}
+
+.security-item h4 {
+  margin-bottom: 0.5rem;
+}
+
+.security-item p {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+/* CTA Section */
+.landing-cta-section {
+  background: var(--card);
+  text-align: center;
+  padding: 80px 0;
+}
+
+.landing-cta-section h2 {
+  margin-bottom: 1rem;
+}
+
+.landing-cta-text {
+  color: var(--muted);
+  margin-bottom: 2rem;
+  font-size: 1.1rem;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .landing-hero {
+    padding: 60px 0 40px;
+  }
+  .landing-section {
+    padding: 40px 0;
+  }
+}

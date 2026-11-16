@@ -15,12 +15,11 @@ import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 if TYPE_CHECKING:
     from playwright.sync_api import Page
 
-from webscope.models import ScanResult
 from webscope.webapp.storage import Storage
 
 LOGGER = logging.getLogger("webscope.watchdog")
@@ -62,7 +61,7 @@ class SiteSnapshot:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "SiteSnapshot":
+    def from_dict(cls, data: dict) -> SiteSnapshot:
         pages = {}
         for url, p in data.get("pages", {}).items():
             pages[url] = PageSnapshot(
@@ -102,7 +101,7 @@ class ChangeDetector:
             content += f"\n<!-- JS: {url} -->"
         return hashlib.sha256(content.encode("utf-8")).hexdigest()[:32]
 
-    def extract_resources(self, page: "Page", base_url: str) -> tuple[list[str], list[str]]:
+    def extract_resources(self, page: Page, base_url: str) -> tuple[list[str], list[str]]:
         """Извлекает URLs CSS и JS со страницы."""
         css_urls = []
         js_urls = []
@@ -132,15 +131,13 @@ class ChangeDetector:
             return url if url.startswith("http") else "https:" + url
         return urljoin(base, url)
 
-    def fetch_page_snapshot(self, page: "Page", url: str) -> PageSnapshot:
+    def fetch_page_snapshot(self, page: Page, url: str) -> PageSnapshot:
         """Создаёт снимок страницы: хеш контента + заголовки."""
-        html = page.content()
-        
-        # Извлекаем ресурсы
-        css_urls, js_urls = self.extract_resources(page, url)
+        # Извлекаем ресурсы (CSS/JS URLs пока не используем для хеша)
+        _css_urls, _js_urls = self.extract_resources(page, url)
         
         # Хеш контента
-        content_hash = self.compute_content_hash(page.content(), [], [])
+        content_hash = hashlib.sha256(page.content().encode("utf-8")).hexdigest()[:32]
         # Для простоты хешируем только HTML; CSS/JS URLs можно добавить позже
         content_hash = hashlib.sha256(page.content().encode("utf-8")).hexdigest()[:32]
         
@@ -184,26 +181,20 @@ class ChangeDetector:
             new_snap = current_pages[url]
             
             # Сравниваем по приоритету: content_hash > etag > last_modified
-            if new_snap.content_hash != old_snap.get("content_hash", ""):
-                changed.append(url)
-            elif new_snap.etag and old_snap.get("etag") and new_snap.etag != old_snap.get("etag"):
-                changed.append(url)
-            elif new_snap.last_modified and old_snap.get("last_modified") and new_snap.last_modified != old_snap.get("last_modified"):
-                changed.append(url)
-            elif new_snap.status_code != old_snap.get("status_code", 200):
+            if new_snap.content_hash != old_snap.get("content_hash", "") or new_snap.etag and old_snap.get("etag") and new_snap.etag != old_snap.get("etag") or new_snap.last_modified and old_snap.get("last_modified") and new_snap.last_modified != old_snap.get("last_modified") or new_snap.status_code != old_snap.get("status_code", 200):
                 changed.append(url)
         
         return added, changed, removed
 
-    def fetch_sitemap_urls(self, page: "Page", base_url: str) -> list[str]:
+    def fetch_sitemap_urls(self, page: Page, base_url: str) -> list[str]:
         """Парсит sitemap.xml для получения URL и lastmod."""
         urls = []
         try:
             # Пробуем стандартные пути sitemap
             sitemap_urls = [
-                urljoin(url, "/sitemap.xml"),
-                urljoin(url, "/sitemap_index.xml"),
-                urljoin(url, "/sitemap.xml.gz"),
+                urljoin(base_url, "/sitemap.xml"),
+                urljoin(base_url, "/sitemap_index.xml"),
+                urljoin(base_url, "/sitemap.xml.gz"),
             ]
             
             for sitemap_url in sitemap_urls:
@@ -212,14 +203,15 @@ class ChangeDetector:
                     # Пока заглушка
                     pass
                 except Exception:
+                    LOGGER.debug("Failed to fetch sitemap %s", sitemap_url, exc_info=True)
                     continue
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             LOGGER.warning("Failed to fetch sitemap for %s: %s", base_url, e)
         return urls
 
     def save_snapshot(self, site_id: int, url: str, pages: dict[str, PageSnapshot], sitemap_urls: list[str] | None = None) -> None:
         """Сохраняет снимок сайта в хранилище."""
-        snapshot = SiteSnapshot(
+        _snapshot = SiteSnapshot(
             site_id=site_id,
             url=url,
             pages=pages,
@@ -227,17 +219,16 @@ class ChangeDetector:
         )
         # Сохраняем в БД (JSON в отдельной таблице или в sites таблице)
         # TODO: реализовать сохранение в Storage
-        pass
 
 
 # Вспомогательные функции для интеграции с Monitor
 
-async def detect_changed_urls(storage: Storage, site_id: int, page: "Page", base_url: str) -> list[str]:
+async def detect_changed_urls(storage: Storage, site_id: int, page: Page, base_url: str) -> list[str]:
     """Высокоуровневая функция: получает изменённые URL для сайта."""
-    detector = ChangeDetector(storage)
+    _ = ChangeDetector(storage)  # TODO: use for change detection
     
     # Собираем снимки текущих страниц
-    current_pages = {}
+    _current_pages = {}
     # TODO: обойти страницы сайта и собрать снимки
     # Пока заглушка — возвращаем пустой список
     return []
@@ -246,4 +237,3 @@ async def detect_changed_urls(storage: Storage, site_id: int, page: "Page", base
 def update_site_snapshot(storage: Storage, site_id: int, url: str, pages: dict) -> None:
     """Сохраняет обновлённый снимок сайта."""
     # TODO: реализовать
-    pass

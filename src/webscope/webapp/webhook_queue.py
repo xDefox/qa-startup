@@ -9,10 +9,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Awaitable
 
-from .storage import Storage, Site
-from webscope.watchdog import ChangeDetector, PageSnapshot
+from webscope.watchdog import PageSnapshot
+
+from .storage import Storage
 
 LOGGER = logging.getLogger("webscope.webhook_queue")
 
@@ -73,12 +73,12 @@ class WebhookQueue:
                 event = await asyncio.wait_for(self.queue.get(), timeout=1.0)
                 await self._process_event(event)
                 self.queue.task_done()
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                LOGGER.exception("Error in webhook worker: %s", e)
+            except Exception:
+                LOGGER.exception("Error in webhook worker")
 
     async def _process_event(self, event: WebhookEvent) -> None:
         """Обрабатывает одно событие вебхука."""
@@ -97,9 +97,6 @@ class WebhookQueue:
             from ..watchdog import ChangeDetector
             detector = ChangeDetector(self.storage)
 
-            # Получаем сохранённый снимок
-            stored_snapshot = self.storage.get_site_snapshot(event.site_id)
-
             # Создаём текущий снимок (упрощённо - в полной реализации будет краулер)
             current_pages = {
                 event.deploy_url: PageSnapshot(
@@ -111,7 +108,7 @@ class WebhookQueue:
                 )
             }
 
-            added, changed, removed = detector.detect_changes(event.site_id, current_pages)
+            added, changed, _removed = detector.detect_changes(event.site_id, current_pages)
             changed_urls = changed + added
 
             if not changed_urls:
@@ -119,8 +116,8 @@ class WebhookQueue:
                 return
 
             # Запускаем инкрементальный скан
+
             from ..scheduler import Monitor, ScanOptions
-            from dataclasses import replace
 
             options = ScanOptions(
                 max_pages=20,
@@ -139,29 +136,33 @@ class WebhookQueue:
             )
 
             # Запускаем инкрементальный скан
-            run = temp_monitor.begin(self.storage.get_site(event.site_id))
-            run = temp_monitor.execute(self.storage.get_site(event.site_id), run)
+            site_obj = self.storage.get_site(event.site_id)
+            run = temp_monitor.execute(site_obj, temp_monitor.begin(site_obj))
 
             # Отправляем алерт если есть новые проблемы
-            final_result = self.storage.finish_run(
-                run.id,
-                temp_monitor.scanner_func(event.deploy_url, ScanOptions(target_urls=changed_urls)).result
-            )
-            diff = self.storage.diff_with_previous(final_result)
-            if diff and (diff.new_findings or diff.worsened_findings):
-                # Отправляем алерт через notify
-                from ..alerts import notify
-                notify(
-                    site_url=event.deploy_url,
-                    diff=final_result.diff_with_previous if hasattr(final_result, 'diff_with_previous') else None,
-                    email=None,  # TODO: брать из настроек сайта
-                    telegram_chat=site.telegram_chat,
+            from ..alerts import notify
+            from ..history import diff_snapshots
+            
+            # Получаем предыдущий успешный прогон для сравнения
+            previous_run = self.storage.previous_run(event.site_id, run.id)
+            if previous_run:
+                diff_report = diff_snapshots(
+                    self.storage.snapshot_of(previous_run),
+                    self.storage.snapshot_of(run)
                 )
+                
+                if diff_report and (diff_report.new_findings or diff_report.worsened_findings):
+                    notify(
+                        site_url=event.deploy_url,
+                        diff=diff_report,
+                        email=site.email,
+                        telegram_chat=site.telegram_chat,
+                    )
 
             LOGGER.info("Processed webhook for site %d, scanned %d URLs", event.site_id, len(changed_urls))
 
-        except Exception as e:
-            LOGGER.exception("Error processing webhook event for site %d: %s", event.site_id, e)
+        except Exception:
+            LOGGER.exception("Error processing webhook event for site %d", event.site_id)
 
 
 async def create_webhook_queue(storage: Storage) -> WebhookQueue:

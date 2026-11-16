@@ -1,422 +1,147 @@
 {% extends "base.html" %}
+{% from "_macros.html" import hero_card, card, field, input, select, checkbox, btn_primary, btn_secondary, btn_lg, section_divider, steps_grid, flash, csrf_input %}
 {% block title %}webscope — проверка сайта{% endblock %}
+{% block scripts %}
+<script src="/static/js/index.js"></script>
+{% endblock %}
 {% block content %}
 
-{% if error %}
-<div class="error">{{ error }}</div>
-{% endif %}
+{{ flash(error, category="error") }}
 
 <!-- Toast container -->
 <div id="toast-container" aria-live="polite"></div>
 
-<div class="card hero">
-  <h1>Проверьте свой сайт — бесплатно</h1>
-  <p>
-    Проверим, что на сайте не сломано: нет ли картинок без подписей, полей без
-    подписей, кнопок без названия, ошибок в консоли и прокрутки вбок на телефоне.
-    Покажем оценку и скажем, что исправить в первую очередь.
-  </p>
-  <div class="hero-cta">
-    <a href="/scan/oneshot" class="btn btn-primary btn-lg">Проверить сайт бесплатно</a>
-    <a href="/landing#how-it-works" class="btn btn-secondary btn-lg">Как это работает</a>
-  </div>
-  <p class="landing-trust">5 находок бесплатно · без карты · запуск за 30 секунд</p>
-  <form method="post" action="/sites" id="site-form">
-    <div class="field">
-      <label for="url">Адрес сайта или загрузите локальную сборку</label>
-      <div class="row" style="align-items: center;">
-        <div style="flex: 3 1 280px;">
-          <input id="url" type="text" name="url" placeholder="https://example.com" inputmode="url" autocomplete="url">
-        </div>
-        <div class="actions">
-          <button type="submit">Проверить сайт</button>
-        </div>
-      </div>
-    </div>
+{{ hero_card(
+    title="Сайт открывается.<br>Заявка — нет.",
+    subtitle="Проверьте свой сайт — бесплатно. Проверим, что на сайте не сломано: нет ли картинок без подписей, полей без подписей, кнопок без названия, ошибок в консоли и прокрутки вбок на телефоне. Покажем оценку и скажем, что исправить в первую очередь.",
+    cta_text="Проверить сайт бесплатно",
+    cta_href="/scan/oneshot",
+    secondary_text="Как это работает",
+    secondary_href="/landing#how-it-works",
+    trust_text="5 находок бесплатно · без карты · запуск за 30 секунд"
+) }}
+
+{{ section_divider() }}
+
+{% call card("Хотите проверять регулярно?", "Добавьте сайт в мониторинг — получите еженедельные отчёты, диффы и алерты в Telegram/Email.") %}
+<form method="post" action="/sites" id="site-form">
+
+    {{ field("Адрес сайта или загрузите локальную сборку", input("url", type="text", placeholder="https://example.com", autocomplete="url", class="flex-url-input", attrs={'inputmode': 'url'})) }}
 
     <div class="row">
-      <div class="field">
-        <label for="email">Куда присылать отчёты (необязательно)</label>
-        <input id="email" type="email" name="email" placeholder="you@example.com" autocomplete="email" spellcheck="false">
-      </div>
-      <div class="field">
-        <label for="schedule">Как часто проверять</label>
-        <select id="schedule" name="schedule">
-          {% for value, label in schedules.items() %}
-          <option value="{{ value }}">{{ label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      {#
-      <div class="field">
-        <label for="organization">Организация</label>
-        <select id="organization" name="organization_id">
-          {% for org in organizations %}
-          <option value="{{ org.id }}"{% if loop.first %} selected{% endif %}>{{ org.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      #}
-      <div class="field" style="align-self: flex-end;">
-        <label class="check-row" for="auth-enabled" style="margin-bottom: 0;">
-          <input type="checkbox" id="auth-enabled" name="auth_enabled" value="1">
-          <span>Нужен вход</span>
-        </label>
-      </div>
+        {{ field("Куда присылать отчёты (необязательно)", input("email", type="email", placeholder="you@example.com", autocomplete="email", attrs={'spellcheck': 'false'})) }}
+
+        {{ field("Как часто проверять", select("schedule", schedules)) }}
+
+        {{ field("", checkbox("auth_enabled", "Нужен вход", value="1", class="check-row check-row-no-margin"), class="field field-align-end") }}
     </div>
+
     <div class="auth-block" id="auth-block" hidden>
-      <p class="muted small">Сайт защищён логином и паролем — войдём перед проверкой.</p>
-      <div class="row">
-        <div class="field">
-          <label for="auth_kind">Как защищён сайт</label>
-          <select id="auth_kind" name="auth_kind">
-            <option value="basic">Пароль на весь сайт (Basic)</option>
-            <option value="form">Форма входа на странице</option>
-          </select>
+        <p class="muted small">Сайт защищён логином и паролем — войдём перед проверкой.</p>
+        <div class="row">
+            {{ field("Как защищён сайт", select("auth_kind", [("basic", "Пароль на весь сайт (Basic)"), ("form", "Форма входа на странице")]), class="field") }}
+
+            {{ field("Логин", input("auth_login", type="text", autocomplete="off", attrs={'spellcheck': 'false'}), class="field") }}
+
+            {{ field("Пароль", input("auth_password", type="password", autocomplete="new-password"), class="field") }}
         </div>
-        <div class="field">
-          <label for="auth_login">Логин</label>
-          <input id="auth_login" type="text" name="auth_login" autocomplete="off" spellcheck="false">
+        <div class="field" id="auth-login-url-field" hidden>
+            {{ field("Адрес страницы входа (если отличается от сайта)", input("auth_login_url", type="text", placeholder="example.com/wp-admin", attrs={'spellcheck': 'false'}), class="field") }}
         </div>
-        <div class="field">
-          <label for="auth_password">Пароль</label>
-          <input id="auth_password" type="password" name="auth_password" autocomplete="new-password">
-        </div>
-      </div>
-      <div class="field" id="auth-login-url-field" hidden>
-        <label for="auth_login_url">Адрес страницы входа (если отличается от сайта)</label>
-        <input id="auth_login_url" type="text" name="auth_login_url" placeholder="example.com/wp-admin" spellcheck="false">
-      </div>
     </div>
-  </form>
 
-  <!-- File inputs OUTSIDE the form - used only for /upload -->
-  <input type="file" id="local-file" accept=".html,.htm,.zip" hidden>
-  <input type="file" id="local-dir" webkitdirectory directory multiple hidden>
+    <div class="actions">
+        {{ btn_primary("Добавить в мониторинг", class="btn btn-primary", attrs={"type": "submit"}) }}
+    </div>
+</form>
 
-  <div class="upload-zone" id="upload-zone">
+<!-- File inputs OUTSIDE the form - used only for /upload -->
+<input type="file" id="local-file" accept=".html,.htm,.zip" hidden>
+<input type="file" id="local-dir" webkitdirectory directory multiple hidden>
+
+{% endcall %}
+
+{% call card("Загрузить локальную сборку") %}
+<div class="upload-zone" id="upload-zone">
     <div class="upload-zone-content" id="upload-content">
-      <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-        <polyline points="17 8 12 3 7 8"/>
-        <line x1="12" y1="3" x2="12" y2="15"/>
-      </svg>
-      <p class="upload-title">Перетащите папку сборки или файл сюда</p>
-      <p class="upload-hint">Или нажмите кнопку ниже</p>
-      <div class="upload-actions">
-        <label class="btn-like secondary" for="local-file"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:-2px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Файл</label>
-        <label class="btn-like secondary" for="local-dir"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:-2px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Папку</label>
-      </div>
+        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <p class="upload-title">Перетащите папку сборки или файл сюда</p>
+        <p class="upload-hint">Или нажмите кнопку ниже</p>
+        <div class="upload-actions">
+            <label class="btn-like secondary" for="local-file">
+                <svg class="icon-btn-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>Файл
+            </label>
+            <label class="btn-like secondary" for="local-dir">
+                <svg class="icon-btn-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                </svg>Папку
+            </label>
+        </div>
     </div>
     <div class="upload-selected" id="upload-selected" hidden>
-      <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>
-      <span id="upload-count">0 файлов</span>
-      <button type="button" class="btn-like secondary" id="upload-clear">Очистить</button>
+        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span id="upload-count">0 файлов</span>
+        <button type="button" class="btn-like secondary" id="upload-clear">Очистить</button>
     </div>
     <div class="upload-progress" id="upload-progress" hidden>
-      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-      <span class="progress-text" id="progress-text">Загрузка…</span>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <span class="progress-text" id="progress-text">Загрузка…</span>
     </div>
-  </div>
-  <script>
-    (function(){
-      const form = document.getElementById('site-form');
-      const urlInput = document.getElementById('url');
-      const fileInput = document.getElementById('local-file');
-      const dirInput = document.getElementById('local-dir');
-      const uploadZone = document.getElementById('upload-zone');
-      const uploadContent = document.getElementById('upload-content');
-      const uploadSelected = document.getElementById('upload-selected');
-      const uploadCount = document.getElementById('upload-count');
-      const uploadClear = document.getElementById('upload-clear');
-      const uploadProgress = document.getElementById('upload-progress');
-      const progressFill = document.getElementById('progress-fill');
-      const progressText = document.getElementById('progress-text');
-
-      // Debug: check all elements exist
-      console.log('Init elements:', {form: !!form, urlInput: !!urlInput, fileInput: !!fileInput, dirInput: !!dirInput, uploadZone: !!uploadZone, uploadContent: !!uploadContent, uploadSelected: !!uploadSelected, uploadCount: !!uploadCount, uploadClear: !!uploadClear, uploadProgress: !!uploadProgress, progressFill: !!progressFill, progressText: !!progressText});
-
-      // Local toast function (fallback if global not ready)
-      function showToast(message, type) {
-        type = type || 'warning';
-        const container = document.getElementById('toast-container');
-        if (!container) { console.warn('toast-container not found'); return; }
-        const icons = {
-          warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
-          error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>',
-          success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>'
-        };
-        const toast = document.createElement('div');
-        toast.className = 'toast ' + type;
-        toast.innerHTML = '<span class="toast-icon" aria-hidden="true">' + icons[type] + '</span><span class="toast-message">' + message + '</span><button class="toast-close" aria-label="Закрыть"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>';
-        container.appendChild(toast);
-        toast.querySelector('.toast-close').addEventListener('click', () => removeToast(toast));
-        setTimeout(() => removeToast(toast), 5000);
-        function removeToast(el) { el.style.animation = 'toast-out 200ms ease-in forwards'; setTimeout(() => el.remove(), 200); }
-      }
-      // Expose globally for other scripts
-      window.showToast = showToast;
-
-      let selectedFiles = [];
-
-      function showSelected(files) {
-        selectedFiles = Array.from(files);
-        uploadContent.hidden = true;
-        uploadSelected.hidden = false;
-        
-        // Show count
-        const countText = selectedFiles.length + ' ' + 
-          (selectedFiles.length === 1 ? 'файл' : 
-           selectedFiles.length < 5 ? 'файла' : 'файлов');
-        
-        // Build file list with remove buttons
-        const fileList = selectedFiles.map((f, i) =>
-          '<div class="upload-file-item" data-index="' + i + '">' +
-            '<span class="upload-file-name" title="' + (f.webkitRelativePath || f.name).replace(/"/g, '"') + '">' +
-              (i + 1) + '. ' + (f.webkitRelativePath || f.name) +
-            '</span>' +
-            '<button type="button" class="upload-file-remove" aria-label="Удалить файл" data-index="' + i + '">' +
-              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>' +
-            '</button>' +
-          '</div>'
-        ).join('');
-        
-        uploadCount.innerHTML = countText + '<div class="upload-file-list">' + fileList + '</div>';
-        
-        // Attach remove handlers
-        uploadCount.querySelectorAll('.upload-file-remove').forEach(btn => {
-          btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            const idx = parseInt(this.dataset.index, 10);
-            removeFile(idx);
-          });
-        });
-      }
-      
-      function removeFile(index) {
-        selectedFiles.splice(index, 1);
-        if (selectedFiles.length === 0) {
-          clearSelection();
-        } else {
-          showSelected(selectedFiles); // Re-render with updated indices
-        }
-      }
-
-      function clearSelection() {
-        selectedFiles = [];
-        fileInput.value = '';
-        dirInput.value = '';
-        uploadContent.hidden = false;
-        uploadSelected.hidden = true;
-      }
-
-      async function upload(files) {
-        console.log('upload() called with:', files ? files.length : 0, 'files');
-        if (!files || !files.length) return null;
-        const fd = new FormData();
-        for (let i = 0; i < files.length; i++) {
-          fd.append('files', files[i]);
-          fd.append('paths', files[i].webkitRelativePath || files[i].name);
-        }
-        uploadSelected.hidden = true;
-        uploadProgress.hidden = false;
-        progressFill.style.width = '0%';
-        progressText.textContent = 'Загрузка…';
-        try {
-          const data = await new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/upload');
-            xhr.upload.addEventListener('progress', e => {
-              if (e.lengthComputable) {
-                const pct = Math.round((e.loaded / e.total) * 100);
-                progressFill.style.width = pct + '%';
-                progressText.textContent = 'Загрузка: ' + pct + '%';
-              }
-            });
-            xhr.addEventListener('load', () => {
-              console.log('XHR load, status:', xhr.status);
-              if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                  const data = JSON.parse(xhr.responseText);
-                  console.log('XHR response:', data);
-                  if (data && data.url) {
-                    resolve(data.url);
-                  } else {
-                    reject(new Error('Нет URL в ответе')); 
-                  }
-                } catch (e) {
-                  console.error('Parse error:', e);
-                  reject(new Error('Ошибка парсинга ответа'));
-                }
-              } else {
-                console.error('XHR error status:', xhr.status, xhr.responseText);
-                reject(new Error('Upload failed: ' + xhr.status));
-              }
-            });
-            xhr.addEventListener('error', () => {
-              console.error('XHR network error');
-              reject(new Error('Network error'));
-            });
-            xhr.send(fd);
-          });
-          console.log('upload() resolved with:', data);
-          return data;
-        } catch (e) {
-          console.error('Upload error:', e);
-          uploadProgress.hidden = true;
-          uploadContent.hidden = false;
-          if (window.showToast) {
-            window.showToast('Ошибка загрузки: ' + e.message, 'error');
-          } else {
-            alert('Ошибка загрузки: ' + e.message);
-          }
-          return null;
-        }
-      }
-
-      // File input changes
-      fileInput?.addEventListener('change', e => {
-        console.log('fileInput change:', e.target.files.length);
-        if (e.target.files.length) showSelected(e.target.files);
-      });
-      dirInput?.addEventListener('change', e => {
-        console.log('dirInput change:', e.target.files.length);
-        if (e.target.files.length) showSelected(e.target.files);
-      });
-
-      // Form submit - validate, then upload if files selected
-      form?.addEventListener('submit', async (e) => {
-        console.log('Form submit, selectedFiles:', selectedFiles.length, 'url:', urlInput.value);
-        // Validate: need either URL or selected files
-        const hasUrl = urlInput.value.trim().length > 0;
-        if (!hasUrl && selectedFiles.length === 0) {
-          e.preventDefault();
-          if (window.showToast) {
-            window.showToast('Укажите адрес сайта или выберите папку/файл для загрузки', 'warning');
-          } else {
-            alert('Укажите адрес сайта или выберите папку/файл для загрузки');
-          }
-          return;
-        }
-        // Always prevent default if files are selected - we'll handle submission
-        if (selectedFiles.length > 0) {
-          e.preventDefault();
-          try {
-            const url = await upload(selectedFiles);
-            if (url) {
-              urlInput.value = url;
-              // Clear file inputs so they don't get sent in final submit
-              fileInput.value = '';
-              dirInput.value = '';
-              form.submit();
-            } else {
-              console.log('Upload failed, not submitting');
-            }
-          } catch (err) {
-            console.error('Upload error:', err);
-            if (window.showToast) {
-              window.showToast('Ошибка загрузки: ' + err.message, 'error');
-            } else {
-              alert('Ошибка загрузки: ' + err.message);
-            }
-          }
-        } else {
-          console.log('No files selected, normal submit');
-        }
-      });
-
-      // Clear button
-      uploadClear?.addEventListener('click', clearSelection);
-
-      // Drag and drop
-      ['dragenter', 'dragover'].forEach(evt => {
-        uploadZone.addEventListener(evt, e => {
-          e.preventDefault();
-          e.stopPropagation();
-          uploadZone.classList.add('drag-over');
-        });
-      });
-      ['dragleave', 'drop'].forEach(evt => {
-        uploadZone.addEventListener(evt, e => {
-          e.preventDefault();
-          e.stopPropagation();
-          uploadZone.classList.remove('drag-over');
-        });
-      });
-      uploadZone.addEventListener('drop', e => {
-        const files = e.dataTransfer.files;
-        if (files.length) showSelected(files);
-      });
-
-      // Click on zone opens file dialog (but not on buttons/labels)
-      uploadZone.addEventListener('click', e => {
-        // Don't trigger if clicked on a label/button inside
-        if (e.target.closest('label, button')) return;
-        if (e.target === uploadZone || e.target.closest('.upload-zone-content')) {
-          fileInput.click();
-        }
-      });
-    })();
-    (function(){
-      const toggle = document.getElementById('auth-enabled');
-      const block = document.getElementById('auth-block');
-      const kind = document.getElementById('auth_kind');
-      const loginUrlField = document.getElementById('auth-login-url-field');
-      function syncAuth(){
-        block.hidden = !toggle.checked;
-        loginUrlField.hidden = !(toggle.checked && kind.value === 'form');
-      }
-      toggle.addEventListener('change', syncAuth);
-      kind.addEventListener('change', syncAuth);
-      syncAuth();
-    })();
-  </script>
 </div>
+{% endcall %}
 
-<div class="card">
-  <h2>Как это работает</h2>
-  <div class="steps">
-    <div class="step"><b>1. Обходим сайт</b><span class="muted small">Находим все типы страниц: главная, каталог, новости, контакты.</span></div>
-    <div class="step"><b>2. Проверяем в браузере</b><span class="muted small">Реальный браузер, реальные ошибки — не догадки.</span></div>
-    <div class="step"><b>3. Показываем отчёт</b><span class="muted small">Оценка, список проблем и три первых дела.</span></div>
-  </div>
-</div>
+{{ section_divider() }}
 
-<div class="card">
-  <h2>Ваши сайты</h2>
-  {% if sites %}
-  <div class="site-rows">
+{{ steps_grid([
+    {"title": "1. Обходим сайт", "text": "Находим все типы страниц: главная, каталог, новости, контакты."},
+    {"title": "2. Проверяем в браузере", "text": "Реальный браузер, реальные ошибки — не догадки."},
+    {"title": "3. Показываем отчёт", "text": "Оценка, список проблем и три первых дела."}
+]) }}
+
+{{ section_divider() }}
+
+{% call card("Ваши сайты") %}
+{% if sites %}
+<div class="site-rows">
     {% for item in sites %}
     <a class="site-row" href="/sites/{{ item.site.id }}">
-      <div class="site-row-main">
-        <div class="site-row-url">{{ item.site.url }}</div>
-        <div class="site-row-meta muted small">
-          {% if not item.run %}
-            проверка ещё не выполнялась
-          {% elif item.run.status == 'ok' %}
-            последняя проверка: {{ item.run.finished_at[:16].replace('T', ' ') }}
-          {% elif item.run.status == 'running' %}
-            проверка выполняется…
-          {% else %}
-            <span class="status-error" title="{{ item.run.error or '' }}">последняя проверка не удалась{% if item.run.error %}: {{ item.run.error.split('\n')[0][:90] }}{% endif %}</span>
-          {% endif %}
+        <div class="site-row-main">
+            <div class="site-row-url">{{ item.site.url }}</div>
+            <div class="site-row-meta muted small">
+                {% if not item.run %}
+                    проверка ещё не выполнялась
+                {% elif item.run.status == 'ok' %}
+                    последняя проверка: {{ item.run.finished_at[:16].replace('T', ' ') }}
+                {% elif item.run.status == 'running' %}
+                    проверка выполняется…
+                {% else %}
+                    <span class="status-error" title="{{ item.run.error or '' }}">последняя проверка не удалась{% if item.run.error %}: {{ item.run.error.split('\n')[0][:90] }}{% endif %}</span>
+                {% endif %}
+            </div>
         </div>
-      </div>
-      {% if item.run and item.run.status == 'ok' %}
-      <div class="site-row-score">{{ item.run.score }}/100</div>
-      {% elif item.run and item.run.status == 'error' %}
-      <div class="site-row-score status-error" title="{{ item.run.error or '' }}">!</div>
-      {% else %}
-      <div class="site-row-arrow muted">→</div>
-      {% endif %}
+        {% if item.run and item.run.status == 'ok' %}
+        <div class="site-row-score">{{ item.run.score }}/100</div>
+        {% elif item.run and item.run.status == 'error' %}
+        <div class="site-row-score status-error" title="{{ item.run.error or '' }}">!</div>
+        {% else %}
+        <div class="site-row-arrow muted">→</div>
+        {% endif %}
     </a>
     {% endfor %}
-  </div>
-  {% else %}
-  <p class="muted">Пока ни одного сайта. Вставьте адрес выше — и первая проверка начнётся сразу.</p>
-  {% endif %}
 </div>
+{% else %}
+<p class="muted">Пока ни одного сайта. Вставьте адрес выше — и первая проверка начнётся сразу.</p>
+{% endif %}
+{% endcall %}
 
 {% endblock %}

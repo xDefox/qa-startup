@@ -5,8 +5,8 @@
 """
 
 from __future__ import annotations
-import math
 
+import math
 from collections import defaultdict
 
 from .models import Finding, Severity

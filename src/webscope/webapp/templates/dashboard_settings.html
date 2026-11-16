@@ -1,20 +1,11 @@
 {% extends "base.html" %}
+{% from "_macros.html" import card, btn_primary, btn_secondary, field, input, select, checkbox, form_row, form_actions, card_header, dashboard_header, dashboard_tabs, dashboard_header_row, btn_sm, btn_primary %}
+
 {% block title %}Настройки профиля — webscope{% endblock %}
 {% block content %}
-<div class="dashboard-header">
-  <div>
-    <h1>Настройки профиля</h1>
-    <p class="muted">Управление аккаунтом и уведомлениями.</p>
-  </div>
-  <a class="btn" href="/dashboard">← К сайтам</a>
-</div>
+{{ dashboard_header("Настройки профиля", back_text="← К сайтам") }}
 
-<nav class="dashboard-tabs">
-  <a href="/dashboard" class="{% if active_tab == 'sites' %}active{% endif %}">Мои сайты</a>
-  <a href="/dashboard/organizations" class="{% if active_tab == 'organizations' %}active{% endif %}">Организации</a>
-  <a href="/dashboard/settings" class="{% if active_tab == 'settings' %}active{% endif %}">Настройки</a>
-  <a href="/dashboard/api-keys" class="{% if active_tab == 'api_keys' %}active{% endif %}">API ключи</a>
-</nav>
+{{ dashboard_tabs('settings') }}
 
 <div class="card">
   <h3>Профиль</h3>
@@ -26,35 +17,31 @@
         <small class="muted">Логин задаётся через переменную окружения WEBSCOPE_AUTH_USER</small>
       </div>
       <div class="field">
-        <label>Новый пароль</label>
-        <input type="password" name="new_password" placeholder="Оставьте пустым, чтобы не менять" autocomplete="new-password">
+        {{ field('Новый пароль', input('new_password', type='password', placeholder='Оставьте пустым, чтобы не менять', autocomplete='new-password')) }}
       </div>
       <div class="field">
-        <label>Подтвердите пароль</label>
-        <input type="password" name="confirm_password" autocomplete="new-password">
+        {{ field('Подтвердите пароль', input('confirm_password', type='password', autocomplete='new-password')) }}
       </div>
     </div>
     <div class="actions">
-      <button type="submit" class="btn">Сохранить</button>
+      <button type="submit" class="btn btn-primary">Сохранить</button>
     </div>
   </form>
 </div>
 
-<div class="card" style="margin-top: 24px;">
+<div class="card margin-top-xl">
   <h3>Уведомления</h3>
   <form method="post" action="/dashboard/settings/notifications">
     <div class="row">
       <div class="field">
-        <label>Email для отчётов</label>
-        <input type="email" name="email" placeholder="you@example.com" autocomplete="email">
+        {{ field('Email для отчётов', input('email', placeholder='you@example.com', autocomplete='email')) }}
       </div>
       <div class="field">
-        <label>Telegram Chat ID</label>
-        <input type="text" name="telegram_chat" placeholder="-1001234567890">
+        {{ field('Telegram Chat ID', input('telegram_chat', placeholder='-1001234567890')) }}
       </div>
     </div>
     <div class="actions">
-      <button type="submit" class="btn">Сохранить</button>
+      <button type="submit" class="btn btn-primary">Сохранить</button>
     </div>
   </form>
 </div>

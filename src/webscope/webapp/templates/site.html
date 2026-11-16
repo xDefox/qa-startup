@@ -1,18 +1,20 @@
 {% extends "base.html" %}
+{% from "_macros.html" import card, btn_primary, btn_secondary, field, input, select, checkbox, form_row, form_actions, card_header, sites_table, dashboard_header, dashboard_tabs, dashboard_header_row, btn_sm, btn_primary, diff_card, blockers_card, findings_table, findings_list, download_button, run_selector %}
+
 {% block title %}{{ site.url }} — проверка сайта{% endblock %}
+{% block scripts %}
+<script src="/static/js/site.js"></script>
+{% endblock %}
 {% block content %}
 
 {% if pending %}
-<div class="scan-progress" id="scan-progress" role="status" aria-live="polite">
-  <span class="scan-spinner" aria-hidden="true"></span>
-  <span class="scan-progress-text">Идёт проверка сайта… это занимает до минуты. Страница обновится сама.</span>
-</div>
+  {{ scan_progress() }}
 {% endif %}
 
 {% if last_error %}
 <div class="error">
   <div><strong>Последняя проверка не удалась:</strong> {{ last_error }}</div>
-  <div class="small" style="margin-top:6px;">
+  <div class="small error-detail">
     {% if 'авториз' in last_error|lower or 'auth' in last_error|lower or '401' in last_error or 'login' in last_error|lower %}
       Проверьте настройки входа — логин/пароль или форму авторизации.
     {% elif 'timeout' in last_error|lower or 'таймаут' in last_error|lower or 'connect' in last_error|lower %}
@@ -32,9 +34,9 @@
 {% endif %}
 
 <div class="card">
-  <div class="row" style="align-items: center;">
-    <div style="flex: 2 1 auto;">
-      <h1 style="margin-bottom:4px;">{{ site.url }}</h1>
+  <div class="row site-header-row">
+    <div class="site-header-url">
+      <h1 class="site-header-title">{{ site.url }}</h1>
       <div class="muted small">
         Автоматическая проверка: {{ schedule_label }}
         {% if site.email %} · отчёты на {{ site.email }}{% endif %}
@@ -46,11 +48,11 @@
       </div>
       {% endif %}
     </div>
-    <div style="flex: 0 0 auto; text-align: right;">
+    <div class="site-header-meta">
       {% if view %}
       <div class="score">
         {% if view.diff and view.diff.score_before != view.diff.score_after %}
-        <s class="score-prev" title="Оценка предыдущей проверки: {{ view.diff.score_before }}">{{ view.diff.score_before }}</s>
+        <s class="score-prev" title="Оценка предыдущей проверки: {{ view.diff.score_before }}">{{ view.diff.score_before }} 
         {% endif %}
         {{ view.score }}<small>/100</small>
       </div>
@@ -58,9 +60,9 @@
       {% endif %}
     </div>
   </div>
-  <div class="row" style="margin-top: 18px;">
+  <div class="row site-actions-row">
     <form method="post" action="/sites/{{ site.id }}/scan" class="actions scan-form">
-      <button type="submit">Проверить ещё раз</button>
+      <button type="submit" class="btn btn-primary">Проверить ещё раз</button>
     </form>
     <div class="actions">
       <a class="pill" href="/sites/{{ site.id }}/history">История проверок</a>
@@ -69,46 +71,18 @@
       <a class="pill" href="/sites/{{ site.id }}/settings">Настройки</a>
     </div>
     <div class="actions">
-      <a class="pill" href="/scan" style="background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; text-decoration: none; font-size: 14px;">Проверить ещё один сайт</a>
+      <a class="pill site-check-another" href="/scan">Проверить ещё один сайт</a>
     </div>
   </div>
 </div>
 
 {% if view %}
   {% if view.diff and view.diff.new_count %}
-  <div class="card">
-    <h2>Что сломалось с прошлого раза</h2>
-    <p class="muted small">
-      Оценка: {{ view.diff.score_before }} → {{ view.diff.score_after }}
-      {% if view.diff.delta > 0 %}(+{{ view.diff.delta }}){% elif view.diff.delta < 0 %}({{ view.diff.delta }}){% endif %}
-      · новых проблем: {{ view.diff.new_count }} · исправлено: {{ view.diff.fixed_count }}
-    </p>
-    <ul class="small diff-list">
-      {% for item in view.diff.new %}
-      <li><span class="badge {{ item.severity }}">{{ item.severity }}</span> {{ item.title }} — <span class="muted">{{ item.url }}</span></li>
-      {% endfor %}
-    </ul>
-  </div>
+  {{ diff_card(view.diff) }}
   {% endif %}
 
   {% if view.blockers %}
-  <div class="card blockers">
-    <h2>Блокирует клики — нельзя нажать кнопку или ссылку</h2>
-    <p class="muted small">Это прямо мешает оставить заявку или заказ — исправлять в первую очередь.</p>
-    {% for item in view.blockers %}
-    <div class="issue">
-      <div>{{ item.meaning }}</div>
-      {% if item.selector %}<div class="where">Селектор: <code>{{ item.selector }}</code></div>{% endif %}
-      {% if item.pages_count > 1 %}
-      <div class="where">Затронуто: {{ item.pages_count }} стр., элементов: {{ item.count }}{% if item.url %} · {{ item.url }}{% if item.pages_count > 3 %} и др.{% endif %}{% endif %}</div>
-      {% elif item.url %}
-      <div class="where">Страница: {{ item.url }}</div>
-      {% endif %}
-      <div class="fix">Что сделать: {{ item.fix }}</div>
-      {% if item.snippet %}<pre class="snippet">{{ item.snippet }}</pre>{% endif %}
-    </div>
-    {% endfor %}
-  </div>
+  {{ blockers_card(view.blockers) }}
   {% endif %}
 
   <div class="card">
@@ -128,24 +102,13 @@
     {% endif %}
   </div>
 
-  <div class="card" style="position:relative;">
+  <div class="card findings-card">
     <div class="findings-head">
       <h2 class="findings-title">Все находки ({{ view.total }})</h2>
       {% if view.has_external %}
-      <span class="muted small" style="font-weight:400;">из них в чужих виджетах: {{ view.external_total }}</span>
+      <span class="muted small external-badge">из них в чужих виджетах: {{ view.external_total }}</span>
       {% endif %}
-      {% if runs and runs|length > 1 %}
-      <div class="run-selector" style="margin: 8px 0;">
-        <label for="run-select" class="muted small">Итерация:</label>
-        <select id="run-select" class="run-select" onchange="window.location.href='/sites/{{ site.id }}/runs/' + this.value">
-          {% for run in runs %}
-          <option value="{{ run.id }}" {% if run.id == current_run_id %}selected{% endif %}>
-            {{ run.finished_at[:16].replace('T', ' ') if run.finished_at else run.started_at[:16].replace('T', ' ') }} · {{ run.score }}/100 · {{ run.pages_scanned }} стр.
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      {% endif %}
+      {{ run_selector(runs, current_run_id, site.id) }}
       <span class="view-toggle" role="group" aria-label="Как показать находки">
         <button type="button" class="view-btn" data-view="list" aria-label="Списком" title="Списком" aria-pressed="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12"></path><path d="M8 12h12"></path><path d="M8 18h12"></path><circle cx="4" cy="6" r="1"></circle><circle cx="4" cy="12" r="1"></circle><circle cx="4" cy="18" r="1"></circle></svg>
@@ -154,12 +117,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 10h18"></path><path d="M9 10v10"></path></svg>
         </button>
       </span>
-      <button type="button" class="icon-btn download-btn" id="download-open"
-              aria-label="Сохранить отчёт" title="Сохранить отчёт"
-              aria-haspopup="true" aria-expanded="false" aria-controls="download-pop"
-              data-fallback="/api/sites/{{ site.id }}/report.html?download=1">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
-      </button>
+      {{ download_button(site.id, download_default_name, download_formats, download_date) }}
       <noscript>
         <span class="muted small">Скачать:</span>
         {% for item in download_formats %}
@@ -168,110 +126,8 @@
       </noscript>
     </div>
 
-    <div class="download-pop" id="download-pop" hidden role="group" aria-label="Формат отчёта">
-      <div class="download-pop-head">
-        <span>Сохранить отчёт</span>
-        {% if download_date %}<span class="muted small">от {{ download_date }}</span>{% endif %}
-      </div>
-      <div class="download-name">
-        <label class="download-name-label" for="download-name">Имя файла</label>
-        <div class="download-name-field">
-          <input id="download-name" type="text" value="{{ download_default_name }}" maxlength="120"
-                 spellcheck="false" autocomplete="off" autocapitalize="off"
-                 aria-describedby="download-name-hint">
-          <span class="download-name-ext" id="download-name-ext">.json</span>
-        </div>
-        <p class="download-name-hint" id="download-name-hint">Расширение подставится по формату</p>
-      </div>
-      {% for item in download_formats %}
-      <a class="download-option" href="/api/sites/{{ site.id }}/report.{{ item.ext }}?download=1" download
-         data-base-href="/api/sites/{{ site.id }}/report.{{ item.ext }}?download=1" data-ext="{{ item.ext }}">
-        <span class="download-option-top">
-          <span class="download-ext">{{ item.label }}</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
-        </span>
-        <span class="download-hint">{{ item.hint }}</span>
-      </a>
-      {% endfor %}
-    </div>
-
-    {% set columns = [
-      ('rule', 'Правило'),
-      ('severity', 'Серьёзность'),
-      ('title', 'Заголовок'),
-      ('pages', 'Страниц'),
-      ('count', 'Элементов'),
-      ('selector', 'Селектор'),
-      ('fix', 'Что сделать'),
-      ('url', 'Страница')
-    ] %}
-    <div class="findings-view" data-mode="table" hidden>
-      <div class="findings-table-wrap">
-      <table class="findings-table">
-        <thead>
-          <tr>
-            {% for key, label in columns %}<th class="col-{{ key }}">{{ label }}</th>{% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for group in view.groups %}
-          {% for item in group.problems %}
-          <tr>
-            <td class="cell-rule">{{ item.rule }}</td>
-            <td class="cell-badge"><span class="badge {{ item.severity }}">{{ item.severity_label }}</span></td>
-            <td class="cell-title">{{ item.meaning }}</td>
-            <td class="cell-num">{{ item.pages_count }}</td>
-            <td class="cell-num">{{ item.count }}</td>
-            <td class="cell-selector"><code>{{ item.selector or '—' }}</code></td>
-            <td class="cell-fix">{{ item.fix }}</td>
-            <td class="cell-url">{{ item.url }}</td>
-          </tr>
-          {% endfor %}
-          {% endfor %}
-          {% if not view.groups %}
-          <tr><td colspan="{{ columns|length }}" class="muted">Ничего не найдено.</td></tr>
-          {% endif %}
-        </tbody>
-      </table>
-      </div>
-    </div>
-
-    <div class="findings-view" data-mode="list">
-    {% for group in view.groups %}
-    <div class="sev {{ group.key }}">
-      <h3>{{ group.title }} ({{ group.count }})</h3>
-      {% for item in group.problems %}
-      <div class="issue">
-        <div>{{ item.meaning }}</div>
-        {% if item.selector %}<div class="where">Селектор: <code>{{ item.selector }}</code></div>{% endif %}
-        {% if item.pages_count > 1 %}
-        <div class="where">Затронуто: {{ item.pages_count }} стр., элементов: {{ item.count }}{% if item.url %} · {{ item.url }}{% if item.pages_count > 3 %} и др.{% endif %}{% endif %}</div>
-        {% elif item.url %}
-        <div class="where">Страница: {{ item.url }}</div>
-        {% endif %}
-        <div class="fix">Что сделать: {{ item.fix }}</div>
-        <div class="fp-actions" style="margin-top: 6px;">
-          <button type="button" class="btn-fp" data-finding-id="{{ item.id }}" data-fp="{{ item.details.fp if item.details.fp is defined else false }}">
-            {% if item.details.fp %}✓ Ложная находка{% else %}🚫 Это ложная находка{% endif %}
-          </button>
-        </div>
-        {% if item.message and item.rule in ('console/error', 'console/failed-request') %}
-        <div class="where">Детали: {{ item.message }}</div>
-        {% endif %}
-        {% if item.source %}
-        <div class="where">Источник/ресурс: <code>{{ item.source }}</code></div>
-        {% endif %}
-        {% if item.help_url %}
-        <div class="where"><a href="{{ item.help_url }}" rel="noopener">Подробнее о проверке</a></div>
-        {% endif %}
-        {% if item.snippet %}<pre class="snippet">{{ item.snippet }}</pre>{% endif %}
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}
-    <p class="muted">Ничего не найдено.</p>
-    {% endfor %}
-    </div>
+    {{ findings_table(view) }}
+    {{ findings_list(view) }}
   </div>
 
 {% elif not pending %}
@@ -279,223 +135,9 @@
   <h2>Отчёта пока нет</h2>
   <p class="muted">Запустите первую проверку — она начнётся сразу.</p>
   <form method="post" action="/sites/{{ site.id }}/scan" class="scan-form">
-    <button type="submit">Проверить сайт</button>
+    <button type="submit" class="btn btn-primary">Проверить сайт</button>
   </form>
 </div>
 {% endif %}
 
-{% endblock %}
-
-{% block scripts %}
-<script>
-  // «Проверить ещё раз» → показываем спиннер сразу, не перезагружая страницу.
-  (function () {
-    const form = document.querySelector('form.scan-form');
-    if (!form) return;
-    form.addEventListener('submit', async (event) => {
-      // Без preventDefault кнопка ушла бы обычным POST со сменой страницы
-      // и спиннер мигнул бы на долю секунды.
-      event.preventDefault();
-      showScanProgress();
-      try {
-        await fetch(form.action, { method: 'POST', credentials: 'same-origin' });
-        // Проверка уже в работе — поллинг статуса подхватит её ниже.
-        setTimeout(check, 1000);
-      } catch (error) {
-        // Сеть мертва — откатываемся на обычную отправку, чтобы пользователь не завис.
-        form.submit();
-      }
-    });
-  })();
-
-  // Панель форматов: всплывает поверх таблицы находок и ничего не прячет —
-  // список и таблица остаются на месте, меняется только их вид.
-  (function () {
-    const opener = document.getElementById('download-open');
-    const pop = document.getElementById('download-pop');
-    if (!opener || !pop) return;
-
-    let isOpen = false;
-
-    // Панель fixed: считаем место от кнопки, прижимаем к экрану,
-    // а если снизу мало места — раскрываем вверх (иначе уедет за край).
-    function place() {
-      const anchor = opener.getBoundingClientRect();
-      const box = pop.getBoundingClientRect();
-      const gap = 8;
-      const margin = 12;
-      let left = anchor.right - box.width;
-      left = Math.max(margin, Math.min(left, window.innerWidth - box.width - margin));
-      let top = anchor.bottom + gap;
-      if (top + box.height > window.innerHeight - margin) {
-        top = Math.max(margin, anchor.top - box.height - gap);
-      }
-      pop.style.left = Math.round(left) + 'px';
-      pop.style.top = Math.round(top) + 'px';
-    }
-
-    // Имя файла задаётся здесь, а не атрибутом download: если сервер пришлёт
-    // Content-Disposition, браузер возьмёт имя из заголовка, поэтому имя уходит
-    // параметром в ссылку. Пустое поле — имя по умолчанию на сервере.
-    const nameInput = pop.querySelector('#download-name');
-    const nameExt = pop.querySelector('#download-name-ext');
-    const links = pop.querySelectorAll('a[download]');
-
-    function cleanName(value) {
-      // Тот же набор символов, что и в safe_report_stem на сервере: без путей,
-      // переводов строк и кавычек — имя попадает в заголовок ответа.
-      return (value || '')
-        .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g, '-')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .replace(/^[.\-_ ]+|[.\-_ ]+$/g, '')
-        .slice(0, 120);
-    }
-
-    function applyName() {
-      const name = cleanName(nameInput ? nameInput.value : '');
-      links.forEach(function (link) {
-        const base = link.dataset.baseHref;
-        const ext = link.dataset.ext || '';
-        link.setAttribute('href', name ? base + '&filename=' + encodeURIComponent(name) : base);
-        link.setAttribute('download', (name || 'webscope') + '.' + ext);
-      });
-      if (nameExt && links.length) nameExt.textContent = '.' + (links[0].dataset.ext || '');
-    }
-
-    if (nameInput) nameInput.addEventListener('input', applyName);
-    applyName();
-
-    function open() {
-      isOpen = true;
-      pop.hidden = false;
-      opener.setAttribute('aria-expanded', 'true');
-      place();
-      const first = nameInput || pop.querySelector('a');
-      if (first) first.focus();
-    }
-
-    function close(focusBack) {
-      if (!isOpen) return;
-      isOpen = false;
-      pop.hidden = true;
-      opener.setAttribute('aria-expanded', 'false');
-      if (focusBack) opener.focus();
-    }
-
-    opener.addEventListener('click', function () {
-      if (isOpen) close(true);
-      else open();
-    });
-
-    // Клик мимо и Esc закрывают панель; фокус возвращается на кнопку,
-    // как и положено раскрывающемуся меню.
-    document.addEventListener('click', function (event) {
-      if (isOpen && !pop.contains(event.target) && !opener.contains(event.target)) close(false);
-    });
-    document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape' && isOpen) close(true);
-    });
-    window.addEventListener('resize', function () { if (isOpen) place(); });
-    window.addEventListener('scroll', function () { if (isOpen) place(); }, true);
-
-    // Выбрали формат — панель больше не нужна; таблица при этом не меняется.
-    pop.querySelectorAll('a[download]').forEach(function (link) {
-      link.addEventListener('click', function () { close(false); });
-    });
-  })();
-
-  // FP (false positive) toggle button handler
-  (function () {
-    document.querySelectorAll('.btn-fp').forEach(function (btn) {
-      btn.addEventListener('click', async function () {
-        const findingId = this.dataset.findingId;
-        const currentFp = this.dataset.fp === 'true';
-        const newFp = !currentFp;
-        
-        // Optimistic UI update
-        this.dataset.fp = newFp.toString();
-        this.textContent = newFp ? '✓ Ложная находка' : '🚫 Это ложная находка';
-        this.disabled = true;
-        
-        try {
-          const response = await fetch('/api/findings/' + findingId + '/fp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fp: newFp }),
-            credentials: 'same-origin'
-          });
-          if (!response.ok) throw new Error('Server error');
-          // Optionally show toast
-          if (window.showToast) {
-            window.showToast(newFp ? 'Находка отмечена как ложная' : 'Находка восстановлена', 'success');
-          }
-        } catch (error) {
-          // Revert on error
-          this.dataset.fp = currentFp.toString();
-          this.textContent = currentFp ? '✓ Ложная находка' : '🚫 Это ложная находка';
-          if (window.showToast) {
-            window.showToast('Ошибка: ' + error.message, 'error');
-          }
-        } finally {
-          this.disabled = false;
-        }
-      });
-    });
-  })();
-
-  function setFindingsView(mode) {
-    // Таблица и список — две панели внутри одной карточки; кнопки без текста,
-    // чтобы не спорить с темой и читаться как иконки (как переключатель темы).
-    // Без режима ничего не делаем: раньше сюда прилетал клик по любой кнопке
-    // с классом view-btn (в том числе «скачать») и прятал обе панели находок.
-    if (mode !== 'list' && mode !== 'table') return;
-    document.querySelectorAll('.findings-view').forEach(function (panel) {
-      panel.hidden = panel.dataset.mode !== mode;
-    });
-    document.querySelectorAll('.view-toggle .view-btn').forEach(function (btn) {
-      btn.setAttribute('aria-pressed', btn.dataset.view === mode ? 'true' : 'false');
-    });
-    localStorage.setItem('webscope_view', mode);
-  }
-  document.querySelectorAll('.view-toggle .view-btn').forEach(function (btn) {
-    btn.addEventListener('click', function () { setFindingsView(btn.dataset.view); });
-  });
-  (function () {
-    const saved = localStorage.getItem('webscope_view') || 'list';
-    setFindingsView(saved === 'table' ? 'table' : 'list');
-  })();
-  function showScanProgress() {
-    if (document.getElementById('scan-progress')) return;
-    const box = document.createElement('div');
-    box.className = 'scan-progress';
-    box.id = 'scan-progress';
-    box.setAttribute('role', 'status');
-    box.setAttribute('aria-live', 'polite');
-    const spinner = document.createElement('span');
-    spinner.className = 'scan-spinner';
-    spinner.setAttribute('aria-hidden', 'true');
-    const text = document.createElement('span');
-    text.className = 'scan-progress-text';
-    text.textContent = 'Идёт проверка сайта… это занимает до минуты. Страница обновится сама.';
-    box.append(spinner, text);
-    const card = document.querySelector('main .card');
-    if (card) card.parentNode.insertBefore(box, card);
-    else document.querySelector('main').prepend(box);
-  }
-
-  // Ждём окончания проверки и обновляем страницу.
-  const check = async () => {
-    try {
-      const response = await fetch('/api/sites/{{ site.id }}/runs');
-      const data = await response.json();
-      const running = (data.runs || []).some((run) => run.status === 'running');
-      if (!running) { window.location.reload(); return; }
-    } catch (error) { /* молча пробуем ещё раз */ }
-    setTimeout(check, 3000);
-  };
-  {% if pending %}
-  setTimeout(check, 3000);
-  {% endif %}
-</script>
 {% endblock %}

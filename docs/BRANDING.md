@@ -1,110 +1,256 @@
-# webscope — 品牌与设计系统 (BRANDBOOK)
+# webscope — Брендбук (единый источник визуальной правды)
 
-> Единый источник правды по визуальному стилю. Всё здесь взято из `src/webscope/webapp/templates/base.html` — если правило меняется, правится и этот файл.
-> Reference: BRANDBOOK.md → **[BRANDING.md](BRANDING.md)**
+> Все токены — CSS-переменные в `src/webscope/webapp/templates/base.html`. Если правило меняется, правится и этот файл.
 
-## Principle: Interface as tool, not display case
+---
 
-Scandiour: скромная светлая база, один синий акцент и строгая шкала серьёзности.
-Цвет несёт смысл: красный — блокирует клик, оранжевый — мешает клиенту, серый — мелочь.
+## 1. Принципы
 
-## Palette
+- **Функция важнее формы.** Интерфейс — это инструмент, не украшение.
+- **Доступность по умолчанию.** Контраст ≥4.5:1, таргеты ≥44×44px, фокус видимый, `prefers-reduced-motion` уважается.
+- **Две темы — одна система.** Light/Dark через CSS-переменные, без дублирования правил.
+- **Типографика — системная.** Никаких веб-шрифтов, нет FOUT/FOIT.
 
-### Light theme (`--bg`: `#f6f7f9`, `--card`: `#ffffff`)
+---
 
-| Variable | HEX | Usage |
+## 2. Цветовые токены
+
+### Light (default)
+
+| Токен | Значение | Назначение |
 |---|---|---|
-| `--bg` | `#f6f7f9` | фон страницы |
-| `--card` | `#ffffff` | Карточки, шапки, поля |
-| `--ink` | `#1c2333` | Основной текст, h1 |
-| `--muted` | `#5b6474` | Подписи, вторичный текст |
-| `--line` | `#e4e7ec` | Границы |
-| `--accent` | `#2563eb` | Ссылки, кнопки |
-| `--accent-hover` | `#1d4ed8` | Наведение |
-| `--ok` | `#087443` | Отлично |
+| `--bg` | `#f6f7f9` | Фон страницы |
+| `--card` | `#ffffff` | Карточки, модалки, панели |
+| `--ink` | `#1c2333` | Основной текст |
+| `--muted` | `#475467` | Вторичный текст, плейсхолдеры (WCAG AA ≥4.5:1 на `--bg`) |
+| `--line` | `#e4e7ec` | Разделители, границы инпутов |
+| `--accent` | `#2563eb` | Primary действия, ссылки, фокус |
+| `--accent-hover` | `#1d4ed8` | Hover primary |
+| `--critical` | `#b42318` | Critical severity, ошибки |
+| `--serious` | `#d97706` | Serious severity |
+| `--serious-ink` | `#92400e` | Текст на serious-бейдже |
+| `--moderate` | `#b54708` | Moderate severity |
+| `--minor` | `#667085` | Minor severity |
+| `--ok` | `#087443` | Success, OK |
 
-### Dark theme (`--bg`: `#0b1026`, `--card`: `#101625`)
-Тёмно-синий → больше контраста с акцентом `#4f9bff`.
+### Dark (`[data-theme="dark"]`)
 
-## Severity scale (both themes)
+| Токен | Значение | Назначение |
+|---|---|---|
+| `--bg` | `#0b1026` | Фон страницы |
+| `--card` | `#101625` | Карточки, модалки |
+| `--ink` | `#e6e8ee` | Основной текст |
+| `--muted` | `#9aa2b4` | Вторичный текст |
+| `--line` | `#232a3d` | Разделители |
+| `--accent` | `#4f9bff` | Primary действия |
+| `--accent-hover` | `#6aa8ff` | Hover primary |
+| `--critical` | `#f87171` | Critical severity |
+| `--serious` | `#fbbf24` | Serious severity (amber-400) |
+| `--serious-ink` | `#92400e` | Текст на serious-бейдже |
+| `--moderate` | `#fb923c` | Moderate severity (orange-400) |
+| `--minor` | `#9aa2b4` | Minor severity |
+| `--ok` | `#22c55e` | Success, OK |
 
-| Severity | Light HEX | Dark HEX | Bg / Text |
+> ⚠️ В dark mode `--serious` и `--moderate` **не должны совпадать**. Используются разные оттенки amber/orange.
+
+---
+
+## 3. Бейджи severity
+
+### Light — светлый фон, тёмный текст
+
+```css
+.badge.critical { background: #fee4e2; color: #b42318; }
+.badge.serious  { background: #fef0c7; color: #92400e; }
+.badge.moderate { background: #fdf1e3; color: #9a3412; }
+.badge.minor    { background: #f2f4f7; color: #475467; }
+.badge.ok       { background: #dcfae6; color: #087443; }
+.badge.external { background: #eef2f6; color: #475467; }
+```
+
+### Dark — тёмный фон, светлый текст (инвертированные)
+
+```css
+:root[data-theme="dark"] .badge.critical { background: #7f1d1d; color: #fecaca; }
+:root[data-theme="dark"] .badge.serious  { background: #78350f; color: #fde68a; }
+:root[data-theme="dark"] .badge.moderate { background: #7c2d12; color: #fed7aa; }
+:root[data-theme="dark"] .badge.minor    { background: #374151; color: #d1d5db; }
+:root[data-theme="dark"] .badge.ok       { background: #14532d; color: #86efac; }
+:root[data-theme="dark"] .badge.external { background: #374151; color: #d1d5db; }
+```
+
+---
+
+## 4. Типографика
+
+| Элемент | Размер | Line-height | Weight |
 |---|---|---|---|
-| Critical | `#b42318` | `#f87171` | `#fee4e2` / `#b42318` |
-| Serious | `#d97706` | `#f59e0b` | `#fef0c7` / `#92400e` |
-| Moderate | `#b54708` | `#f59e0b` | `#fdf1e3` / `#9a3412` |
-| Minor | `#667085` | `#9aa2b4` | `#f2f4f7` / `#475467` |
-| Success | `--ok` | `--ok` | `#dcfae6` / `#087443` |
+| Базовый текст | `16px` | `1.6` | `400` |
+| `h1` | `clamp(1.75rem, 4vw, 2.25rem)` | `1.25` | `700` |
+| `h2` | `clamp(1.375rem, 3vw, 1.625rem)` | `1.3` | `600` |
+| `h3` | `clamp(1.25rem, 2vw, 1.375rem)` | `1.4` | `600` |
+| `small` / `.small` | `14px` | `1.5` | `400` |
+| Код / селекторы | `12.5px` | `1.5` | `400` |
 
-Fonts: system stack (no web fonts):
-```
--apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-"Helvetica Neue", Arial, sans-serif
-```
-Monospace: system `monospace`.
+**Макс. длина строки:** `65ch` для текстовых блоков (класс `.text-body`).
 
-Typographic scale:
-| Element | Size | Weight |
+**Шрифт-стек:** системный (san Francisco / Segoe UI / Roboto / Helvetica / Arial).
+
+---
+
+## 5. Spacing система (базовый шаг 4px)
+
+| Токен | Значение | Применение |
 |---|---|---|
-| Score | 46px | 700 |
-| h1 (page title) | 30px | 700 |
-| h2 (card title) | 21px | 700 |
-| Logo | 19px | 700 |
-| Small text | 14px | 400 |
-| Bullgidgets | 13px | 700 |
-| `.where`, `th`, `code` | 12.5–13px | 400/700 |
+| `--space-1` | `4px` | Микро-отступы внутри компонентов |
+| `--space-2` | `8px` | Gap между мелкими элементами |
+| `--space-3` | `12px` | Отступы в карточках, padding кнопок |
+| `--space-4` | `16px` | Стандартный gap, padding секций |
+| `--space-5` | `24px` | Padding карточек, margin между блоками |
+| `--space-6` | `32px` | Крупные отступы между секциями |
+| `--space-7` | `48px` | Hero-секции, лендинги |
+| `--space-8` | `64px` | Максимальные отступы |
 
-Letter-spacing compression: larger text → tighter negative spacing (`-0.03em` → `-0.01em`).
+> В текущем CSS используются абсолютные значения. При рефакторинге заменить на `var(--space-N)`.
 
-## Code & radii
+---
 
-Radii encode hierarchy: larger → more rounded:
-```
-card: 14px, .step: 12px, buttons/fields: 10px, code: 5px, pills: 8px
-```
+## 6. Радиусы
 
-Padding unit: 4px (typical: 8 / 12 / 14 / 16 / 18 / 22 / 24 / 28).
-
-## Shadows
-Card: double shadow — thin outline + deep blur:
-```css
-box-shadow: 0 1px 1px rgba(15, 23, 42, 0.01), 0 10px 30px -20px rgba(15, 23, 42, 0.8);
-```
-
-## Motion (respect prefers-reduced-motion)
-
-| Effect | Duration | Timing |
-|---|---|---|
-| Button hover bg | 120ms | ease-in-out |
-| Color/line change | 160ms | ease |
-| Theme switch | 240ms | ease |
-| Theme icon rotation | 320ms | ease |
-| Spinning spinner | 800ms | linear, infinite |
-| Progress bar | 1400ms | ease-in-out, infinite |
-
-## Scan progress (.scan-progress)
-Spinner + aria-live="polite" for screen readers; reduced motion: halved durations.
-
-## Layout
-```css
-main { max-width: 940px; padding: 28px 20px 60px; }
-.top { padding: 14px 24px; }
-.row { flex gap: 12px; flex-wrap; }
-.site-row { columns: URL + meta; score + arrow right }
-```
-
-## Contrast
-- Minimum text contrast: **5.2:1** (WCAG AA requires 4.5:1).
-- Visible focus: `outline: 2px solid var(--accent)` + `outline-offset: 2px`.
-- `theme-color` in `<head>` adapts browser toolbar.
-- Bullgidgets: light bg + dark text (both themes), to avoid contrast collapse.
-
-## Dictionary (write for owner, not developer)
-
-| Don't write | Write instead |
+| Токен | Значение |
 |---|---|
-| «Ошибка» | «проблема» / «находка» |
-| «Критический баг» | «блокирует клики» |
-| «Контрастность» | «текст сливается с фоном» |
-| «Доступное имя» | «подпись для скринридера» |
-| 404 / timeout | «страница не найдена», «сайт не ответил вовремя» |
+| `--radius-sm` | `6px` (инпуты, бейджи) |
+| `--radius-md` | `10px` (кнопки, карточки внутренние) |
+| `--radius-lg` | `14px` (карточки, модалки) |
+| `--radius-xl` | `12px` (крупные кнопки `btn-lg`) |
+| `--radius-full` | `999px` (пиллы, иконки-кнопки) |
+
+---
+
+## 7. Тени
+
+| Уровень | Значение | Где используется |
+|---|---|---|
+| `--shadow-xs` | `0 1px 1px rgba(15,23,42,0.01)` | Карточки (верхний слой) |
+| `--shadow-sm` | `0 1px 2px rgba(15,23,42,0.04)` | Ховер карточек |
+| `--shadow-md` | `0 4px 12px -4px rgba(15,23,42,0.1)` | Выпадашки, тултипы |
+| `--shadow-lg` | `0 10px 30px -20px rgba(15,23,42,0.06)` | Карточки (основная) |
+| `--shadow-xl` | `0 22px 60px -24px rgba(15,23,42,0.55)` | Модалки, попапы |
+
+---
+
+## 8. Анимации и motion
+
+- **Длительность:** `120ms` (микро), `160ms` (стандарт), `200ms` (макро), `320ms` (тема).
+- **Easing:** `ease-out` для входа, `ease-in` для выхода, `ease-in-out` для сложных.
+- **Reduced motion:** `@media (prefers-reduced-motion: reduce)` — анимации отключены или длительность ×3.
+
+---
+
+## 9. Зоны касания (Touch targets)
+
+| Элемент | Минимум | Рекомендуется |
+|---|---|---|
+| Кнопки, ссылки | `24×24px` (WCAG 2.2 AA) | `44×44px` (iOS HIG / Material) |
+| Иконки-кнопки (theme, view-toggle) | — | `44×44px` |
+| Чекбоксы, радиокнопки | `24×24px` | `28×28px` |
+
+> Все интерактивные элементы в коде имеют `min-height: 44px; min-width: 44px` для иконок-кнопок.
+
+---
+
+## 10. Состояния фокуса
+
+```css
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+*:focus:not(:focus-visible) { outline: none; }
+```
+
+Никаких `:focus` без `:focus-visible` — скрываем outline для мыши, показываем для клавиатуры.
+
+---
+
+## 11. Логотип
+
+- **Текст:** `webscope` (нижний регистр).
+- **Акцент:** точка после названия в цвет `--accent` (`webscope<span>.</span>`).
+- **Размер в шапке:** `19px / 700 / -0.02em`.
+- **Не использовать:** заглавные буквы, другой вес, без точки.
+
+---
+
+## 12. Иконки
+
+- **Стиль:** outline, stroke `1.5–2px`, `stroke-linecap="round"`, `stroke-linejoin="round"`.
+- **Размер:** `18×18px` (в кнопках), `24×24px` (в навигации), `40–48px` (иллюстративные).
+- **Цвет:** `currentColor` (наследует от текста).
+
+---
+
+## 13. Состояния загрузки
+
+- **Спиннер:** `18×18px`, border `2px`, `border-top-color: var(--accent)`, `animation: spin 0.8s linear infinite`.
+- **Кнопка в loading:** `disabled`, текст → «Проверяем…», спиннер внутри кнопки (не отдельным блоком).
+- **Прогресс-бар:** `height: 6px`, `border-radius: 3px`, fill `var(--accent)`.
+
+---
+
+## 14. Toast / уведомления
+
+- Позиция: `fixed bottom: 20px right: 20px`, `z-index: 100`.
+- Типы: `warning` (amber), `error` (critical), `success` (ok).
+- Авто-скрытие: `5s`, анимация `slide-in/out 180ms`.
+
+---
+
+## 15. Доступность (a11y) чек-лист
+
+- [ ] Контраст текста ≥4.5:1 (normal), ≥3:1 (large).
+- [ ] Фокус видимый на всех интерактивных элементах.
+- [ ] ARIA-labels на иконках-кнопках без текста.
+- [ ] `prefers-reduced-motion` уважается.
+- [ ] `color-scheme: light dark` в `:root`.
+- [ ] Таблицы имеют `<th scope="col">`.
+- [ ] Ошибки форм связаны через `aria-describedby`.
+- [ ] Язык страницы `lang="ru"`.
+
+---
+
+## 16. Не делать
+
+- ❌ Не использовать произвольные цвета вне токенов.
+- ❌ Не добавлять веб-шрифты без одобрения.
+- ❌ Не делать тени тяжелее `--shadow-lg` без нужды.
+- ❌ Не смешивать `rem` и `px` в одном правиле (кроме `border-radius`).
+- ❌ Не использовать `!important` кроме утилит Reduced Motion.
+- ❌ Не делать `outline: none` без `:focus-visible` fallback.
+
+---
+
+## 17. Файловая структура стилей
+
+```
+src/webscope/webapp/templates/
+├── base.html          # Все CSS-токены + базовые стили (inline)
+├── index.html         # Главная (лендинг + форма сканирования)
+├── landing.html       # Публичный лендинг (свои стили в блоке {% block scripts %})
+├── site.html          # Отчёт по сайту
+├── oneshot.html       # Разовая проверка
+├── dashboard.html     # Кабинет пользователя
+├── settings.html      # Настройки сайта
+├── history.html       # История прогонов
+└── auth.html          # Вход
+```
+
+> В будущем: вынести базовые стили в `/static/css/base.css`, подключать через `<link>`, оставить в `base.html` только CSS-переменные и критические inline-стили для first paint.
+
+---
+
+## 18. Версионирование
+
+| Версия | Дата | Изменения |
+|---|---|---|
+| 1.0 | 2026-11-09 | Инициальная версия по результатам аудита |

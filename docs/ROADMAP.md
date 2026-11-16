@@ -67,7 +67,7 @@
 
 | Jab | Task | State |
 |---|---|---|
-| Pricing tiers: Free 5 находок; Starter $19 / Pro $59 / Business $199 | Approved 2026-11-04 | ✅ |
+| Pricing tiers: Free 5 находок; Starter $19 / Pro $59 / Business $199; пакеты $29/10 · $99/50 · $179/100 | Approved 2026-11-12 (v2.2) | ✅ |
 | Unit economics ARPU $19–25, CAC~$30, churn≤12%, LTV/CAC~5× | Approved 2026-11-04 | ✅ |
 | Economic justification document (Russian) | ../ECONOMICS.md | ✅ |
 | Economic audit (penalties, rooms) | economic-audit.md, economic-persona.md | ✅ |

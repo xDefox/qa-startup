@@ -1,0 +1,867 @@
+{# ============================================================
+   WebScope — Макросы для единых компонентов
+   Использование: {% from "_macros.html" import card, btn, field, ... %}
+   ============================================================ #}
+
+{# ---------- КНОПКИ ---------- #}
+{% macro btn(text, href=None, type="button", class="btn", icon=None, disabled=false, aria_label=None, attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  {%- if href -%}
+    <a href="{{ href }}" class="{{ class }}"{% if icon %} aria-label="{{ icon }}"{% endif %}{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>{{ text }}</a>
+  {%- else -%}
+    <button type="{{ type }}" class="{{ class }}"{% if disabled %} disabled{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>{{ text }}</button>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro btn_primary(text, href=None, class="btn btn-primary", type="submit", attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  {{ btn(text, href=href, class=class, type=type, attrs=attrs) }}
+{%- endmacro %}
+
+{% macro btn_secondary(text, href=None, class="btn btn-secondary", attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  {{ btn(text, href=href, class=class, attrs=attrs) }}
+{%- endmacro %}
+
+{% macro btn_danger(text, href=None, class="btn btn-danger", attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  {{ btn(text, href=href, class=class, attrs=attrs) }}
+{%- endmacro %}
+
+{% macro btn_outline(text, href=None, class="btn btn-outline", attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  {{ btn(text, href=href, class=class, attrs=attrs) }}
+{%- endmacro %}
+
+{% macro btn_lg(text, href=None, class="btn btn-primary btn-lg", attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  {{ btn(text, href=href, class=class, attrs=attrs) }}
+{%- endmacro %}
+
+{% macro btn_sm(text, href=None, class="btn btn-sm", attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  {{ btn(text, href=href, class=class, attrs=attrs) }}
+{%- endmacro %}
+
+{% macro pill(text, href=None, class="pill", attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  {%- if href -%}
+    <a href="{{ href }}" class="{{ class }}"{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>{{ text }}</a>
+  {%- else -%}
+    <span class="{{ class }}">{{ text }}</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro icon_btn(icon_svg, href=None, class="icon-btn", aria_label=None, title=None, attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  {%- if href -%}
+    <a href="{{ href }}" class="{{ class }}" aria-label="{{ aria_label }}"{% if title %} title="{{ title }}"{% endif %}{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>{{ icon_svg }}</a>
+  {%- else -%}
+    <button type="button" class="{{ class }}" aria-label="{{ aria_label }}"{% if title %} title="{{ title }}"{% endif %}{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>{{ icon_svg }}</button>
+  {%- endif -%}
+{%- endmacro %}
+
+{# ---------- КАРТОЧКИ ---------- #}
+{% macro card_header(title, actions=None, subtitle=None) -%}
+  <div class="card-header-row">
+    <h2>{{ title }}</h2>
+    {% if subtitle %}<p class="muted small">{{ subtitle }}</p>{% endif %}
+    {% if actions %}<div class="card-actions">{{ actions }}</div>{% endif %}
+  </div>
+{%- endmacro %}
+
+{% macro card(title=None, subtitle=None, actions=None, class="", attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  <div class="card {{ class }}"{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>
+    {% if title or actions or subtitle %}
+    <div class="card-header-row">
+      {% if title %}<h2>{{ title }}</h2>{% endif %}
+      {% if subtitle %}<p class="muted small">{{ subtitle }}</p>{% endif %}
+      {% if actions %}<div class="card-actions">{{ actions }}</div>{% endif %}
+    </div>
+    {% endif %}
+    <div class="card-body">
+      {{ caller() }}
+    </div>
+  </div>
+{%- endmacro %}
+
+{% macro simple_card(content, class="", attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  <div class="card {{ class }}"{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>
+    {{ content }}
+  </div>
+{%- endmacro %}
+
+{% macro hero_card(title, subtitle, cta_text, cta_href, cta_class="btn btn-primary btn-lg btn-hero", secondary_text=None, secondary_href=None, trust_text=None, attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  <div class="card hero"{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>
+    <h1>{{ title }}</h1>
+    {% if subtitle %}<p>{{ subtitle }}</p>{% endif %}
+    <div class="hero-cta">
+      {{ btn_primary(cta_text, href=cta_href, class=cta_class) }}
+      {% if secondary_text and secondary_href %}
+        {{ btn_secondary(secondary_text, href=secondary_href, class="btn btn-secondary btn-lg") }}
+      {% endif %}
+    </div>
+    {% if trust_text %}<p class="landing-trust">{{ trust_text }}</p>{% endif %}
+  </div>
+{%- endmacro %}
+
+{% macro section_card(title, subtitle=None, class="", attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  <div class="card {{ class }}"{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>
+    <h2>{{ title }}</h2>
+    {% if subtitle %}<p class="muted">{{ subtitle }}</p>{% endif %}
+    <div class="card-body">
+      {{ caller() }}
+    </div>
+  </div>
+{%- endmacro %}
+
+{% macro flash_card(title, items, icon_svg, variant="security", attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  <div class="card"{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>
+    <h3>{{ title }}</h3>
+    <div class="{{ variant }}-grid">
+      {% for item in items %}
+      <div class="{{ variant }}-item">
+        <div class="{{ variant }}-icon">{{ item.icon | safe }}</div>
+        <h4>{{ item.title }}</h4>
+        <p>{{ item.text }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+{%- endmacro %}
+
+{# ---------- ФОРМЫ ---------- #}
+{% macro field(label, input_html, help_text=None, error=None, class="field", required=false, attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  <div class="{{ class }}"{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>
+    <label{% if required %} class="required"{% endif %}>{{ label }}{% if required %}<span class="required-mark" aria-hidden="true">*</span>{% endif %}</label>
+    {{ input_html }}
+    {% if help_text %}<p class="field-hint">{{ help_text }}</p>{% endif %}
+    {% if error %}<p class="field-error">{{ error }}</p>{% endif %}
+  </div>
+{%- endmacro %}
+
+{% macro input(name, type="text", value="", placeholder="", class="", required=false, disabled=false, autocomplete="", aria_describedby=None, attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  <input type="{{ type }}" name="{{ name }}" id="{{ name }}" value="{{ value }}" placeholder="{{ placeholder }}" class="{{ class }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}{% if aria_describedby %} aria-describedby="{{ aria_describedby }}"{% endif %}{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>
+{%- endmacro %}
+
+{% macro textarea(name, value="", placeholder="", class="", required=false, rows=4, attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  <textarea name="{{ name }}" id="{{ name }}" class="{{ class }}"{% if required %} required{% endif %} rows="{{ rows }}"{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>{{ value }}</textarea>
+{%- endmacro %}
+
+{% macro select(name, options, value="", placeholder="", class="", required=false, attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  {%- set opts = options.items() if options is mapping else options -%}
+  <select name="{{ name }}" id="{{ name }}" class="{{ class }}"{% if required %} required{% endif %}{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>
+    {% if placeholder %}<option value="" disabled{% if not value %} selected{% endif %}>{{ placeholder }}</option>{% endif %}
+    {% for opt in opts %}
+      {% set opt_value = opt.value if opt.value is defined else opt[0] %}
+      {% set opt_label = opt.label if opt.label is defined else opt[1] %}
+      <option value="{{ opt_value }}" {% if opt_value == value %}selected{% endif %}>{{ opt_label }}</option>
+    {% endfor %}
+  </select>
+{%- endmacro %}
+
+{% macro checkbox(name, label, value="1", checked=false, class="check-row", attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  <label class="{{ class }}">
+    <input type="checkbox" name="{{ name }}" value="{{ value }}"{% if checked %} checked{% endif %}{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>
+    <span>{{ label }}</span>
+  </label>
+{%- endmacro %}
+
+{% macro radio_group(name, options, value="", class="", attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  <div class="radio-group {{ class }}"{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>
+    {% for opt in options %}
+      <label class="radio-option">
+        <input type="radio" name="{{ name }}" value="{{ opt.value }}"{% if opt.value == value %} checked{% endif %}>
+        <span>{{ opt.label }}</span>
+      </label>
+    {% endfor %}
+  </div>
+{%- endmacro %}
+
+{% macro hidden_input(name, value) -%}
+  <input type="hidden" name="{{ name }}" value="{{ value }}">
+{%- endmacro %}
+
+{% macro form_row(fields) -%}
+  <div class="row">
+    {% for field in fields %}{{ field }}{% endfor %}
+  </div>
+{%- endmacro %}
+
+{% macro form_actions(buttons) -%}
+  <div class="actions">
+    {% for btn in buttons %}{{ btn }}{% endfor %}
+  </div>
+{%- endmacro %}
+
+{# ---------- БЕЙДЖИ ---------- #}
+{% macro badge(text, variant="minor", class="") -%}
+  <span class="badge {{ variant }} {{ class }}">{{ text }}</span>
+{%- endmacro %}
+
+{% macro severity_badge(severity, label=None) -%}
+  <span class="badge {{ severity }}">{{ label or severity }}</span>
+{%- endmacro %}
+
+{% macro status_badge(status, class="") -%}
+  <span class="status-badge {{ status }} {{ class }}">{{ status }}</span>
+{%- endmacro %}
+
+{% macro count_badge(count, class="") -%}
+  <span class="count-badge {{ class }}">{{ count }}</span>
+{%- endmacro %}
+
+{# ---------- ТАБЛИЦЫ ---------- #}
+{% macro table(headers, rows, class="", empty_text="Ничего не найдено.", attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="{{ class }}"{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>
+      <thead>
+        <tr>
+          {% for header in headers %}
+            <th{% if header.class %} class="{{ header.class }}"{% endif %}{% if header.width %} style="width: {{ header.width }}"{% endif %}>{{ header.label }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr{% if row.attrs %} {{ row.attrs|safe }}{% endif %}>
+          {% for cell in row.cells %}
+            <td{% if cell.class %} class="{{ cell.class }}"{% endif %}>{{ cell.content | safe }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">{{ empty_text }}</p>
+  {% endif %}
+{%- endmacro %}
+
+{% macro sites_table(sites, current_user_id=None) -%}
+  {% if sites %}
+  <table class="sites-table">
+    <thead>
+      <tr>
+        <th>Сайт</th>
+        <th>Организация</th>
+        <th>Последняя проверка</th>
+        <th class="num">Оценка</th>
+        <th>Расписание</th>
+        <th>Действия</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for site in sites %}
+      <tr>
+        <td><a href="/sites/{{ site.id }}">{{ site.url }}</a></td>
+        <td>
+          {% if site.organization_id and site.organization_id > 0 %}
+            <span class="badge org">{{ site.organization_id }}</span>
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if site.last_run %}
+            {{ site.last_run.started_at[:19].replace('T', ' ') }}
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if site.last_run and site.last_run.score is not none %}
+            <span class="score-{{ 'ok' if site.last_run.score >= 80 else 'warn' if site.last_run.score >= 50 else 'bad' }}">{{ site.last_run.score }}</span>
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td>{{ site.schedule }}</td>
+        <td>
+          <div class="actions">
+            <a class="btn-sm" href="/sites/{{ site.id }}">Отчёт</a>
+            <a class="btn-sm secondary" href="/sites/{{ site.id }}/settings">Настройки</a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Сайтов нет. <a href="/">Добавить первый</a>.</p>
+  {% endif %}
+{%- endmacro %}
+
+{% macro orgs_table(organizations) -%}
+  {% if organizations %}
+  <table>
+    <thead>
+      <tr>
+        <th>Название</th>
+        <th>Email владельца</th>
+        <th>Создана</th>
+        <th>Действия</th>
+      </tr>
+    </thead>
+    <tbody id="orgs-list">
+      {% for org in organizations %}
+      <tr>
+        <td>{{ org.name }}</td>
+        <td>{{ org.owner_email or '—' }}</td>
+        <td>{{ org.created_at[:10] }}</td>
+        <td>
+          <button class="btn-sm edit-org-btn" data-org-id="{{ org.id }}" data-org-name="{{ org.name }}" data-org-email="{{ org.owner_email or '' }}">Редактировать</button>
+          <button class="btn-sm danger delete-org-btn" data-org-id="{{ org.id }}" data-org-name="{{ org.name }}">Удалить</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Организаций нет. Нажмите «Создать».</p>
+  {% endif %}
+{%- endmacro %}
+
+{% macro api_keys_table(keys) -%}
+  {% if keys %}
+  <div id="api-keys-list">
+    {% for key in keys %}
+    <div class="api-key-row">
+      <code>{{ key.prefix }}****{{ key.suffix }}</code>
+      <span class="muted">Создан: {{ key.created_at }}</span>
+      <button class="btn-sm danger revoke-api-key-btn" data-key-id="{{ key.id }}">Отозвать</button>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Ключей нет. Нажмите «Создать ключ».</p>
+  {% endif %}
+{%- endmacro %}
+
+{# ---------- НАВИГАЦИЯ ---------- #}
+{% macro dashboard_tabs(active_tab) -%}
+<nav class="dashboard-tabs" role="tablist" aria-label="Разделы дашборда">
+  <a href="/dashboard" role="tab" class="dashboard-tab {% if active_tab == 'sites' %}active{% endif %}" aria-selected="{% if active_tab == 'sites' %}true{% else %}false{% endif %}">Мои сайты</a>
+  <a href="/dashboard/organizations" role="tab" class="dashboard-tab {% if active_tab == 'organizations' %}active{% endif %}" aria-selected="{% if active_tab == 'organizations' %}true{% else %}false{% endif %}">Организации</a>
+  <a href="/dashboard/settings" role="tab" class="dashboard-tab {% if active_tab == 'settings' %}active{% endif %}" aria-selected="{% if active_tab == 'settings' %}true{% else %}false{% endif %}">Настройки</a>
+  <a href="/dashboard/api-keys" role="tab" class="dashboard-tab {% if active_tab == 'api_keys' %}active{% endif %}" aria-selected="{% if active_tab == 'api_keys' %}true{% else %}false{% endif %}">API ключи</a>
+</nav>
+{%- endmacro %}
+
+{% macro dashboard_header(title, back_url="/dashboard", back_text="← К сайтам") -%}
+<div class="dashboard-header">
+  <div>
+    <h1>{{ title }}</h1>
+    <p class="muted">Управление организациями и сайтами.</p>
+  </div>
+  <a class="btn" href="{{ back_url }}">{{ back_text }}</a>
+</div>
+{%- endmacro %}
+
+{% macro dashboard_header_row(title, actions=None) -%}
+<div class="dashboard-header-row">
+  <h2>{{ title }}</h2>
+  {% if actions %}<div class="dashboard-actions">{{ actions }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro page_header(title, back_url="/", back_text="← На главную") -%}
+<div class="page-header">
+  <h1>{{ title }}</h1>
+  <a class="btn" href="{{ back_url }}">{{ back_text }}</a>
+</div>
+{%- endmacro %}
+
+{% macro breadcrumb(items) -%}
+<nav class="breadcrumb" aria-label="Хлебные крошки">
+  <ol>
+    {% for item in items %}
+    <li{% if item.current %} aria-current="page"{% endif %}>
+      {% if item.href and not item.current %}
+        <a href="{{ item.href }}">{{ item.label }}</a>
+      {% else %}
+        <span>{{ item.label }}</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</nav>
+{%- endmacro %}
+
+{# ---------- СОСТОЯНИЯ ---------- #}
+{% macro empty_state(icon_svg, title, text, action_text=None, action_href=None, action_class="btn btn-primary") -%}
+  <div class="empty-state">
+    <div class="empty-icon">{{ icon_svg | safe }}</div>
+    <h3>{{ title }}</h3>
+    <p class="muted">{{ text }}</p>
+    {% if action_text and action_href %}
+      {{ btn_primary(action_text, href=action_href, class=action_class) }}
+    {% endif %}
+  </div>
+{%- endmacro %}
+
+{% macro flash(message, category="success") -%}
+  {% if message %}
+  <div class="flash flash-{{ category }}" role="alert">
+    {{ message }}
+  </div>
+  {% endif %}
+{%- endmacro %}
+
+{% macro loading_state(text="Загрузка...") -%}
+  <div class="loading-state" role="status" aria-live="polite">
+    <div class="spinner" aria-hidden="true"></div>
+    <p>{{ text }}</p>
+  </div>
+{%- endmacro %}
+
+{% macro error_state(title, text, action_text=None, action_href=None) -%}
+  <div class="error-state">
+    <h2>{{ title }}</h2>
+    <p>{{ text }}</p>
+    {% if action_text and action_href %}
+      {{ btn_primary(action_text, href=action_href) }}
+    {% endif %}
+  </div>
+{%- endmacro %}
+
+{# ---------- СПИСКИ ---------- #}
+{% macro site_row(site, run=None) -%}
+<a class="site-row" href="/sites/{{ site.id }}">
+  <div class="site-row-main">
+    <div class="site-row-url">{{ site.url }}</div>
+    <div class="site-row-meta muted small">
+      {% if not run %}
+        проверка ещё не выполнялась
+      {% elif run.status == 'ok' %}
+        последняя проверка: {{ run.finished_at[:16].replace('T', ' ') }}
+      {% elif run.status == 'running' %}
+        проверка выполняется…
+      {% else %}
+        <span class="status-error" title="{{ run.error or '' }}">последняя проверка не удалась{% if run.error %}: {{ run.error.split('\n')[0][:90] }}{% endif %}</span>
+      {% endif %}
+    </div>
+  </div>
+  {% if run and run.status == 'ok' %}
+  <div class="site-row-score">{{ run.score }}/100</div>
+  {% elif run and run.status == 'error' %}
+  <div class="site-row-score status-error" title="{{ run.error or '' }}">!</div>
+  {% else %}
+  <div class="site-row-arrow muted">→</div>
+  {% endif %}
+</a>
+{%- endmacro %}
+
+{% macro package_card(pkg) -%}
+<div class="package-card {% if not pkg.is_active %}inactive{% endif %}">
+  <div class="package-header">
+    <span class="package-scans">{{ pkg.scans_left }} / {{ pkg.scans_total }}</span>
+    <span class="package-status {% if pkg.is_active %}active{% else %}inactive{% endif %}">{{ 'Активен' if pkg.is_active else 'Исчерпан' }}</span>
+  </div>
+  <div class="package-details">
+    <div class="package-row"><span>Цена:</span><span>${{ (pkg.price_cents / 100) | round(2) }} {{ pkg.currency }}</span></div>
+    <div class="package-row"><span>Куплен:</span><span>{{ pkg.created_at[:10] }}</span></div>
+    <div class="package-row"><span>Статус:</span><span class="status-badge {{ pkg.status }}">{{ pkg.status }}</span></div>
+  </div>
+  {% if pkg.is_active %}
+  <div class="package-actions">
+    {{ btn_primary("Использовать ({{ pkg.scans_left }} сканов)", href="/scan/oneshot", class="btn btn-primary btn-sm") }}
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# ---------- СПЕЦИАЛЬНЫЕ КОМПОНЕНТЫ ---------- #}
+{% macro scan_progress(text="Идёт проверка сайта… это занимает до минуты. Страница обновится сама.") -%}
+<div class="scan-progress" id="scan-progress" role="status" aria-live="polite">
+  <span class="scan-spinner" aria-hidden="true"></span>
+  <span class="scan-progress-text">{{ text }}</span>
+</div>
+{%- endmacro %}
+
+{% macro download_button(site_id, default_name, formats, download_date=None) -%}
+<button type="button" class="icon-btn download-btn" id="download-open"
+        aria-label="Сохранить отчёт" title="Сохранить отчёт"
+        aria-haspopup="true" aria-expanded="false" aria-controls="download-pop"
+        data-fallback="/api/sites/{{ site_id }}/report.html?download=1">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 4v11"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path>
+  </svg>
+</button>
+<div class="download-pop" id="download-pop" hidden role="group" aria-label="Формат отчёта">
+  <div class="download-pop-head">
+    <span>Сохранить отчёт</span>
+    {% if download_date %}<span class="muted small">от {{ download_date }}</span>{% endif %}
+  </div>
+  <div class="download-name">
+    <label class="download-name-label" for="download-name">Имя файла</label>
+    <div class="download-name-field">
+      <input id="download-name" type="text" value="{{ default_name }}" maxlength="120" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="download-name-hint">
+      <span class="download-name-ext" id="download-name-ext">.json</span>
+    </div>
+    <p class="download-name-hint" id="download-name-hint">Расширение подставится по формату</p>
+  </div>
+  {% for item in formats %}
+  <a class="download-option" href="/api/sites/{{ site_id }}/report.{{ item.ext }}?download=1" download
+     data-base-href="/api/sites/{{ site_id }}/report.{{ item.ext }}?download=1" data-ext="{{ item.ext }}">
+    <span class="download-option-top">
+      <span class="download-ext">{{ item.label }}</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
+    </span>
+    <span class="download-hint">{{ item.hint }}</span>
+  </a>
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+{# ---------- ОТЧЁТЫ: НАХОДКИ, БЛОКЕРЫ, DIFF, СКАЧИВАНИЕ, ВЫБОР ИТЕРАЦИИ ---------- #}
+{% macro diff_card(diff) -%}
+  <div class="card">
+    <h2>Что сломалось с прошлого раза</h2>
+    <p class="muted small">
+      Оценка: {{ diff.score_before }} &rarr; {{ diff.score_after }}
+      {% if diff.delta > 0 %}(+{{ diff.delta }}){% elif diff.delta < 0 %}({{ diff.delta }}){% endif %}
+      &middot; новых проблем: {{ diff.new_count }} &middot; исправлено: {{ diff.fixed_count }}
+    </p>
+    <ul class="small diff-list">
+      {% for item in diff.new %}
+      <li><span class="badge {{ item.severity }}">{{ item.severity }}</span> {{ item.title }} &mdash; <span class="muted">{{ item.url }}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+{%- endmacro %}
+
+{% macro blockers_card(blockers) -%}
+  <div class="card blockers">
+    <h2>Блокирует клики &mdash; нельзя нажать кнопку или ссылку</h2>
+    <p class="muted small">Это прямо мешает оставить заявку или заказ &mdash; исправлять в первую очередь.</p>
+    {% for item in blockers %}
+    <div class="issue">
+      <div>{{ item.meaning }}</div>
+      {% if item.selector %}<div class="where">Селектор: <code>{{ item.selector }}</code></div>{% endif %}
+      {% if item.pages_count > 1 %}
+      <div class="where">Затронуто: {{ item.pages_count }} стр., элементов: {{ item.count }}{% if item.url %} &middot; {{ item.url }}{% if item.pages_count > 3 %} и др.{% endif %}{% endif %}</div>
+      {% elif item.url %}
+      <div class="where">Страница: {{ item.url }}</div>
+      {% endif %}
+      <div class="fix">Что сделать: {{ item.fix }}</div>
+      {% if item.snippet %}<pre class="snippet">{{ item.snippet }}</pre>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+{%- endmacro %}
+
+{% macro findings_table(view, columns=None) -%}
+  {%- if columns is none -%}
+    {%- set columns = [
+      ('rule', 'Правило'),
+      ('severity', 'Серьёзность'),
+      ('title', 'Заголовок'),
+      ('pages', 'Страниц'),
+      ('count', 'Элементов'),
+      ('selector', 'Селектор'),
+      ('fix', 'Что сделать'),
+      ('url', 'Страница')
+    ] -%}
+  {%- endif -%}
+  <div class="findings-view" data-mode="table" hidden>
+    <div class="findings-table-wrap">
+    <table class="findings-table">
+      <thead>
+        <tr>
+          {% for key, label in columns %}<th class="col-{{ key }}">{{ label }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for group in view.groups %}
+        {% for item in group.problems %}
+        <tr>
+          <td class="cell-rule">{{ item.rule }}</td>
+          <td class="cell-badge"><span class="badge {{ item.severity }}">{{ item.severity_label }}</span></td>
+          <td class="cell-title">{{ item.meaning }}</td>
+          <td class="cell-num">{{ item.pages_count }}</td>
+          <td class="cell-num">{{ item.count }}</td>
+          <td class="cell-selector"><code>{{ item.selector or '&mdash;' }}</code></td>
+          <td class="cell-fix">{{ item.fix }}</td>
+          <td class="cell-url">{{ item.url }}</td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+        {% if not view.groups %}
+        <tr><td colspan="{{ columns|length }}" class="muted">Ничего не найдено.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+{%- endmacro %}
+
+{% macro findings_list(view) -%}
+  <div class="findings-view" data-mode="list">
+  {% for group in view.groups %}
+  <div class="sev {{ group.key }}">
+    <h3>{{ group.title }} ({{ group.count }})</h3>
+    {% for item in group.problems %}
+    <div class="issue">
+      <div>{{ item.meaning }}</div>
+      {% if item.selector %}<div class="where">Селектор: <code>{{ item.selector }}</code></div>{% endif %}
+      {% if item.pages_count > 1 %}
+      <div class="where">Затронуто: {{ item.pages_count }} стр., элементов: {{ item.count }}{% if item.url %} &middot; {{ item.url }}{% if item.pages_count > 3 %} и др.{% endif %}{% endif %}</div>
+      {% elif item.url %}
+      <div class="where">Страница: {{ item.url }}</div>
+      {% endif %}
+      <div class="fix">Что сделать: {{ item.fix }}</div>
+      <div class="fp-actions">
+        <button type="button" class="btn-fp" data-finding-id="{{ item.id }}" data-fp="{{ item.details.fp if item.details.fp is defined else false }}">
+          {% if item.details.fp %}&check; Ложная находка{% else %}&#x1f6ab; Это ложная находка{% endif %}
+        </button>
+      </div>
+      {% if item.message and item.rule in ('console/error', 'console/failed-request') %}
+      <div class="where">Детали: {{ item.message }}</div>
+      {% endif %}
+      {% if item.source %}
+      <div class="where">Источник/ресурс: <code>{{ item.source }}</code></div>
+      {% endif %}
+      {% if item.help_url %}
+      <div class="where"><a href="{{ item.help_url }}" rel="noopener">Подробнее о проверке</a></div>
+      {% endif %}
+      {% if item.snippet %}<pre class="snippet">{{ item.snippet }}</pre>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Ничего не найдено.</p>
+  {% endfor %}
+  </div>
+{%- endmacro %}
+
+{% macro download_menu(site_id, formats, default_name, download_date=None) -%}
+  {{ download_button(site_id, default_name, formats, download_date) }}
+{%- endmacro %}
+
+{% macro run_selector(runs, current_run_id, site_id) -%}
+  {% if runs and runs|length > 1 %}
+  <div class="run-selector run-selector-margin">
+    <label for="run-select" class="muted small">Итерация:</label>
+    {%- set options = [] -%}
+    {%- for run in runs -%}
+      {%- set _ = options.append({'value': run.id, 'label': (run.finished_at[:16].replace('T', ' ') if run.finished_at else run.started_at[:16].replace('T', ' ')) ~ ' · ' ~ run.score ~ '/100 · ' ~ run.pages_scanned ~ ' стр.'}) -%}
+    {%- endfor -%}
+    {{ select('run-select', options, value=current_run_id, class="run-select", attrs={'onchange': 'if(this.value) window.location.href="/sites/' ~ site_id ~ '/runs/" + this.value'}) }}
+  </div>
+  {% endif %}
+{%- endmacro %}
+
+{% macro tooltip(trigger_label, trigger_svg, content) -%}
+<div class="watchdog-header">
+  <h2>{{ trigger_label }}</h2>
+  <button type="button" class="tooltip-trigger" aria-label="Что такое {{ trigger_label }}?" aria-expanded="false">
+    {{ trigger_svg | safe }}
+  </button>
+</div>
+<div class="tooltip" role="tooltip">
+  {{ content | safe }}
+</div>
+{%- endmacro %}
+
+{% macro auth_block(site) -%}
+<label class="check-row" for="auth-enabled">
+  <input type="checkbox" id="auth-enabled" name="auth_enabled" value="1" {% if site.has_auth %}checked{% endif %}>
+  <span>Нужна авторизация</span>
+</label>
+<div class="auth-block" id="auth-block" {% if not site.has_auth %}hidden{% endif %}>
+  <p class="muted small">Сайт защищён логином и паролем — войдём перед проверкой.</p>
+  <div class="row">
+    <div class="field">
+      <label for="auth_kind">Как защищён сайт</label>
+      <select id="auth_kind" name="auth_kind">
+        <option value="basic" {% if site.auth_kind != 'form' %}selected{% endif %}>Пароль на весь сайт (Basic)</option>
+        <option value="form" {% if site.auth_kind == 'form' %}selected{% endif %}>Форма входа на странице</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="auth_login">Логин</label>
+      <input id="auth_login" type="text" name="auth_login" value="{{ site.auth_login or '' }}" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="auth_password">Пароль</label>
+      <input id="auth_password" type="password" name="auth_password" autocomplete="new-password" placeholder="{% if site.has_auth %}оставьте пустым, чтобы не менять{% else %}пароль{% endif %}">
+    </div>
+  </div>
+  <div class="field" id="auth-login-url-field" {% if site.auth_kind != 'form' %}hidden{% endif %}>
+    <label for="auth_login_url">Адрес страницы входа (если отличается от сайта)</label>
+    <input id="auth_login_url" type="text" name="auth_login_url" value="{{ site.auth_login_url or '' }}" placeholder="example.com/wp-admin" spellcheck="false">
+  </div>
+{%- endmacro %}
+
+{% macro watchdog_section(site) -%}
+<div class="watchdog-header">
+  <h2>Watchdog — автоматический контроль после деплоя</h2>
+  <button type="button" class="tooltip-trigger" aria-label="Что такое Watchdog?" aria-expanded="false">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M12 16v-4M12 8h.01"/>
+    </svg>
+  </button>
+</div>
+<div class="tooltip" role="tooltip">
+  <p><strong>Watchdog</strong> — это автоматический мониторинг, который проверяет сайт сразу после деплоя.</  <ul>
+    <li><strong>Вебхук от CI/CD:</strong> GitHub Actions, GitLab, Vercel и др. шлют сигнал — мы запускаем проверку за 5 минут.</li>
+    <li><strong>Проверка контента:</strong> периодически сравниваем хеш страниц — если изменилось, запускаем скан.</li>
+    <li><strong>Алерты:</strong> при новых проблемах приходит уведомление в Telegram/Email.</li>
+  </ul>
+  <p class="muted small">Входит в Starter ($19/мес) и выше. Free — без Watchdog.</p>
+</div>
+<p class="muted small">Watchdog отслеживает изменения на сайте после деплоя и сразу запускает проверку. Работает через вебхуки от CI/CD или периодическую проверку контента.</p>
+
+<form method="post" action="/sites/{{ site.id }}/settings">
+  <div class="row">
+    <div class="field">
+      <label class="check-row" for="watchdog-enabled">
+        <input type="checkbox" id="watchdog-enabled" name="watchdog_enabled" value="1" {% if site.watchdog_enabled %}checked{% endif %}>
+        <span>Включить Watchdog</span>
+      </label>
+    </div>
+    <div class="field">
+      <label for="watchdog_triggers">Триггеры проверки</label>
+      <div class="check-row">
+        <input type="checkbox" id="trigger-webhook" name="watchdog_triggers" value="webhook" {% if 'webhook' in site.watchdog_triggers %}checked{% endif %}>
+        <label for="trigger-webhook">Вебхук от CI/CD (GitHub Actions, GitLab, Vercel и др.)</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="trigger-content_hash" name="watchdog_triggers" value="content_hash" {% if 'content_hash' in site.watchdog_triggers %}checked{% endif %}>
+        <label for="trigger-content_hash">Изменение контента (хеш страниц)</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="trigger-sitemap" name="watchdog_triggers" value="sitemap" {% if 'sitemap' in site.watchdog_triggers %}checked{% endif %}>
+        <label for="trigger-sitemap">Изменения в sitemap.xml</label>
+      </div>
+    </div>
+  </div>
+  <div class="field" id="webhook-secret-field" {% if not site.watchdog_enabled %}hidden{% endif %}>
+    <label for="watchdog_webhook_secret">Секрет вебхука (для верификации подписи)</label>
+    <input id="watchdog_webhook_secret" type="password" name="watchdog_webhook_secret" placeholder="оставьте пустым, чтобы не менять" autocomplete="new-password">
+    <p class="muted small">Используется для верификации HMAC подписи вебхуков (GitHub, GitLab, Vercel и др.).</p>
+  </div>
+
+  <div class="field" id="watchdog-status" {% if site.watchdog_enabled %}{% else %}hidden{% endif %}>
+    <h4>Статус Watchdog</h4>
+    {% set last_deploy = site.last_deploy_at if site.last_deploy_at else 'никогда' %}
+    {% set last_check = site.last_watchdog_check if site.last_watchdog_check else 'никогда' %}
+    <div class="row">
+      <div class="field"><strong>Последний деплой:</strong> {{ last_deploy }}</div>
+      <div class="field"><strong>Последняя проверка:</strong> {{ last_check }}</div>
+    </div>
+    {% if site.last_watchdog_diff %}
+    <p class="muted small">Последняя проверка: {{ site.last_watchdog_diff.new|default(0) }} новых, {{ site.last_watchdog_diff.changed|default(0) }} изменённых, {{ site.last_watchdog_diff.removed|default(0) }} удалённых страниц.</p>
+    {% endif %}
+  </div>
+
+  <div class="actions">
+    <button type="submit" name="watchdog_save" value="1">Сохранить настройки Watchdog</button>
+  </div>
+{%- endmacro %}
+
+{# ---------- СЕКЦИИ ---------- #}
+{% macro section_divider() -%}
+<div class="section-divider"></div>
+{%- endmacro %}
+
+{% macro steps_grid(steps) -%}
+<div class="steps-grid">
+  {% for step in steps %}
+  <div class="step-card">
+    <div class="step-number">{{ loop.index }}</div>
+    <h3>{{ step.title }}</h3>
+    <p>{{ step.text }}</p>
+  </div>
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+{% macro problem_cards(problems) -%}
+<div class="problem-grid">
+  {% for problem in problems %}
+  <div class="problem-card">
+    <div class="problem-icon">{{ problem.icon | safe }}</div>
+    <h3>{{ problem.title }}</h3>
+    <p>{{ problem.text }}</p>
+  </div>
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+{# ---------- ИКОНКИ (SVG) ---------- #}
+{% macro icon_check() -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+{%- endmacro %}
+
+{% macro icon_cross() -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+{%- endmacro %}
+
+{% macro icon_download() -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 4v11"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
+{%- endmacro %}
+
+{% macro icon_info() -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+{%- endmacro %}
+
+{% macro icon_shield() -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+{%- endmacro %}
+
+{% macro icon_menu() -%}
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+{%- endmacro %}
+
+{% macro icon_theme() -%}
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+{%- endmacro %}
+
+{% macro icon_download() -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 4v11"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
+{%- endmacro %}
+
+{% macro icon_chevron_down() -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+{%- endmacro %}
+
+{# ---------- УТИЛИТЫ ---------- #}
+{% macro csrf_input() -%}
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{%- endmacro %}
+
+{% macro method_override(method) -%}
+  <input type="hidden" name="_method" value="{{ method }}">
+{%- endmacro %}
+
+{% macro pagination(current, total, base_url, attrs=None) -%}
+  {%- set attrs = attrs or {} -%}
+  {% if total > 1 %}
+  <nav class="pagination"{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %} aria-label="Пагинация">
+    {% if current > 1 %}
+      <a href="{{ base_url }}?page={{ current - 1 }}" class="btn btn-sm">&laquo; Назад</a>
+    {% endif %}
+    <span class="pagination-info">Страница {{ current }} из {{ total }}</span>
+    {% if current < total %}
+      <a href="{{ base_url }}?page={{ current + 1 }}" class="btn btn-sm">Вперёд &raquo;</a>
+    {% endif %}
+  </nav>
+  {% endif %}
+{%- endmacro %}
+

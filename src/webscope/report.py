@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html as html_lib
 import json
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from .models import Finding, ScanResult, Severity
@@ -395,7 +396,6 @@ def render_pdf(result: ScanResult) -> bytes:
     pdf.set_font("LiberationSans", "B", 11)
     pdf.cell(25, 7, "Дата:")
     pdf.set_font("LiberationSans", size=11)
-    from datetime import datetime, UTC
     pdf.cell(0, 7, datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"), ln=True)
     pdf.ln(3)
 
@@ -436,7 +436,6 @@ def render_pdf(result: ScanResult) -> bytes:
     critical_count = sum(1 for f in own if f.severity.value == "critical")
     serious_count = sum(1 for f in own if f.severity.value == "serious")
     moderate_count = sum(1 for f in own if f.severity.value == "moderate")
-    minor_count = sum(1 for f in own if f.severity.value == "minor")
 
     col_w = (pdf.w - pdf.l_margin - pdf.r_margin) / 5
     metrics = [

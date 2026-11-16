@@ -29,6 +29,14 @@ from ..views import SCHEDULE_LABELS, build_report_view
 router = APIRouter()
 
 
+@router.get("/landing", response_class=HTMLResponse)
+def landing(request: Request, state: AppState = Depends(get_state)):
+    """Лендинг-страница — публичная, доступна без входа."""
+    return _page(state, request, "landing.html", {
+        "organizations": get_organizations(state.storage),
+    })
+
+
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request, state: AppState = Depends(get_state)):
     """Публичная лендинг-страница — главная страница, доступна без входа."""

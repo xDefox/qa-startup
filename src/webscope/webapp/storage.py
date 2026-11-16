@@ -322,11 +322,7 @@ class ScanPackage:
 
     @property
     def is_active(self) -> bool:
-        if self.status != "active":
-            return False
-        if self.scans_left <= 0:
-            return False
-        return True
+        return self.status == "active" and self.scans_left > 0
 
     def to_dict(self) -> dict:
         return {

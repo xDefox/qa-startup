@@ -132,6 +132,9 @@ class Deck:
         self.warnings: list[str] = []
         self.slide = -1
         self.page = 0
+        # {"light": (path, w, h), "dark": (path, w, h)} — если задан, подвал
+        # рисует логотип вместо текстового «webscope».
+        self.footer_logo: dict[str, tuple[str, float, float]] | None = None
 
     def add(self, cmd: str, params: dict | None = None) -> None:
         if params is None:
@@ -264,7 +267,14 @@ class Deck:
 
     def footer(self, dark: bool = False) -> None:
         color = DARK_MUTED if dark else LABEL
-        self.text("webscope", (M, 508, 320, 12), 9, color, font="sans", line=1.0)
+        logo = None
+        if self.footer_logo:
+            logo = self.footer_logo.get("dark" if dark else "light")
+        if logo:
+            path, w, h = logo
+            self.add("insert.picture", {"path": path, "rect": [M, 505, w, h]})
+        else:
+            self.text("webscope", (M, 508, 320, 12), 9, color, font="sans", line=1.0)
         self.text(
             f"{self.page:02d} / {TOTAL}",
             (W - M - 90, 508, 90, 12),

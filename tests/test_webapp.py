@@ -325,7 +325,7 @@ def test_healthz(client: TestClient) -> None:
 def test_index_contains_form(client: TestClient) -> None:
     response = client.get("/")
     assert response.status_code == 200
-    assert "Проверьте свой сайт" in response.text
+    assert "Сайт открывается" in response.text
     assert 'name="url"' in response.text
 
 

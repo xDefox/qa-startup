@@ -7,7 +7,10 @@ Chromium отдаёт сырые коды вида ``net::ERR_NAME_NOT_RESOLVED`
 
 from __future__ import annotations
 
+import logging
 import re
+
+LOGGER = logging.getLogger("webscope.diagnostics")
 
 # Коды сетевых ошибок Chromium → (причина, что проверить).
 _NET_ERRORS: dict[str, tuple[str, str]] = {
@@ -163,7 +166,7 @@ def detect_bot_protection(page, url: str) -> str | None:
             if indicator in title:
                 return name
     except Exception:
-        pass
+        LOGGER.debug("Bot protection check failed", exc_info=True)
     return None
 
 

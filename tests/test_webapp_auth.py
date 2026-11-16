@@ -85,7 +85,7 @@ def test_login_sets_session_and_grants_access(guarded_app) -> None:
 
     page = client.get("/")
     assert page.status_code == 200
-    assert "Проверьте свой сайт" in page.text
+    assert "Сайт открывается" in page.text
 
     # cookie не содержит пароля и подписана HMAC'ом
     token = client.cookies.get(COOKIE_NAME)

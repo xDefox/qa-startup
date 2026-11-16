@@ -1,35 +1,29 @@
 {% extends "base.html" %}
+{% from "_macros.html" import card, btn_primary, btn_secondary, field, input, select, checkbox, form_row, form_actions, card_header, auth_block, watchdog_section, section_divider, packages_table, flash %}
+
 {% block title %}{{ site.url }} — настройки{% endblock %}
+{% block scripts %}
+<script src="/static/js/settings.js"></script>
+{% endblock %}
 {% block content %}
 
 <div class="card">
   <h1>Настройки сайта</h1>
   <p class="muted small"><a href="/sites/{{ site.id }}">← к отчёту</a> · {{ site.url }}</p>
 
-  {% if saved %}
-  <div class="flash">Настройки сохранены.</div>
-  {% endif %}
+  {{ flash() }}
 
   <form method="post" action="/sites/{{ site.id }}/settings">
     <div class="row">
-      <div class="field" style="flex: 1 1 240px;">
-        <label for="email">Куда присылать отчёты</label>
-        <input id="email" type="email" name="email" value="{{ site.email or '' }}"
-               placeholder="you@example.com" autocomplete="email" spellcheck="false">
+      <div class="field settings-field-flex">
+        {{ field('Куда присылать отчёты', input('email', value=site.email or '', placeholder='you@example.com', autocomplete='email', attrs={'spellcheck': 'false'})) }}
       </div>
-      <div class="field" style="flex: 1 1 240px;">
-        <label for="telegram_chat">Telegram: id чата или @канал</label>
-        <input id="telegram_chat" type="text" name="telegram_chat" value="{{ site.telegram_chat or '' }}"
-               placeholder="-1001234567890" spellcheck="false">
+      <div class="field settings-field-flex">
+        {{ field('Telegram: id чата или @канал', input('telegram_chat', value=site.telegram_chat or '', placeholder='-1001234567890', attrs={'spellcheck': 'false'})) }}
       </div>
-    </div>
+    </div
     <div class="field">
-      <label for="schedule">Как часто проверять</label>
-      <select id="schedule" name="schedule">
-        {% for value, label in schedules.items() %}
-        <option value="{{ value }}" {% if site.schedule == value %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
+      {{ field('Как часто проверять', select('schedule', schedules, value=site.schedule)) }}
     </div>
     <div class="field">
       <label for="organization">Организация</label>
@@ -39,64 +33,21 @@
         {% endfor %}
       </select>
     </div>
-    <label class="check-row" for="auth-enabled">
-      <input type="checkbox" id="auth-enabled" name="auth_enabled" value="1" {% if site.has_auth %}checked{% endif %}>
-      <span>Нужна авторизация</span>
-    </label>
-    <div class="auth-block" id="auth-block" {% if not site.has_auth %}hidden{% endif %}>
-      <p class="muted small">Сайт защищён логином и паролем — войдём перед проверкой.</p>
-      <div class="row">
-        <div class="field">
-          <label for="auth_kind">Как защищён сайт</label>
-          <select id="auth_kind" name="auth_kind">
-            <option value="basic" {% if site.auth_kind != 'form' %}selected{% endif %}>Пароль на весь сайт (Basic)</option>
-            <option value="form" {% if site.auth_kind == 'form' %}selected{% endif %}>Форма входа на странице</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="auth_login">Логин</label>
-          <input id="auth_login" type="text" name="auth_login" value="{{ site.auth_login or '' }}"
-                 autocomplete="off" spellcheck="false">
-        </div>
-        <div class="field">
-          <label for="auth_password">Пароль</label>
-          <input id="auth_password" type="password" name="auth_password" autocomplete="new-password"
-                 placeholder="{% if site.has_auth %}оставьте пустым, чтобы не менять{% else %}пароль{% endif %}">
-        </div>
-      </div>
-      <div class="field" id="auth-login-url-field" {% if site.auth_kind != 'form' %}hidden{% endif %}>
-        <label for="auth_login_url">Адрес страницы входа (если отличается от сайта)</label>
-        <input id="auth_login_url" type="text" name="auth_login_url" value="{{ site.auth_login_url or '' }}"
-               placeholder="example.com/wp-admin" spellcheck="false">
-      </div>
-    </div>
+    {{ auth_block(site) }}
     <div class="actions">
-      <button type="submit">Сохранить</button>
+      <button type="submit" class="btn btn-primary">Сохранить</button>
     </div>
   </form>
-  <script>
-    (function(){
-      const toggle = document.getElementById('auth-enabled');
-      const block = document.getElementById('auth-block');
-      const kind = document.getElementById('auth_kind');
-      const loginUrlField = document.getElementById('auth-login-url-field');
-      function syncAuth(){
-        block.hidden = !toggle.checked;
-        loginUrlField.hidden = !(toggle.checked && kind.value === 'form');
-      }
-      toggle.addEventListener('change', syncAuth);
-      kind.addEventListener('change', syncAuth);
-      syncAuth();
-    })();
-  </script>
 </div>
+
+{{ section_divider() }}
 
 <div class="card">
   <h2>Мои пакеты сканов</h2>
   <p class="muted small">Пакеты не сгорают — списываются за факт сканирования. Watchdog включён в каждый пакет.</p>
   
-  <div class="actions" style="margin-bottom: 16px;">
-    <a href="/scan/oneshot" class="btn btn-primary">Купить пакет / Разовая проверка</a>
+  <div class="actions actions-margin">
+    {{ btn_primary("Купить пакет / Разовая проверка", href="/scan/oneshot") }}
   </div>
   
   {% if packages %}
@@ -123,7 +74,7 @@
       </div>
       {% if pkg.is_active %}
       <div class="package-actions">
-        <a href="/scan/oneshot" class="btn btn-primary btn-sm">Использовать ({{ pkg.scans_left }} сканов)</a>
+        {{ btn_primary("Использовать ({{ pkg.scans_left }} сканов)", href="/scan/oneshot", class="btn btn-primary btn-sm") }}
       </div>
       {% endif %}
     </div>
@@ -134,73 +85,11 @@
   {% endif %}
 </div>
 
-<div class="card">
-  <h2>Watchdog — автоматический контроль после деплоя</h2>
-  <p class="muted small">Watchdog отслеживает изменения на сайте после деплоя и сразу запускает проверку. Работает через вебхуки от CI/CD или периодическую проверку контента.</p>
+{{ section_divider() }}
 
-  <form method="post" action="/sites/{{ site.id }}/settings">
-    <div class="row">
-      <div class="field">
-        <label class="check-row" for="watchdog-enabled">
-          <input type="checkbox" id="watchdog-enabled" name="watchdog_enabled" value="1" {% if site.watchdog_enabled %}checked{% endif %}>
-          <span>Включить Watchdog</span>
-        </label>
-      </div>
-      <div class="field">
-        <label for="watchdog_triggers">Триггеры проверки</label>
-        <div class="check-row">
-          <input type="checkbox" id="trigger-webhook" name="watchdog_triggers" value="webhook" {% if 'webhook' in site.watchdog_triggers %}checked{% endif %}>
-          <label for="trigger-webhook">Вебхук от CI/CD (GitHub Actions, GitLab, Vercel и др.)</label>
-        </div>
-        <div class="check-row">
-          <input type="checkbox" id="trigger-content_hash" name="watchdog_triggers" value="content_hash" {% if 'content_hash' in site.watchdog_triggers %}checked{% endif %}>
-          <label for="trigger-content_hash">Изменение контента (хеш страниц)</label>
-        </div>
-        <div class="check-row">
-          <input type="checkbox" id="trigger-sitemap" name="watchdog_triggers" value="sitemap" {% if 'sitemap' in site.watchdog_triggers %}checked{% endif %}>
-          <label for="trigger-sitemap">Изменения в sitemap.xml</label>
-        </div>
-      </div>
-    </div>
-    <div class="field" id="webhook-secret-field" {% if not site.watchdog_enabled %}hidden{% endif %}>
-      <label for="watchdog_webhook_secret">Секрет вебхука (для верификации подписи)</label>
-      <input id="watchdog_webhook_secret" type="password" name="watchdog_webhook_secret"
-             placeholder="оставьте пустым, чтобы не менять" autocomplete="new-password">
-      <p class="muted small">Используется для верификации HMAC подписи вебхуков (GitHub, GitLab, Vercel и др.).</p>
-    </div>
-    
-    <div class="field" id="watchdog-status" {% if site.watchdog_enabled %}style="display: block;"{% else %}hidden{% endif %}>
-      <h4>Статус Watchdog</h4>
-      {% set last_deploy = site.last_deploy_at if site.last_deploy_at else 'никогда' %}
-      {% set last_check = site.last_watchdog_check if site.last_watchdog_check else 'никогда' %}
-      <div class="row">
-        <div class="field"><strong>Последний деплой:</strong> {{ last_deploy }}</div>
-        <div class="field"><strong>Последняя проверка:</strong> {{ last_check }}</div>
-      </div>
-      {% if site.last_watchdog_diff %}
-      <p class="muted small">Последняя проверка: {{ site.last_watchdog_diff.new|default(0) }} новых, {{ site.last_watchdog_diff.changed|default(0) }} изменённых, {{ site.last_watchdog_diff.removed|default(0) }} удалённых страниц.</p>
-      {% endif %}
-    </div>
+{{ watchdog_section(site) }}
 
-    <div class="actions">
-      <button type="submit" name="watchdog_save" value="1">Сохранить настройки Watchdog</button>
-    </div>
-  </form>
-  <script>
-    (function(){
-      const toggle = document.getElementById('watchdog-enabled');
-      const secretField = document.getElementById('webhook-secret-field');
-      const statusField = document.getElementById('watchdog-status');
-      function syncWatchdog(){
-        const enabled = toggle.checked;
-        secretField.hidden = !enabled;
-        statusField.hidden = !enabled;
-      }
-      toggle.addEventListener('change', syncWatchdog);
-      syncWatchdog();
-    })();
-  </script>
-</div>
+{{ section_divider() }}
 
 <div class="card">
   <h2>Удаление сайта</h2>
@@ -208,10 +97,9 @@
     Сайт, все прогоны и история проверок будут удалены безвозвратно.
     Проверки по расписанию прекратятся.
   </p>
-  <form method="post" action="/sites/{{ site.id }}/delete"
-        onsubmit="return confirm('Удалить {{ site.url }} вместе с историей проверок?');">
+  <form method="post" action="/sites/{{ site.id }}/delete" id="delete-site-form">
     <div class="actions">
-      <button type="submit" class="danger">Удалить сайт и историю</button>
+      <button type="submit" class="btn btn-danger">Удалить сайт и историю</button>
     </div>
   </form>
 </div>

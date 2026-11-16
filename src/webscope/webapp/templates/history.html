@@ -1,5 +1,10 @@
 {% extends "base.html" %}
+{% from "_macros.html" import card, btn_primary, btn_secondary, field, input, select, checkbox, form_row, form_actions, card_header, section_divider, btn_sm, btn_primary %}
+
 {% block title %}{{ site.url }} — история проверок{% endblock %}
+{% block scripts %}
+<script src="/static/js/history.js"></script>
+{% endblock %}
 {% block content %}
 
 <div class="card">
@@ -10,55 +15,16 @@
     {% set scores = runs | map(attribute='score') | list %}
     {% set best = scores | max %}
     {% set worst = scores | min %}
-    <div style="margin: 18px 0 24px;">
-      <canvas id="scoreChart" height="120" aria-label="Динамика оценки"></canvas>
+    {% set labels = [] %}
+    {% set data = [] %}
+    {% for run in runs %}
+      {% set _ = labels.append((run.finished_at or run.started_at)[:16].replace('T', ' ')) %}
+      {% set _ = data.append(run.score or 0) %}
+    {% endfor %}
+    <div class="margin-vertical-lg">
+      <canvas id="scoreChart" height="120" aria-label="Динамика оценка" data-labels="{{ labels | tojson }}" data-data="{{ data | tojson }}"></canvas>
       <div class="muted small">Оценка по прогонам: от {{ worst }} до {{ best }}</div>
     </div>
-    <script>
-      (function() {
-        const labels = [{% for run in runs %}'{{ run.finished_at[:16].replace('T', ' ') if run.finished_at else run.started_at[:16].replace('T', ' ') }}'{% if not loop.last %}, {% endif %}{% endfor %}];
-        const data = [{% for run in runs %}{{ run.score or 0 }}{% if not loop.last %}, {% endif %}{% endfor %}];
-        const ctx = document.getElementById('scoreChart').getContext('2d');
-        new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: labels,
-            datasets: [{
-              label: 'Оценка',
-              data: data,
-              borderColor: '#2563eb',
-              backgroundColor: 'rgba(37, 99, 235, 0.1)',
-              fill: true,
-              tension: 0.3,
-              pointRadius: 4,
-              pointHoverRadius: 6
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                callbacks: {
-                  label: function(ctx) { return ctx.parsed.y + '/100'; }
-                }
-              }
-            },
-            scales: {
-              x: {
-                ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 8 }
-              },
-              y: {
-                min: 0,
-                max: 100,
-                ticks: { callback: function(v) { return v; } }
-              }
-            }
-          }
-        });
-      })();
-    </script>
 
     <table>
       <thead>

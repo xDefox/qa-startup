@@ -1,8 +1,10 @@
-{% extends "base.html" %}
+{% extends "auth_base.html" %}
+{% from "_macros.html" import card, btn_primary, field, input %}
+
 {% block title %}webscope — вход{% endblock %}
 {% block content %}
 
-<div class="card" style="max-width: 440px; margin: 40px auto;">
+<div class="card auth-card">
   <h1>Вход в кабинет</h1>
   <p class="muted small">
     В отчётах — адреса сайтов, расписание проверок и адреса для алертов,
@@ -15,17 +17,10 @@
 
   {% if auth_enabled %}
   <form method="post" action="/auth/login">
-    <input type="hidden" name="next" value="{{ request.query_params.get('next', '/') }}">
-    <div class="field">
-      <label for="username">Логин</label>
-      <input id="username" name="username" type="text" autocomplete="username" required>
-    </div>
-    <div class="field">
-      <label for="password">Пароль</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required>
-    </div>
+    {{ field('Логин', input('username', type='text', autocomplete='username', required=true, placeholder='Логин')) }}
+    {{ field('Пароль', input('password', type='password', autocomplete='current-password', required=true, placeholder='Пароль')) }}
     <div class="actions">
-      <button type="submit">Войти</button>
+      {{ btn_primary('Войти', class='btn btn-primary') }}
     </div>
   </form>
   {% else %}
