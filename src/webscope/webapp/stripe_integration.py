@@ -219,8 +219,19 @@ async def handle_subscription_updated(event: stripe.Event, storage) -> None:
     subscription = event.data.object
     customer_id = subscription.customer
     status = subscription.status
-
-    # TODO: Update organization subscription status in storage
+    plan_id = getattr(subscription, "items", {}).get("data", [{}])[0].get("price", {}).get("id")
+    try:
+        org_id = int(subscription.get("metadata", {}).get("organization_id", 0))
+    except (ValueError, TypeError):
+        org_id = 0
+    storage.update_organization_subscription_status(
+        org_id=org_id,
+        plan=plan_id,
+        status=status,
+        stripe_customer_id=customer_id,
+        stripe_subscription_id=subscription.id,
+        current_period_ends_at=subscription.get("current_period_end"),
+    )
     LOGGER.info("Subscription %s for customer %s status: %s", subscription.id, customer_id, status)
 
 

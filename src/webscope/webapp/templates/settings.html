@@ -16,6 +16,18 @@
 
 {% if saved %}{{ alert("Настройки сохранены.", variant="success", icon_name="check") }}{% endif %}
 
+{% if not site.watchdog_enabled %}
+<div class="card onboarding-banner" style="border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 15%, var(--card));">
+  <div class="onboarding-banner__icon">{{ icon("shield-check", 28) }}</div>
+  <div>
+    <h3 style="margin: 0 0 var(--space-2); color: var(--accent);">Watchdog — проверка сразу после деплоя</h3>
+    <p class="muted small mb-3">Не ждите еженедельного расписания. Настройте вебхук от CI/CD или отслеживание контента — и webscope сам запустит проверку, когда сайт изменится. Новые проблемы сразу улетят в Telegram или на email.</p>
+    <p class="muted small mb-3"><strong>Доступно в тарифе Starter ($19/мес) и выше.</strong></p>
+    <a href="#watchdog" class="btn btn-primary btn-sm">Настроить Watchdog</a>
+  </div>
+</div>
+{% endif %}
+
 {% call card("Уведомления и расписание", "Куда присылать отчёты и как часто проверять сайт.") %}
 <form method="post" action="/sites/{{ site.id }}/settings" class="stack">
   <div class="row">
@@ -47,11 +59,11 @@
 </form>
 {% endcall %}
 
+{{ watchdog_section(site) }}
+
 {% call card("Пакеты сканов", "Пакеты не сгорают: один прогон списывает один скан.") %}
 {{ packages_grid(packages) }}
 {% endcall %}
-
-{{ watchdog_section(site) }}
 
 {% call card("Удаление сайта", "Сайт, все прогоны и история проверок будут удалены безвозвратно. Проверки по расписанию прекратятся.", class="card--danger") %}
 <form method="post" action="/sites/{{ site.id }}/delete" id="delete-site-form" data-site-url="{{ site.url }}">

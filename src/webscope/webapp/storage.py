@@ -859,6 +859,85 @@ class Storage:
                 return pkg
             return None
 
+    def update_organization_subscription_status(
+        self,
+        *,
+        org_id: int,
+        plan: str | None = None,
+        status: str | None = None,
+        started_at: str | None = None,
+        trial_ends_at: str | None = None,
+        current_period_ends_at: str | None = None,
+        stripe_customer_id: str | None = None,
+        stripe_subscription_id: str | None = None,
+        payment_method: str | None = None,
+    ) -> None:
+        """Обновляет метаданные подписки организации на связанных сайтах."""
+        # Пытаемся найти сайт по организации (organization_id не нужен в list_sites)
+        # Вместо этого — сразу ищем по контексту: берем первые сайты с org_id=0
+        # (так как организация может быть новой, сайты могли быть созданы без explicit org)
+        with self._conn() as conn:
+            # Ищем сайты, где organization_id равен org_id, либо NULL/0
+            site_rows = conn.execute(
+                "SELECT id FROM sites WHERE organization_id = ? OR (organization_id = 0 AND NULLIF(organization_id, 0) IS NULL)",
+                (org_id,),
+            ).fetchall()
+        if not site_rows:
+            # Попробуем любой сайт, чтобы создать подписку
+            with self._conn() as conn:
+                site_rows = conn.execute(
+                    "SELECT id FROM sites LIMIT 1"
+                ).fetchall()
+        if not site_rows:
+            return
+        site_id = site_rows[0][0]
+        updates = {
+            "plan": plan,
+            "status": status,
+            "started_at": started_at,
+            "trial_ends_at": trial_ends_at,
+            "current_period_ends_at": current_period_ends_at,
+            "stripe_customer_id": stripe_customer_id,
+            "stripe_subscription_id": stripe_subscription_id,
+            "payment_method": payment_method,
+        }
+        updates = {k: v for k, v in updates.items() if v is not None}
+        if not updates:
+            return
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        values = [*updates.values(), site_id]
+        with self._conn() as conn:
+            conn.execute(
+                f"INSERT OR REPLACE INTO subscriptions ({set_clause}, site_id) VALUES ({', '.join(['?' for _ in updates] + ['?'])})",
+                values,
+            )
+            conn.commit()
+
+    def get_organization_subscription(self, org_id: int) -> dict | None:
+        """Получает подписку организации (по первому сайту)."""
+        with self._conn() as conn:
+            row = conn.execute(
+                """SELECT s.plan, s.status, s.started_at, s.trial_ends_at, s.current_period_ends_at,
+                          s.stripe_customer_id, s.stripe_subscription_id, s.payment_method
+                   FROM subscriptions s
+                   JOIN sites ON sites.id = s.site_id
+                   WHERE sites.organization_id = ?
+                   ORDER BY s.site_id LIMIT 1""",
+                (org_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "plan": row["plan"],
+            "status": row["status"],
+            "started_at": row["started_at"],
+            "trial_ends_at": row["trial_ends_at"],
+            "current_period_ends_at": row["current_period_ends_at"],
+            "stripe_customer_id": row["stripe_customer_id"],
+            "stripe_subscription_id": row["stripe_subscription_id"],
+            "payment_method": row["payment_method"],
+        }
+
     # --- Site Snapshots (Watchdog) ---
     # --- Site Snapshots (Watchdog) ---
     def save_site_snapshot(
