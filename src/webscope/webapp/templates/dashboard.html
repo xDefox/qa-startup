@@ -9,7 +9,7 @@
 {{ page_header(
     "Кабинет",
     subtitle="Управление сайтами, отчётами и проверками.",
-    actions=btn("Добавить сайт", href="#add-site", icon_name="plus")
+    actions=btn("Добавить сайт", href="#add-site", icon_name="plus") ~ btn("Разовая проверка", href="/scan/oneshot", icon_name="play", variant="secondary")
 ) }}
 
 {{ dashboard_tabs('sites') }}
@@ -20,6 +20,14 @@
   <div class="metric"><span class="metric__value">{{ summary.pending }}</span><span class="metric__label">проверяются сейчас</span></div>
   <div class="metric"><span class="metric__value score-bad">{{ summary.failed }}</span><span class="metric__label">с ошибкой</span></div>
 </div>
+
+{% call card("Разовая проверка", "Быстро проверьте сайт один раз: оценка 0–100, три приоритетных дела и отчёт в HTML/PDF.", class="card--accent") %}
+  <p class="muted small">Один прогон списывает один скан из пакета организации. Идеально для финального чека перед релизом.</p>
+  <div class="form-actions mt-3">
+    {{ btn("Проверить сайт", href="/scan/oneshot", icon_name="arrow-right", icon_right=True, size="lg") }}
+  </div>
+  <p class="muted small mt-2">Или попробуйте <a href="/scan">быструю проверку</a> — бесплатно, без подписки.</p>
+{% endcall %}
 
 <div id="add-site">
 {% call card("Добавить сайт", "Поставим адрес в мониторинг или проверим локальную сборку до публикации.") %}

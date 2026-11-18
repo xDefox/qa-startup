@@ -11,8 +11,6 @@
     badge="Проверка после каждого релиза",
     title="Сайт открывается.<br>Заявка — нет.",
     lead="webscope проверяет клики, формы и консоль браузера — чтобы вы узнали о поломке раньше клиента. Без установки и без чтения логов.",
-    primary_text="Проверить сайт бесплатно",
-    primary_href=("/auth/login?next=/scan" if auth_enabled and not is_authenticated(request) else "#scan-form"),
     secondary_text="Как это работает",
     secondary_href="#how-it-works",
     note="Бесплатно · без установки · 30–60 секунд",
@@ -23,7 +21,7 @@
   {% if not (auth_enabled and not is_authenticated(request)) %}
   <p class="muted small">Вставьте адрес — покажем оценку и три первых дела.</p>
   {% endif %}
-  {{ quick_scan_form(request, compact=True, note=None) }}
+  {{ quick_scan_form(request, compact=False, note=None) }}
 </div>
 {% endcall %}
 
