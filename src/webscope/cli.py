@@ -75,7 +75,9 @@ def build_parser() -> argparse.ArgumentParser:
     scan_cmd.add_argument("--max-link-checks", type=int, default=20, help="Сколько внутренних ссылок проверять")
     scan_cmd.add_argument("--allow-private", action="store_true", help="Разрешить локальные адреса (для своих стендов)")
     scan_cmd.add_argument(
-        "--ignore-robots", action="store_true", help="Игнорировать robots.txt (только для своих стендов)"
+        "--ignore-robots",
+        action="store_true",
+        help="Игнорировать robots.txt (только для своих стендов)",
     )
     scan_cmd.add_argument("--headed", action="store_true", help="Показывать браузер (по умолчанию headless)")
     scan_cmd.add_argument("--fix-prompt", action="store_true", help="Вместо отчёта вывести ТЗ для coding-агента")
@@ -103,14 +105,19 @@ def build_parser() -> argparse.ArgumentParser:
     crawl_cmd.add_argument("--max-pages", type=int, default=30, help="Максимум страниц в обходе")
     crawl_cmd.add_argument("--depth", type=int, default=2, help="Глубина обхода по ссылкам")
     crawl_cmd.add_argument(
-        "--ignore-robots", action="store_true", help="Игнорировать robots.txt (только для своих стендов)"
+        "--ignore-robots",
+        action="store_true",
+        help="Игнорировать robots.txt (только для своих стендов)",
     )
     crawl_cmd.add_argument("--all-pages", action="store_true", help="Проверять все страницы, а не по одной на шаблон")
     crawl_cmd.add_argument("--checks", default="", help="Список проверок через запятую")
     crawl_cmd.add_argument("--format", choices=FORMATS, default="text", help="Формат вывода")
     crawl_cmd.add_argument("--out", type=Path, default=None, help="Записать вывод в файл")
     crawl_cmd.add_argument(
-        "--history-dir", type=Path, default=None, help="Каталог для сохранения снимков и сравнения с прошлым"
+        "--history-dir",
+        type=Path,
+        default=None,
+        help="Каталог для сохранения снимков и сравнения с прошлым",
     )
     crawl_cmd.add_argument("--fail-on", choices=("critical", "serious", "moderate", "minor", "none"), default="none")
     crawl_cmd.add_argument("--timeout", type=int, default=30000, help="Таймаут загрузки страницы, мс")

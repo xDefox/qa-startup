@@ -57,15 +57,12 @@ class CrawlOutcome:
 
 def default_scanner(url: str, options: ScanOptions) -> CrawlOutcome:
     """Стандартная проверка сайта: обход + проверка по одной странице шаблона."""
-    import os
-
-    allow_private = options.allow_private or os.environ.get("WEBSCOPE_ALLOW_PRIVATE") == "1"
     result, crawl_result = scan_site(
         url,
         max_pages=options.max_pages,
         max_depth=options.depth,
         timeout_ms=options.timeout_ms,
-        allow_private=allow_private,
+        allow_private=options.allow_private,
         checks=options.checks,
         auth=options.auth,
         time_budget_s=options.timeout_s,

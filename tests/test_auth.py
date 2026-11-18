@@ -135,7 +135,7 @@ def _serve(handler_class: type[BaseHTTPRequestHandler], hostname: str = "127.0.0
     return server, f"http://{hostname}:{port}"
 
 
-@pytest.fixture()
+@pytest.fixture
 def basic_server():
     server, url = _serve(_BasicHandler)
     try:
@@ -145,7 +145,7 @@ def basic_server():
         server.server_close()
 
 
-@pytest.fixture()
+@pytest.fixture
 def form_server():
     server, url = _serve(_FormHandler)
     try:
@@ -194,7 +194,10 @@ def test_storage_saves_auth_and_builds_credentials(tmp_path: Path) -> None:
     assert loaded is not None
     assert loaded.has_auth
     assert loaded.auth_credentials() == AuthCredentials(
-        kind="form", login=LOGIN, password=PASSWORD, login_url="https://site.com/wp-admin"
+        kind="form",
+        login=LOGIN,
+        password=PASSWORD,
+        login_url="https://site.com/wp-admin",
     )
     storage.close()
 
@@ -253,7 +256,7 @@ def test_migrate_adds_auth_columns_to_old_db(tmp_path: Path) -> None:
             next_run_at     TEXT,
             created_at      TEXT NOT NULL
         )
-        """
+        """,
     )
     connection.execute(
         "INSERT INTO sites (url, created_at) VALUES (?, ?)",
@@ -316,10 +319,13 @@ def test_cli_auth_flags_build_credentials() -> None:
             "form",
             "--login-url",
             "example.com/wp-admin",
-        ]
+        ],
     )
     assert _auth_from_args(args) == AuthCredentials(
-        kind="form", login=LOGIN, password=PASSWORD, login_url="example.com/wp-admin"
+        kind="form",
+        login=LOGIN,
+        password=PASSWORD,
+        login_url="example.com/wp-admin",
     )
     assert _auth_from_args(parser.parse_args(["crawl", "example.com"])) is None
 
@@ -334,7 +340,7 @@ def test_cli_password_falls_back_to_env(monkeypatch: pytest.MonkeyPatch) -> None
 # --- веб-форма ---
 
 
-@pytest.fixture()
+@pytest.fixture
 def web(tmp_path: Path):
     app = create_app(
         db_path=tmp_path / "db.sqlite",
@@ -374,7 +380,10 @@ def test_create_site_with_auth_stores_credentials(web) -> None:
     site = storage.list_sites()[0]
     assert site.has_auth
     assert site.auth_credentials() == AuthCredentials(
-        kind="form", login=LOGIN, password=PASSWORD, login_url="https://example.com/wp-admin"
+        kind="form",
+        login=LOGIN,
+        password=PASSWORD,
+        login_url="https://example.com/wp-admin",
     )
 
 
@@ -427,7 +436,10 @@ def test_create_site_auth_updates_existing_site(web) -> None:
     site = storage.list_sites()[0]
     assert site.has_auth
     assert site.auth_credentials() == AuthCredentials(
-        kind="form", login=LOGIN, password=PASSWORD, login_url="https://example.com/wp-admin"
+        kind="form",
+        login=LOGIN,
+        password=PASSWORD,
+        login_url="https://example.com/wp-admin",
     )
 
     # перепроверка без галочки настроенный вход не чистит

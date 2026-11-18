@@ -66,7 +66,10 @@ def get_organization(storage: Storage, org_id: int) -> Organization | None:
     if row is None:
         return None
     return Organization(
-        id=row[0], name=row[1], owner_email=row[2], created_at=row[3]
+        id=row[0],
+        name=row[1],
+        owner_email=row[2],
+        created_at=row[3],
     )
 
 
@@ -104,7 +107,8 @@ def create_site(
         existing_site = existing
         # Если переданы новые авторизационные данные — обновляем их
         if auth_kind is not None:
-            storage.update_site(existing_site.id,
+            storage.update_site(
+                existing_site.id,
                 auth_kind=auth_kind,
                 auth_login=auth_login,
                 auth_password=_seal(auth_password),
@@ -193,11 +197,9 @@ def get_organizations(storage: Storage) -> list[Organization]:
     """Все организации — для UI-селектора."""
     with storage._conn() as connection:
         rows = connection.execute(
-            "SELECT id, name, owner_email, created_at FROM organizations ORDER BY id"
+            "SELECT id, name, owner_email, created_at FROM organizations ORDER BY id",
         ).fetchall()
-    return [
-        Organization(id=r[0], name=r[1], owner_email=r[2], created_at=r[3]) for r in rows
-    ]
+    return [Organization(id=r[0], name=r[1], owner_email=r[2], created_at=r[3]) for r in rows]
 
 
 def update_site(
@@ -276,23 +278,24 @@ def ensure_default_organization(storage) -> Organization:
         org = conn.execute("SELECT id, name, owner_email, created_at FROM organizations LIMIT 1").fetchone()
         if org:
             return Organization(id=org[0], name=org[1], owner_email=org[2], created_at=org[3])
-        
+
         # Создаём дефолтную организацию
         from datetime import UTC, datetime
+
         now = datetime.now(UTC).isoformat()
         cursor = conn.execute(
             "INSERT INTO organizations (name, owner_email, created_at) VALUES (?, ?, ?)",
-            ("Default", "", now)
+            ("Default", "", now),
         )
         org_id = cursor.lastrowid
-        
+
         # Привязываем сайты с org_id=0 или NULL
         conn.execute(
             "UPDATE sites SET organization_id = ? WHERE organization_id IS NULL OR organization_id = 0",
-            (org_id,)
+            (org_id,),
         )
         conn.commit()
-        
+
         return Organization(id=org_id, name="Default", owner_email="", created_at=now)
 
 
@@ -305,11 +308,11 @@ def migrate_add_organization_id(storage) -> None:
     with storage._conn() as conn:
         # Проверяем, колонка уже есть
         col = conn.execute(
-            "PRAGMA table_info(sites)"
+            "PRAGMA table_info(sites)",
         ).fetchall()
         col_names = [c[1] for c in col]
         if "organization_id" not in col_names:
             conn.execute(
-                "ALTER TABLE sites ADD COLUMN organization_id INTEGER NOT NULL DEFAULT 0"
+                "ALTER TABLE sites ADD COLUMN organization_id INTEGER NOT NULL DEFAULT 0",
             )
             conn.commit()

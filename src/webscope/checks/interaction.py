@@ -196,7 +196,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
                 url=url,
                 source="webscope.interaction",
                 **kwargs,
-            )
+            ),
         )
 
     try:
@@ -216,7 +216,11 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
                 "Элемент вне области просмотра карусели — пользователь не может его увидеть или нажать без ручного скролла.",
                 selector=item.get("selector"),
                 snippet=item.get("snippet"),
-                details={"blocker": "carousel", "carousel": item.get("carouselSelector"), "size": f"{item.get('width')}x{item.get('height')}"},
+                details={
+                    "blocker": "carousel",
+                    "carousel": item.get("carouselSelector"),
+                    "size": f"{item.get('width')}x{item.get('height')}",
+                },
             )
         else:
             blocked = item.get("blocked")

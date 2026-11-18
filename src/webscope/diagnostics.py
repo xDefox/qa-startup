@@ -153,7 +153,8 @@ _BOT_PROTECTION_INDICATORS = [
 
 def detect_bot_protection(page, url: str) -> str | None:
     """Проверяет страницу на признаки ботозащиты (Cloudflare, WAF и др.).
-    Возвращает название защиты, если найдена, иначе None."""
+    Возвращает название защиты, если найдена, иначе None.
+    """
     try:
         # Быстрая проверка через текст страницы
         text = page.evaluate("document.body.innerText.toLowerCase()")

@@ -1,6 +1,6 @@
 # webscope — Безопасность (AUDIT fixes 2026-10-30)
 
-> Полный аудит S1–S7, B1–B5. Статус: закрыты. См. AUDIT.md §2, §10.
+> Полный аудит S1–S7, B1–B5 и S8–S12. Статус: закрыты. См. AUDIT.md §2, §10.
 
 ---
 
@@ -127,12 +127,44 @@
 
 ---
 
-## S8–S12 (в аудите, P1)
+## S8–S12 (закрыты, P1)
 
 | # | Дыра | Статус | Ссылка |
 |---|---|---|---|
-| S8 | Loading path общее `/tmp/` | ⏳ P1 | скриншот/обсуждение |
-| S9 | Нет заголовков безопасности / `/docs` открыт | ⏳ P1 | CSP, заголовки |
-| S10 | Injection в заголовок письма | ⏳ P1 | `normalize_url`, валидация |
-| S11 | `WEBSCOPE_ALLOW_PRIVATE` отключает защиту | ⏳ P1 | env → явный параметр |
-| S12 | SMTP только starttls | ⏳ P1 | port 465 (SSL) |
+| S8 | Loading path общее `/tmp/` | ✅ Закрыто | `uploads.py` — `mkdtemp`/`WEBSCOPE_LOCAL_DIR` |
+| S9 | Нет заголовков безопасности / `/docs` открыт | ✅ Закрыто | `middleware.py` — CSP, HSTS, Permissions-Policy |
+| S10 | Injection в заголовок письма | ✅ Закрыто | `alerts.py` — валидация email + sanitize Subject |
+| S11 | `WEBSCOPE_ALLOW_PRIVATE` отключает защиту | ✅ Закрыто | `app.py`/`scheduler.py` — env игнорируется |
+| S12 | SMTP только starttls | ✅ Закрыто | `alerts.py` — SMTP_SSL на порт 465 |
+
+---
+
+## Детали S8–S12
+
+### S8. Изоляция каталога загрузок
+
+- **Было:** `LOCAL_DIR = Path(tempfile.gettempdir()) / "webscope-local"` — предсказуемый общий путь `/tmp/webscope-local`, доступный другим процессам/юзерам на shared-хосте (file poisoning, утечка).
+- **Стало:** `LOCAL_DIR = Path(os.environ.get("WEBSCOPE_LOCAL_DIR", tempfile.mkdtemp(prefix="webscope-local-")))` — уникальный каталог процесса с правами `0700`, либо явный путь для продакшена.
+- **Где:** `src/webscope/webapp/uploads.py`.
+
+### S9. Заголовки безопасности
+
+- **Стало:** middleware `security_headers` проставляет `Content-Security-Policy`, `Permissions-Policy`, `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`; `Strict-Transport-Security` — только для HTTPS (по `X-Forwarded-Proto`/схеме). `/docs` и `/redoc` уже выключены (`docs_url=None`, `redoc_url=None` в `app.py`).
+- **Где:** `src/webscope/webapp/middleware.py`.
+
+### S10. Инъекция в заголовки письма
+
+- **Стало:** `_valid_email()` отклоняет получателя с CRLF/пробелами/невалидным форматом; `Subject` экранируется (CRLF → пробел); `From` собирается через `formataddr`.
+- **Где:** `src/webscope/webapp/alerts.py`.
+
+### S11. Env-переключатель SSRF
+
+- **Было:** `WEBSCOPE_ALLOW_PRIVATE=1` глобально снимал SSRF-защиту для всех сканов.
+- **Стало:** env deprecated и игнорируется (только предупреждение в лог); снятие защиты — только через явный `allow_private=True` per-scan (например, `/__local/`).
+- **Где:** `src/webscope/webapp/app.py`, `src/webscope/webapp/scheduler.py`.
+
+### S12. SMTP SSL
+
+- **Было:** только `smtplib.SMTP` + `starttls()` — не поддержан implicit TLS (порт 465).
+- **Стало:** при `SMTP_PORT=465` используется `smtplib.SMTP_SSL`; иначе — STARTTLS.
+- **Где:** `src/webscope/webapp/alerts.py`.

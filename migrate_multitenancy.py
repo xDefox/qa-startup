@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Multi-tenancy migration script for WebScope.
+"""Multi-tenancy migration script for WebScope.
 
 Run this once to migrate an existing database to support organizations:
 - Adds organization_id column to sites table
@@ -34,7 +33,7 @@ def migrate(db_path: str) -> None:
     try:
         # 1. Check if organizations table exists
         org_table = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='organizations'"
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='organizations'",
         ).fetchone()
 
         if not org_table:
@@ -57,14 +56,14 @@ def migrate(db_path: str) -> None:
         if "organization_id" not in col_names:
             print("Adding organization_id column to sites table...")
             conn.execute(
-                "ALTER TABLE sites ADD COLUMN organization_id INTEGER NOT NULL DEFAULT 0"
+                "ALTER TABLE sites ADD COLUMN organization_id INTEGER NOT NULL DEFAULT 0",
             )
         else:
             print("organization_id column already exists in sites table")
 
         # 3. Check if Default organization exists
         org = conn.execute(
-            "SELECT id, name, owner_email, created_at FROM organizations LIMIT 1"
+            "SELECT id, name, owner_email, created_at FROM organizations LIMIT 1",
         ).fetchone()
 
         if org:
@@ -75,14 +74,14 @@ def migrate(db_path: str) -> None:
             now = datetime.now(UTC).isoformat()
             cursor = conn.execute(
                 "INSERT INTO organizations (name, owner_email, created_at) VALUES (?, ?, ?)",
-                ("Default", "", now)
+                ("Default", "", now),
             )
             org_id = cursor.lastrowid
             print(f"Created organization: id={org_id}")
 
         # 4. Update sites with org_id = 0 or NULL to the Default organization
         cursor = conn.execute(
-            "SELECT COUNT(*) as cnt FROM sites WHERE organization_id IS NULL OR organization_id = 0"
+            "SELECT COUNT(*) as cnt FROM sites WHERE organization_id IS NULL OR organization_id = 0",
         )
         count = cursor.fetchone()["cnt"]
 
@@ -90,7 +89,7 @@ def migrate(db_path: str) -> None:
             print(f"Assigning {count} existing sites to Default organization (id={org_id})...")
             conn.execute(
                 "UPDATE sites SET organization_id = ? WHERE organization_id IS NULL OR organization_id = 0",
-                (org_id,)
+                (org_id,),
             )
         else:
             print("No sites need reassignment")
@@ -99,10 +98,10 @@ def migrate(db_path: str) -> None:
         sites_count = conn.execute("SELECT COUNT(*) as cnt FROM sites").fetchone()["cnt"]
         orgs_count = conn.execute("SELECT COUNT(*) as cnt FROM organizations").fetchone()["cnt"]
         unassigned = conn.execute(
-            "SELECT COUNT(*) as cnt FROM sites WHERE organization_id IS NULL OR organization_id = 0"
+            "SELECT COUNT(*) as cnt FROM sites WHERE organization_id IS NULL OR organization_id = 0",
         ).fetchone()["cnt"]
 
-        print(f"\nMigration complete:")
+        print("\nMigration complete:")
         print(f"  Organizations: {orgs_count}")
         print(f"  Sites: {sites_count}")
         print(f"  Unassigned sites: {unassigned}")
@@ -110,7 +109,7 @@ def migrate(db_path: str) -> None:
         conn.commit()
         print("SUCCESS: Database migrated successfully")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - migration script: log and exit on any DB error
         conn.rollback()
         print(f"ERROR: Migration failed: {e}")
         sys.exit(1)
@@ -123,12 +122,12 @@ def main():
     parser.add_argument(
         "--db-path",
         default="webscope.db",
-        help="Path to SQLite database (default: webscope.db)"
+        help="Path to SQLite database (default: webscope.db)",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Show what would be done without making changes"
+        help="Show what would be done without making changes",
     )
     args = parser.parse_args()
 

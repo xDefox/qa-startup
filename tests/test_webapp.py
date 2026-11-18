@@ -198,7 +198,7 @@ def test_alert_text_mentions_worsened_findings() -> None:
                 url="https://site.com/",
                 severity_before="moderate",
                 severity_after="critical",
-            )
+            ),
         ],
     )
     text = build_alert_text("https://site.com/", diff)
@@ -543,10 +543,10 @@ def test_storage_migrates_old_schema(tmp_path: Path) -> None:
     connection.executescript(_OLD_SCHEMA)
     connection.execute("INSERT INTO sites (url, created_at) VALUES ('https://site.com/', '2026-10-01T00:00:00+00:00')")
     connection.execute(
-        "INSERT INTO runs (site_id, started_at, status, score) VALUES (1, '2026-10-01T00:00:00+00:00', 'ok', 92)"
+        "INSERT INTO runs (site_id, started_at, status, score) VALUES (1, '2026-10-01T00:00:00+00:00', 'ok', 92)",
     )
     connection.execute(
-        "INSERT INTO findings (run_id, rule, severity, title) VALUES (1, 'content/image-alt', 'serious', 'Изображение без alt')"
+        "INSERT INTO findings (run_id, rule, severity, title) VALUES (1, 'content/image-alt', 'serious', 'Изображение без alt')",
     )
     connection.commit()
     connection.close()

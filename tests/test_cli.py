@@ -33,8 +33,8 @@ def test_baseline_matches_by_selector_and_snippet(tmp_path: Path) -> None:
             {
                 "findings": [
                     {"rule": "content/image-alt", "selector": "#logo", "snippet": "<img src='/logo.png'>"},
-                ]
-            }
+                ],
+            },
         ),
         encoding="utf-8",
     )

@@ -7,13 +7,18 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 from pathlib import Path
 
 from fastapi.staticfiles import StaticFiles
 
-LOCAL_DIR = Path(tempfile.gettempdir()) / "webscope-local"
+# S8: ИЗОЛИРОВАННЫЙ каталог загрузок вместо общего /tmp/webscope-local.
+# Общий предсказуемый путь на shared-хосте даёт другим процессам/юзерам доступ
+# к загрузкам (file poisoning / утечка). mkdtemp создаёт уникальный каталог
+# процесса с правами 0700; либо явный WEBSCOPE_LOCAL_DIR для продакшена.
+LOCAL_DIR = Path(os.environ.get("WEBSCOPE_LOCAL_DIR", tempfile.mkdtemp(prefix="webscope-local-")))
 LOCAL_DIR.mkdir(parents=True, exist_ok=True)
 
 MAX_UPLOAD_FILES = 300

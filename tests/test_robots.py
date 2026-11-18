@@ -95,7 +95,10 @@ def test_robots_is_asked_with_auth_headers() -> None:
     with _serve("User-agent: *\nAllow: /\n", required_auth=header) as site:
         blocked = robots_block_reason(f"{site}/page", allow_private=True, user_agent=UA)
         allowed = robots_block_reason(
-            f"{site}/page", allow_private=True, user_agent=UA, headers={"Authorization": header}
+            f"{site}/page",
+            allow_private=True,
+            user_agent=UA,
+            headers={"Authorization": header},
         )
     assert blocked is not None, "без авторизации сервер отвечает 403 — robots закрыт"
     assert allowed is None, "с авторизацией robots.txt отдаётся и разрешает обход"

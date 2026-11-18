@@ -121,10 +121,11 @@ async def test_oneshot_form_submission(page):
 async def test_settings_page_toggles(page):
     """Настройки сайта: переключатели авторизации и Watchdog."""
     # Создаем сайт через API
-    from fastapi.testclient import TestClient
-    from webscope.webapp.app import create_app
-    from webscope.webapp.storage import Storage
     import tempfile
+
+    from fastapi.testclient import TestClient
+
+    from webscope.webapp.app import create_app
 
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = f.name
@@ -136,11 +137,14 @@ async def test_settings_page_toggles(page):
     org_resp = client.post("/api/organizations", json={"name": "E2E Test Org", "owner_email": "test@e2e.com"})
     org_id = org_resp.json()["id"]
 
-    site_resp = client.post("/api/sites", json={
-        "url": "https://e2e-test.example.com",
-        "organization_id": org_id,
-        "schedule": "off"
-    })
+    site_resp = client.post(
+        "/api/sites",
+        json={
+            "url": "https://e2e-test.example.com",
+            "organization_id": org_id,
+            "schedule": "off",
+        },
+    )
     site_id = site_resp.json()["id"]
 
     # Логинимся через сессию (если есть auth)
@@ -149,22 +153,22 @@ async def test_settings_page_toggles(page):
     await page.wait_for_load_state("networkidle")
 
     # Проверяем переключатель авторизации
-    auth_toggle = page.locator('#auth-enabled')
+    auth_toggle = page.locator("#auth-enabled")
     await auth_toggle.wait_for(state="visible", timeout=5000)
     is_checked = await auth_toggle.is_checked()
 
     if not is_checked:
         await auth_toggle.check()
-        await page.wait_for_selector('#auth-block:not([hidden])', timeout=5000)
+        await page.wait_for_selector("#auth-block:not([hidden])", timeout=5000)
 
     # Проверяем переключатель Watchdog
-    watchdog_toggle = page.locator('#watchdog-enabled')
+    watchdog_toggle = page.locator("#watchdog-enabled")
     await watchdog_toggle.wait_for(state="visible", timeout=5000)
 
     if not await watchdog_toggle.is_checked():
         await watchdog_toggle.check()
-        await page.wait_for_selector('#webhook-secret-field:not([hidden])', timeout=5000)
-        await page.wait_for_selector('#watchdog-status:not([hidden])', timeout=5000)
+        await page.wait_for_selector("#webhook-secret-field:not([hidden])", timeout=5000)
+        await page.wait_for_selector("#watchdog-status:not([hidden])", timeout=5000)
 
     # Сохраняем настройки
     await page.click('button[type="submit"]:has-text("Сохранить настройки Watchdog")')
@@ -177,19 +181,19 @@ async def test_theme_toggle(page):
     await page.goto(BASE_URL)
     await page.wait_for_load_state("networkidle")
 
-    theme_toggle = page.locator('#theme-toggle')
+    theme_toggle = page.locator("#theme-toggle")
     await theme_toggle.wait_for(state="visible", timeout=5000)
 
     # Получаем начальную тему
-    html = page.locator('html')
-    initial_theme = await html.get_attribute('data-theme')
+    html = page.locator("html")
+    initial_theme = await html.get_attribute("data-theme")
 
     # Кликаем переключатель
     await theme_toggle.click()
     await page.wait_for_timeout(300)
 
     # Проверяем, что тема изменилась
-    new_theme = await html.get_attribute('data-theme')
+    new_theme = await html.get_attribute("data-theme")
     assert new_theme != initial_theme
 
 
@@ -204,13 +208,13 @@ async def test_mobile_menu(page):
     await page.wait_for_timeout(200)
 
     # Открываем меню
-    menu_toggle = page.locator('#mobile-menu-toggle')
+    menu_toggle = page.locator("#mobile-menu-toggle")
     await menu_toggle.wait_for(state="visible", timeout=5000)
     await menu_toggle.click()
     await page.wait_for_timeout(200)
 
     # Проверяем, что меню открылось
-    mobile_nav = page.locator('#mobile-nav')
+    mobile_nav = page.locator("#mobile-nav")
     await mobile_nav.wait_for(state="visible", timeout=5000)
 
     # Кликаем по ссылке - меню должно закрыться

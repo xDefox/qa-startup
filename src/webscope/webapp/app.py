@@ -56,8 +56,14 @@ def create_app(
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     scan_options = options or ScanOptions()
-    if allow_private or os.environ.get("WEBSCOPE_ALLOW_PRIVATE") == "1":
+    if allow_private:
         scan_options.allow_private = True
+    elif os.environ.get("WEBSCOPE_ALLOW_PRIVATE") == "1":
+        # S11: env больше не отключает SSRF-защиту глобально — только предупреждает.
+        # Явный allow_private=True по-прежнему работает (для /__local/ и тестов).
+        logging.getLogger(__name__).warning(
+            "WEBSCOPE_ALLOW_PRIVATE=1 is deprecated and ignored. Use allow_private=True per-scan instead."
+        )
 
     storage = Storage(db_path)
     migrate_add_organization_id(storage)

@@ -5,33 +5,38 @@
 # ============================================================
 
 # ---- Stage 1: Builder ----
-FROM python:3.12-slim AS builder
+FROM python:3.13-slim AS builder
 
 # System deps for building wheels
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
-    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Install Python deps via pip (cached layer)
-COPY pyproject.toml poetry.lock* ./
+COPY pyproject.toml ./
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir poetry && \
-    poetry config virtualenvs.create false && \
-    poetry install --only=main --no-interaction --no-ansi
+    pip install --no-cache-dir .
 
 # Copy source code
 COPY src/ ./src/
-COPY pyproject.toml poetry.lock* ./
-RUN poetry install --only=main --no-interaction --no-ansi
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir .
 
 # ---- Stage 2: Runtime ----
-FROM mcr.microsoft.com/playwright/python:v1.44.0-jammy AS runtime
+FROM python:3.13-slim AS runtime
 
-# Install system deps for runtime (minimal)
+# Playwright browsers location (shared, world-readable)
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# Install Playwright + Chromium with system deps (as root)
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir playwright && \
+    playwright install --with-deps chromium
+
+# Runtime system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -43,7 +48,7 @@ RUN groupadd -r webscope && useradd -r -g webscope -d /app -s /bin/bash webscope
 WORKDIR /app
 
 # Copy installed packages from builder
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code

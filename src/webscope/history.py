@@ -165,7 +165,8 @@ def save_snapshot(snapshot: Snapshot, base: Path, *, make_latest: bool = True) -
     path.write_text(json.dumps(snapshot.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
     if make_latest:
         (directory / "latest.json").write_text(
-            json.dumps(snapshot.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+            json.dumps(snapshot.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
         )
     return path
 
@@ -339,6 +340,6 @@ def trend(base: Path, url: str) -> list[dict]:
                 "pages_scanned": snapshot.pages_scanned,
                 **counts,
                 "total": len(snapshot.findings),
-            }
+            },
         )
     return points

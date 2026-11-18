@@ -42,7 +42,7 @@ def test_diff_detects_new_and_fixed() -> None:
         [
             _finding("content/image-alt", Severity.SERIOUS),
             _finding("content/missing-title", Severity.MODERATE),
-        ]
+        ],
     )
     diff = diff_snapshots(old, new)
     assert [entry.rule for entry in diff.new_findings] == ["content/missing-title"]
@@ -143,7 +143,7 @@ def test_diff_keeps_new_duplicates_without_selector() -> None:
             _bare("content/duplicate-id", Severity.MODERATE, "dup a"),
             _bare("content/duplicate-id", Severity.MODERATE, "dup b"),
             _bare("content/duplicate-id", Severity.MODERATE, "dup c"),
-        ]
+        ],
     )
     diff = diff_snapshots(old, new)
     assert len(diff.new_findings) == 2

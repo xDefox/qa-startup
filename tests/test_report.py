@@ -25,7 +25,7 @@ def _result() -> ScanResult:
                 selector="main > img",
                 snippet='<img src="/logo.png">',
                 help_url="https://www.w3.org/WAI/WCAG22/Understanding/non-text-content.html",
-            )
+            ),
         ],
     )
 

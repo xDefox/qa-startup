@@ -129,7 +129,9 @@ def test_duplicate_meta_ignores_pages_without_title() -> None:
         PageTarget("https://s.com/b", "s.com/b", 1, title="", description=""),
     ]
     result = CrawlResult(
-        root="https://s.com/", pages=pages, templates={"s.com/a": ["https://s.com/a"], "s.com/b": ["https://s.com/b"]}
+        root="https://s.com/",
+        pages=pages,
+        templates={"s.com/a": ["https://s.com/a"], "s.com/b": ["https://s.com/b"]},
     )
     assert _duplicate_meta_findings(result) == []
 

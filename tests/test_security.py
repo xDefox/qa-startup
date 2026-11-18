@@ -15,6 +15,7 @@ def test_auth_middleware_applied():
     # Middleware guard подключён в app.py (P0 разделение)
     # Проверяем через наличие middleware в FastAPI приложении
     import importlib
+
     app_mod = importlib.import_module("webscope.webapp.app")
     # guard — функция middleware, определённая в модуле; проверяем её наличие через getattr
     assert callable(getattr(app_mod, "guard", None)) or True  # заглушка: middleware работает

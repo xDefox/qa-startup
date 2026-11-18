@@ -22,7 +22,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
         return []
 
     # Read axe-core content and inject via evaluate to bypass CSP
-    axe_content = AXE_PATH.read_text(encoding='utf-8')
+    axe_content = AXE_PATH.read_text(encoding="utf-8")
     page.evaluate(axe_content)
     raw = page.evaluate(  # type: ignore[attr-defined]
         """async (tags) => {
@@ -96,7 +96,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
                         "wcag": [t for t in violation.get("tags", []) if t.startswith("wcag")],
                         "failureSummary": node.get("failureSummary"),
                     },
-                )
+                ),
             )
     return findings
 

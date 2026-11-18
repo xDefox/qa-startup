@@ -49,41 +49,59 @@ def _report_response(state: AppState, site_id: int, fmt: str, download: bool, fi
 
 @router.get("/api/sites/{site_id}/report.txt")
 def api_report_text(
-    site_id: int, state: AppState = Depends(get_state), download: bool = False, filename: str | None = None
+    site_id: int,
+    state: AppState = Depends(get_state),
+    download: bool = False,
+    filename: str | None = None,
 ):
     return _report_response(state, site_id, "txt", download, filename)
 
 
 @router.get("/api/sites/{site_id}/report.json")
 def api_report_json(
-    site_id: int, state: AppState = Depends(get_state), download: bool = False, filename: str | None = None
+    site_id: int,
+    state: AppState = Depends(get_state),
+    download: bool = False,
+    filename: str | None = None,
 ):
     return _report_response(state, site_id, "json", download, filename)
 
 
 @router.get("/api/sites/{site_id}/report.html")
 def api_report_html(
-    site_id: int, state: AppState = Depends(get_state), download: bool = False, filename: str | None = None
+    site_id: int,
+    state: AppState = Depends(get_state),
+    download: bool = False,
+    filename: str | None = None,
 ):
     return _report_response(state, site_id, "html", download, filename)
 
 
 @router.get("/api/sites/{site_id}/report.sarif")
 def api_report_sarif(
-    site_id: int, state: AppState = Depends(get_state), download: bool = False, filename: str | None = None
+    site_id: int,
+    state: AppState = Depends(get_state),
+    download: bool = False,
+    filename: str | None = None,
 ):
     return _report_response(state, site_id, "sarif", download, filename)
 
 
 @router.get("/api/sites/{site_id}/report.pdf")
 def api_report_pdf(
-    site_id: int, state: AppState = Depends(get_state), download: bool = False, filename: str | None = None
+    site_id: int,
+    state: AppState = Depends(get_state),
+    download: bool = False,
+    filename: str | None = None,
 ):
     return _report_response(state, site_id, "pdf", download, filename)
 
 
 @router.get("/api/sites/{site_id}/report.xml")
 def api_report_junit(
-    site_id: int, state: AppState = Depends(get_state), download: bool = False, filename: str | None = None
+    site_id: int,
+    state: AppState = Depends(get_state),
+    download: bool = False,
+    filename: str | None = None,
 ):
     return _report_response(state, site_id, "xml", download, filename)

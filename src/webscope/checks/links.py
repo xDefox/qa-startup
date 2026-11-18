@@ -51,7 +51,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
                 url=url,
                 source="webscope.links",
                 **kwargs,
-            )
+            ),
         )
 
     seen: set[str] = set()
@@ -106,7 +106,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
 # Ошибки, которые означают «не дождались», а не «ссылки нет». httpx бросает
 # свои исключения по имени класса, тут же оказывается и socket.timeout.
 _TIMEOUT_ERRORS = frozenset(
-    {"TimeoutException", "ConnectTimeout", "ReadTimeout", "WriteTimeout", "PoolTimeout", "TimeoutError"}
+    {"TimeoutException", "ConnectTimeout", "ReadTimeout", "WriteTimeout", "PoolTimeout", "TimeoutError"},
 )
 
 
@@ -187,7 +187,7 @@ def _check_internal_links(candidates: list[dict], ctx: ScanContext) -> list[Find
                     selector=link.get("selector"),
                     source="webscope.links",
                     details={"href": link["url"], "error": error},
-                )
+                ),
             )
             continue
         if status is not None and status >= 400:
@@ -201,7 +201,7 @@ def _check_internal_links(candidates: list[dict], ctx: ScanContext) -> list[Find
                     selector=link.get("selector"),
                     source="webscope.links",
                     details={"href": link["url"], "status": status},
-                )
+                ),
             )
 
     return findings

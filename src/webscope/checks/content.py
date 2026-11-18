@@ -140,7 +140,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
                 url=url,
                 source="webscope.content",
                 **kwargs,
-            )
+            ),
         )
 
     if not (data.get("lang") or "").strip():

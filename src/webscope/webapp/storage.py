@@ -300,8 +300,6 @@ class Finding:
         return self.details.get("fp", False)
 
 
-
-
 @dataclass
 class ScanPackage:
     """Пакет сканов (pay-per-scan)."""
@@ -338,6 +336,7 @@ class ScanPackage:
             "expires_at": self.expires_at,
             "is_active": self.is_active,
         }
+
 
 class Storage:
     """Тонкая обёртка над SQLite. Одно соединение на операцию — без блокировок."""
@@ -477,6 +476,7 @@ class Storage:
             updates["watchdog_triggers"] = ",".join(updates["watchdog_triggers"])
         if "last_watchdog_diff" in updates and isinstance(updates["last_watchdog_diff"], dict):
             import json
+
             updates["last_watchdog_diff"] = json.dumps(updates["last_watchdog_diff"])
         if not updates:
             return
@@ -572,7 +572,8 @@ class Storage:
     def list_runs(self, site_id: int, limit: int = 30) -> list[Run]:
         with self._conn() as connection:
             rows = connection.execute(
-                "SELECT * FROM runs WHERE site_id = ? ORDER BY id DESC LIMIT ?", (site_id, limit)
+                "SELECT * FROM runs WHERE site_id = ? ORDER BY id DESC LIMIT ?",
+                (site_id, limit),
             ).fetchall()
         return [_run_from_row(row) for row in rows]
 
@@ -749,9 +750,10 @@ class Storage:
     def mark_scheduled(self, site_id: int, next_run_at: str) -> None:
         self.update_site(site_id, next_run_at=next_run_at)
 
-
     # --- Scan Packages (Pay-per-scan) ---
-    def create_scan_package(self, organization_id: int, scans_total: int, price_cents: int, currency: str = "USD") -> ScanPackage:
+    def create_scan_package(
+        self, organization_id: int, scans_total: int, price_cents: int, currency: str = "USD"
+    ) -> ScanPackage:
         """Создаёт новый пакет сканов."""
         now = now_iso()
         with self._conn() as conn:
@@ -768,7 +770,8 @@ class Storage:
     def get_scan_package(self, package_id: int) -> ScanPackage | None:
         with self._conn() as conn:
             row = conn.execute(
-                "SELECT * FROM scan_packages WHERE id = ?", (package_id,)
+                "SELECT * FROM scan_packages WHERE id = ?",
+                (package_id,),
             ).fetchone()
         if not row:
             return None
@@ -781,7 +784,7 @@ class Storage:
             currency=row["currency"],
             status=row["status"],
             created_at=row["created_at"],
-            expires_at=row["expires_at"] if "expires_at" in row.keys() else None,
+            expires_at=dict(row).get("expires_at"),
         )
 
     def list_scan_packages(self, organization_id: int, active_only: bool = True) -> list[ScanPackage]:
@@ -798,24 +801,27 @@ class Storage:
                 ).fetchall()
         packages = []
         for row in rows:
-            packages.append(ScanPackage(
-                id=row["id"],
-                organization_id=row["organization_id"],
-                scans_total=row["scans_total"],
-                scans_used=row["scans_used"],
-                price_cents=row["price_cents"],
-                currency=row["currency"],
-                status=row["status"],
-                created_at=row["created_at"],
-                expires_at=row["expires_at"] if "expires_at" in row.keys() else None,
-            ))
+            packages.append(
+                ScanPackage(
+                    id=row["id"],
+                    organization_id=row["organization_id"],
+                    scans_total=row["scans_total"],
+                    scans_used=row["scans_used"],
+                    price_cents=row["price_cents"],
+                    currency=row["currency"],
+                    status=row["status"],
+                    created_at=row["created_at"],
+                    expires_at=dict(row).get("expires_at"),
+                )
+            )
         return packages
 
     def consume_scan(self, package_id: int) -> ScanPackage | None:
         """Списывает один скан из пакета. Возвращает обновлённый пакет или None, если неактивен."""
         with self._conn() as conn:
             row = conn.execute(
-                "SELECT * FROM scan_packages WHERE id = ?", (package_id,)
+                "SELECT * FROM scan_packages WHERE id = ?",
+                (package_id,),
             ).fetchone()
             if not row:
                 return None
@@ -828,12 +834,12 @@ class Storage:
                 currency=row["currency"],
                 status=row["status"],
                 created_at=row["created_at"],
-                expires_at=row["expires_at"] if "expires_at" in row.keys() else None,
+                expires_at=dict(row).get("expires_at"),
             )
             if not pkg.is_active:
                 return None
             new_used = pkg.scans_used + 1
-            new_status = 'active'
+            new_status = "active"
             if new_used >= pkg.scans_total:
                 new_status = "exhausted"
             conn.execute(
@@ -853,14 +859,14 @@ class Storage:
                 return pkg
             return None
 
-
-
-
     # --- Site Snapshots (Watchdog) ---
     # --- Site Snapshots (Watchdog) ---
-    def save_site_snapshot(self, site_id: int, url: str, pages_data: dict, sitemap_urls: list[str] | None = None) -> None:
+    def save_site_snapshot(
+        self, site_id: int, url: str, pages_data: dict, sitemap_urls: list[str] | None = None
+    ) -> None:
         """Сохраняет снимок сайта для детекции изменений."""
         import json
+
         snapshot_data = {
             "site_id": site_id,
             "url": url,
@@ -893,7 +899,7 @@ class Storage:
         with self._conn() as conn:
             # Проверяем, существует ли таблица
             row = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='site_snapshots'"
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='site_snapshots'",
             ).fetchone()
             if not row:
                 return None
@@ -904,6 +910,7 @@ class Storage:
         if not row:
             return None
         import json
+
         try:
             return json.loads(row["snapshot_json"])
         except json.JSONDecodeError:
@@ -914,7 +921,6 @@ class Storage:
         with self._conn() as conn:
             conn.execute("DELETE FROM site_snapshots WHERE site_id = ?", (site_id,))
             conn.commit()
-
 
 
 def _finding_from_row(row: sqlite3.Row) -> Finding:
@@ -963,12 +969,16 @@ def _site_from_row(row: sqlite3.Row) -> Site:
         organization_id=row["organization_id"] if "organization_id" in keys else 0,
         # Watchdog
         watchdog_enabled=bool(row["watchdog_enabled"]) if "watchdog_enabled" in keys else False,
-        watchdog_triggers=row["watchdog_triggers"].split(",") if "watchdog_triggers" in keys and row["watchdog_triggers"] else ["webhook", "content_hash"],
+        watchdog_triggers=row["watchdog_triggers"].split(",")
+        if "watchdog_triggers" in keys and row["watchdog_triggers"]
+        else ["webhook", "content_hash"],
         watchdog_webhook_secret=row["watchdog_webhook_secret"] if "watchdog_webhook_secret" in keys else None,
         # Watchdog status tracking
         last_deploy_at=row["last_deploy_at"] if "last_deploy_at" in keys else None,
         last_watchdog_check=row["last_watchdog_check"] if "last_watchdog_check" in keys else None,
-        last_watchdog_diff=json.loads(row["last_watchdog_diff"]) if "last_watchdog_diff" in keys and row["last_watchdog_diff"] else None,
+        last_watchdog_diff=json.loads(row["last_watchdog_diff"])
+        if "last_watchdog_diff" in keys and row["last_watchdog_diff"]
+        else None,
     )
 
 

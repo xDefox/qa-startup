@@ -99,7 +99,7 @@ def build_report_view(storage: Storage, run: Run) -> dict:
     groups = []
     for severity, title, key in SEVERITY_GROUPS:
         items = group_by_rule(
-            [finding for finding in own if finding.severity == severity and finding.rule != BLOCKER_RULE]
+            [finding for finding in own if finding.severity == severity and finding.rule != BLOCKER_RULE],
         )
         if not items:
             continue
@@ -109,7 +109,7 @@ def build_report_view(storage: Storage, run: Run) -> dict:
                 "key": key,
                 "count": len(items),
                 "problems": [problem_view(group) for group in items],
-            }
+            },
         )
     external_items = group_by_rule(external)
     if external_items:
@@ -119,7 +119,7 @@ def build_report_view(storage: Storage, run: Run) -> dict:
                 "key": "external",
                 "count": len(external_items),
                 "problems": [problem_view(group) for group in external_items],
-            }
+            },
         )
     fp_items = group_by_rule(fp_findings)
     if fp_items:
@@ -129,7 +129,7 @@ def build_report_view(storage: Storage, run: Run) -> dict:
                 "key": "fp",
                 "count": len(fp_items),
                 "problems": [problem_view(group) for group in fp_items],
-            }
+            },
         )
 
     actions = [
@@ -155,7 +155,8 @@ def build_report_view(storage: Storage, run: Run) -> dict:
                     "url": entry.url,
                     "severity": entry.severity_after,
                     "severity_label": SEVERITY_LABELS.get(
-                        entry.severity_after or "", entry.severity_after or ""
+                        entry.severity_after or "",
+                        entry.severity_after or "",
                     ),
                 }
                 for entry in diff.new_findings[:10]

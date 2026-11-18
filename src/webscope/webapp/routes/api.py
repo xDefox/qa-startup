@@ -33,7 +33,7 @@ def api_sites(
                 **site.to_dict(),
                 "last_run": last.to_dict() if last else None,
                 "score": last.score if last else None,
-            }
+            },
         )
     return {"sites": payload}
 
@@ -75,7 +75,8 @@ def api_scan(
     site = get_site_or_404(state, site_id)
     run = trigger(state, site, background_tasks)
     return JSONResponse(
-        {"status": "started", "site_id": site_id, "run_id": run.id}, status_code=202
+        {"status": "started", "site_id": site_id, "run_id": run.id},
+        status_code=202,
     )
 
 
@@ -83,7 +84,11 @@ def api_scan(
 def api_organizations(state: AppState = Depends(get_state)):
     """Список организаций для UI селектора."""
     orgs = get_organizations(state.storage)
-    return {"organizations": [{"id": o.id, "name": o.name, "owner_email": o.owner_email, "created_at": o.created_at} for o in orgs]}
+    return {
+        "organizations": [
+            {"id": o.id, "name": o.name, "owner_email": o.owner_email, "created_at": o.created_at} for o in orgs
+        ]
+    }
 
 
 @router.post("/api/organizations")
@@ -109,7 +114,7 @@ async def api_update_organization(org_id: int, request: Request, state: AppState
     with state.storage._conn() as conn:
         conn.execute(
             "UPDATE organizations SET name = ?, owner_email = ? WHERE id = ?",
-            (name, owner_email, org_id)
+            (name, owner_email, org_id),
         )
         conn.commit()
     return {"status": "ok", "org_id": org_id}
@@ -139,6 +144,7 @@ async def api_mark_fp(finding_id: int, request: Request, state: AppState = Depen
 
 # --- Scan Packages (Pay-per-scan) ---
 
+
 @router.get("/api/packages")
 def api_list_packages(
     state: AppState = Depends(get_state),
@@ -165,7 +171,7 @@ async def api_buy_package(
     state: AppState = Depends(get_state),
 ):
     """Покупка пакета сканов (через Stripe Checkout или ЮKassa).
-    
+
     Body: {
         "organization_id": int,
         "package_type": "starter" | "pro" | "agency",  # 10, 50, 100 scans
@@ -194,9 +200,10 @@ async def api_buy_package(
         return JSONResponse({"detail": "Неизвестный тип пакета"}, status_code=400)
 
     config = packages_config[package_type]
-    
+
     # Получаем организацию для получения email клиента
     from ..services.site_service import get_organization
+
     org = get_organization(state.storage, organization_id)
     if not org:
         return JSONResponse({"detail": "Организация не найдена"}, status_code=404)
@@ -212,29 +219,33 @@ async def api_buy_package(
         return {
             "status": "ok",
             "package": pkg.to_dict(),
-            "message": f"Пакет на {config['scans']} сканов куплен за ${config['price_cents']/100:.2f} (mock)",
+            "message": f"Пакет на {config['scans']} сканов куплен за ${config['price_cents'] / 100:.2f} (mock)",
         }
 
     # Stripe режим
     if payment_method == "stripe":
         from ..stripe_integration import get_stripe_client
+
         client = get_stripe_client()
         if not client.is_configured:
             return JSONResponse({"detail": "Stripe не настроен на сервере"}, status_code=503)
 
         import os
+
         price_id = os.environ.get(config["stripe_price_id_env"])
         if not price_id:
             return JSONResponse({"detail": f"Stripe price ID для {package_type} не настроен"}, status_code=503)
 
         customer_email = org.owner_email or f"org-{organization_id}@webscope.local"
-        customer = client.create_customer(email=customer_email, name=org.name, metadata={"organization_id": str(organization_id)})
+        customer = client.create_customer(
+            email=customer_email, name=org.name, metadata={"organization_id": str(organization_id)}
+        )
         if not customer:
             return JSONResponse({"detail": "Не удалось создать Stripe customer"}, status_code=500)
 
         success_url = success_url or f"{request.base_url}dashboard?payment=success"
         cancel_url = cancel_url or f"{request.base_url}dashboard?payment=cancelled"
-        
+
         session = client.create_checkout_session(
             customer_id=customer.id,
             price_id=price_id,
@@ -243,7 +254,7 @@ async def api_buy_package(
             mode="subscription",
             metadata={"organization_id": str(organization_id), "package_type": package_type},
         )
-        
+
         if not session:
             return JSONResponse({"detail": "Не удалось создать Stripe Checkout сессию"}, status_code=500)
 
@@ -257,14 +268,16 @@ async def api_buy_package(
     # ЮKassa режим
     if payment_method == "yookassa":
         from ..yookassa_integration import get_yookassa_client
+
         client = await get_yookassa_client()
         if not client.is_configured:
             return JSONResponse({"detail": "ЮKassa не настроена на сервере"}, status_code=503)
 
         import os
+
         # Конвертируем в рубли (примерно $1 = 100 RUB)
         amount_rub = int(config["price_cents"] * 100 / 100)  # $1 = 100 RUB
-        
+
         payment = await client.create_payment(
             amount_cents=amount_rub * 100,  # в копейках
             currency="RUB",
@@ -272,12 +285,12 @@ async def api_buy_package(
             return_url=success_url or f"{request.base_url}dashboard?payment=success",
             metadata={"organization_id": str(organization_id), "package_type": package_type},
         )
-        
+
         if not payment:
             return JSONResponse({"detail": "Не удалось создать платеж в ЮKassa"}, status_code=500)
 
         confirmation_url = payment.get("confirmation", {}).get("confirmation_url")
-        
+
         return {
             "status": "ok",
             "checkout_url": confirmation_url,
@@ -289,6 +302,7 @@ async def api_buy_package(
 
 
 # --- Watchdog Webhooks ---
+
 
 @router.post("/webhook/github")
 async def webhook_github(request: Request, state: AppState = Depends(get_state)):
@@ -330,18 +344,18 @@ async def webhook_generic(request: Request, state: AppState = Depends(get_state)
 async def webhook_stripe(request: Request, state: AppState = Depends(get_state)):
     """Stripe webhook для обработки событий биллинга."""
     from ..stripe_integration import get_stripe_client, process_stripe_webhook
-    
+
     body = await request.body()
     sig_header = request.headers.get("stripe-signature")
-    
+
     client = get_stripe_client()
     if not client.is_configured:
         return JSONResponse({"detail": "Stripe not configured"}, status_code=503)
-    
+
     event = client.construct_webhook_event(body, sig_header or "")
     if not event:
         return JSONResponse({"detail": "Invalid signature"}, status_code=400)
-    
+
     await process_stripe_webhook(event, state.storage)
     return {"status": "ok"}
 
@@ -350,24 +364,25 @@ async def webhook_stripe(request: Request, state: AppState = Depends(get_state))
 async def webhook_yookassa(request: Request, state: AppState = Depends(get_state)):
     """ЮKassa webhook для обработки событий биллинга."""
     from ..yookassa_integration import get_yookassa_client, process_yookassa_webhook
-    
+
     body = await request.body()
     signature = request.headers.get("x-signature")
-    
+
     client = await get_yookassa_client()
     if not client.is_configured:
         return JSONResponse({"detail": "ЮKassa not configured"}, status_code=503)
-    
+
     if not signature or not client.verify_webhook(body, signature):
         return JSONResponse({"detail": "Invalid signature"}, status_code=400)
-    
+
     import json
+
     try:
         data = json.loads(body)
         event_type = data.get("event")
         if not event_type:
             return JSONResponse({"detail": "Missing event type"}, status_code=400)
-        
+
         await process_yookassa_webhook(event_type, data.get("object", {}), state.storage)
         return {"status": "ok"}
     except json.JSONDecodeError:
@@ -378,32 +393,36 @@ async def _handle_deploy_webhook(request: Request, state: AppState, provider: st
     """Обрабатывает вебхук деплоя от CI/CD провайдера (ставит в очередь для фоновой обработки)."""
     import hashlib
     import hmac
-    
+
     body = await request.body()
-    
+
     # Верификация подписи (если настроена)
     webhook_secret = state.storage.get_webhook_secret(provider)
     if webhook_secret:
-        signature = request.headers.get("X-Hub-Signature-256") or request.headers.get("X-Gitlab-Token") or request.headers.get("X-Vercel-Signature")
+        signature = (
+            request.headers.get("X-Hub-Signature-256")
+            or request.headers.get("X-Gitlab-Token")
+            or request.headers.get("X-Vercel-Signature")
+        )
         if signature:
             expected = "sha256=" + hmac.new(webhook_secret.encode(), body, hashlib.sha256).hexdigest()
             if not hmac.compare_digest(signature, expected):
                 return JSONResponse({"detail": "Invalid signature"}, status_code=401)
-    
+
     # Парсим данные деплоя
     deploy_info = _parse_deploy_payload(provider, body)
     if not deploy_info:
         return JSONResponse({"detail": "Не удалось распарсить payload"}, status_code=400)
-    
+
     # Ищем сайт по URL
     site = state.storage.get_site_by_url(deploy_info.url)
     if not site:
         return JSONResponse({"detail": "Сайт не найден в WebScope"}, status_code=404)
-    
+
     # Проверяем, включен ли Watchdog для этого сайта
     if not site.watchdog_enabled:
         return JSONResponse({"detail": "Watchdog не включен для этого сайта"}, status_code=400)
-    
+
     # Создаём событие для очереди
     event = WebhookEvent(
         provider=provider,
@@ -413,49 +432,68 @@ async def _handle_deploy_webhook(request: Request, state: AppState, provider: st
         deploy_commit=deploy_info.commit,
         raw_payload=deploy_info,
     )
-    
+
     # Получаем очередь из state (инициализируется при старте приложения)
-    webhook_queue = getattr(state, 'webhook_queue', None)
+    webhook_queue = getattr(state, "webhook_queue", None)
     if webhook_queue:
         enqueued = await webhook_queue.enqueue(event)
         if enqueued:
             return {"status": "queued", "message": f"Проверка поставлена в очередь для {site.url}"}
-        else:
-            return JSONResponse({"detail": "Очередь переполнена, попробуйте позже"}, status_code=503)
-    else:
-        # Fallback: обрабатываем синхронно если очередь не инициализирована
-        LOGGER.warning("Webhook queue not initialized, processing inline")
-        return {"status": "ok", "message": f"Проверка запущена для {site.url} (fallback)"}
+        return JSONResponse({"detail": "Очередь переполнена, попробуйте позже"}, status_code=503)
+    # Fallback: обрабатываем синхронно если очередь не инициализирована
+    LOGGER.warning("Webhook queue not initialized, processing inline")
+    return {"status": "ok", "message": f"Проверка запущена для {site.url} (fallback)"}
 
 
 def _parse_deploy_payload(provider: str, body: bytes) -> dict | None:
     """Парсит payload от разных CI/CD провайдеров."""
     import json
+
     try:
         data = json.loads(body)
     except json.JSONDecodeError:
         return None
-    
+
     if provider == "github":
         # GitHub deployment webhook
         if data.get("deployment_status") and data["deployment_status"].get("state") == "success":
-            return {"url": data["deployment"].get("payload", {}).get("url") or data["repository"].get("html_url"), "version": data["deployment_status"].get("deployment_id"), "commit": data["deployment"].get("sha")}
+            return {
+                "url": data["deployment"].get("payload", {}).get("url") or data["repository"].get("html_url"),
+                "version": data["deployment_status"].get("deployment_id"),
+                "commit": data["deployment"].get("sha"),
+            }
     elif provider == "gitlab":
         # GitLab deployment webhook
         if data.get("object_kind") == "deployment" and data.get("deployment_status") == "success":
-            return {"url": data.get("deployment", {}).get("environment_url"), "version": data.get("deployment", {}).get("id"), "commit": data.get("commit", {}).get("id")}
+            return {
+                "url": data.get("deployment", {}).get("environment_url"),
+                "version": data.get("deployment", {}).get("id"),
+                "commit": data.get("commit", {}).get("id"),
+            }
     elif provider == "vercel":
         # Vercel deployment webhook
         if data.get("type") == "deployment.succeeded":
-            return {"url": data.get("payload", {}).get("url"), "version": data.get("payload", {}).get("deploymentId"), "commit": data.get("payload", {}).get("git", {}).get("sha")}
+            return {
+                "url": data.get("payload", {}).get("url"),
+                "version": data.get("payload", {}).get("deploymentId"),
+                "commit": data.get("payload", {}).get("git", {}).get("sha"),
+            }
     elif provider == "netlify":
         # Netlify deployment webhook
         if data.get("state") == "ready":
-            return {"url": data.get("deploy_ssl_url") or data.get("deploy_url"), "version": data.get("id"), "commit": data.get("commit_ref")}
+            return {
+                "url": data.get("deploy_ssl_url") or data.get("deploy_url"),
+                "version": data.get("id"),
+                "commit": data.get("commit_ref"),
+            }
     elif provider == "cloudflare":
         # Cloudflare Pages webhook
         if data.get("event") == "deployment_created" and data.get("payload", {}).get("status") == "success":
-            return {"url": data.get("payload", {}).get("url"), "version": data.get("payload", {}).get("deployment_id"), "commit": data.get("payload", {}).get("commit_hash")}
+            return {
+                "url": data.get("payload", {}).get("url"),
+                "version": data.get("payload", {}).get("deployment_id"),
+                "commit": data.get("payload", {}).get("commit_hash"),
+            }
     elif provider == "generic":
         # Generic: ожидаем url в теле
         return {"url": data.get("url"), "version": data.get("version"), "commit": data.get("commit")}
@@ -469,7 +507,7 @@ async def api_scan_oneshot(
     state: AppState = Depends(get_state),
 ):
     """Разовый скан с использованием пакета сканов.
-    
+
     Body: {
         "url": "https://example.com",
         "organization_id": int,
@@ -511,7 +549,7 @@ async def api_scan_oneshot(
     # Создаём временный сайт для сканирования (или используем существующий)
     from ..services.site_service import create_site as create_site_service
     from ..urls import normalize_url
-    
+
     normalized_url = normalize_url(url)
     site = create_site_service(
         state.storage,
@@ -523,17 +561,18 @@ async def api_scan_oneshot(
     # Настройки сканирования
 
     from ..scheduler import Monitor, ScanOptions
-    
+
     scan_options = ScanOptions()
     if max_pages:
         scan_options.max_pages = max_pages
-    
+
     # Настройка проверок
     scan_options.checks = checks
-    
+
     # Настройка авторизации
     if auth_enabled:
         from webscope.models import AuthCredentials
+
         scan_options.auth = AuthCredentials(
             kind=auth_kind,
             login=auth_login,
@@ -557,6 +596,7 @@ async def api_scan_oneshot(
         background_tasks.add_task(temp_monitor.execute, site, run)
     else:
         import asyncio
+
         task = asyncio.create_task(asyncio.to_thread(temp_monitor.execute, site, run))
         state.tasks.add(task)
         task.add_done_callback(state.tasks.discard)
@@ -568,5 +608,5 @@ async def api_scan_oneshot(
             "run_id": run.id,
             "package_scans_left": pkg.scans_left,
         },
-        status_code=202
+        status_code=202,
     )

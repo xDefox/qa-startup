@@ -18,6 +18,7 @@ LOGGER = logging.getLogger("webscope.yookassa")
 @dataclass
 class YookassaConfig:
     """ЮKassa configuration from environment."""
+
     shop_id: str | None = None
     secret_key: str | None = None
     webhook_secret: str | None = None
@@ -42,14 +43,18 @@ class YookassaClient:
 
     def __init__(self, config: YookassaConfig | None = None):
         self.config = config or YookassaConfig.from_env()
-        self._client = httpx.AsyncClient(
-            auth=(self.config.shop_id, self.config.secret_key),
-            headers={
-                "Content-Type": "application/json",
-                "Idempotence-Key": str(uuid.uuid4()),
-            },
-            timeout=30.0,
-        ) if self.config.is_configured else None
+        self._client = (
+            httpx.AsyncClient(
+                auth=(self.config.shop_id, self.config.secret_key),
+                headers={
+                    "Content-Type": "application/json",
+                    "Idempotence-Key": str(uuid.uuid4()),
+                },
+                timeout=30.0,
+            )
+            if self.config.is_configured
+            else None
+        )
 
     @property
     def is_configured(self) -> bool:
@@ -95,7 +100,12 @@ class YookassaClient:
             response = await self._client.post("/payments", json=payload)
             response.raise_for_status()
             payment = response.json()
-            LOGGER.info("Created ЮKassa payment %s for %d %s", payment["id"], payment["amount"]["value"], payment["amount"]["currency"])
+            LOGGER.info(
+                "Created ЮKassa payment %s for %d %s",
+                payment["id"],
+                payment["amount"]["value"],
+                payment["amount"]["currency"],
+            )
             return payment
         except httpx.HTTPError as e:
             LOGGER.error("Failed to create ЮKassa payment: %s", e)
@@ -144,12 +154,13 @@ class YookassaClient:
         """Verify webhook signature (SHA256 HMAC with secret)."""
         import hashlib
         import hmac
+
         if not self.config.webhook_secret:
             return False
         expected = hmac.new(
             self.config.webhook_secret.encode(),
             payload,
-            hashlib.sha256
+            hashlib.sha256,
         ).hexdigest()
         return hmac.compare_digest(signature, expected)
 

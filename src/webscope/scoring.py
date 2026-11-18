@@ -62,7 +62,7 @@ def group_by_rule(findings: list[Finding]) -> list[dict]:
                 "examples": pages[:3],
                 "selectors_count": len(selectors),
                 "representative": rep,
-            }
+            },
         )
 
     result.sort(key=lambda g: (g["severity"].rank, -g["pages_count"], -g["count"], g["rule"]))
@@ -310,7 +310,7 @@ DIAGNOSTIC_RULES = frozenset(
     {
         "links/timeout",
         "scan/timeout",
-    }
+    },
 )
 
 
@@ -342,7 +342,11 @@ def compute_score(findings: list[Finding], pages_scanned: int = 1) -> int:
     - Порог шума: правила на < 2 страницах (если не critical/serious) не штрафуются
     - Ложные срабатывания (FP) исключаются из расчёта.
     """
-    own = [finding for finding in findings if is_site_defect(finding) and not is_diagnostic(finding) and not is_false_positive(finding)]
+    own = [
+        finding
+        for finding in findings
+        if is_site_defect(finding) and not is_diagnostic(finding) and not is_false_positive(finding)
+    ]
     if not own:
         return 100
 
@@ -353,14 +357,26 @@ def compute_score(findings: list[Finding], pages_scanned: int = 1) -> int:
     # Взвешивание правил по категории (влияние на UX)
     RULE_CATEGORY_WEIGHT = {
         # Accessibility — критический UX impact
-        "aria-": 1.5, "color-contrast": 1.5, "link-name": 1.4, "image-alt": 1.4,
-        "label": 1.3, "heading-order": 1.2, "region": 1.2, "landmark": 1.2,
+        "aria-": 1.5,
+        "color-contrast": 1.5,
+        "link-name": 1.4,
+        "image-alt": 1.4,
+        "label": 1.3,
+        "heading-order": 1.2,
+        "region": 1.2,
+        "landmark": 1.2,
         # Forms — прямой impact на конверсию
-        "form": 1.3, "control-without-label": 1.3, "email-without-autocomplete": 1.1,
+        "form": 1.3,
+        "control-without-label": 1.3,
+        "email-without-autocomplete": 1.1,
         # Links — навигация
-        "link": 1.1, "target-blank": 1.0, "empty-href": 1.1,
+        "link": 1.1,
+        "target-blank": 1.0,
+        "empty-href": 1.1,
         # Content/HTML — техническое качество
-        "duplicate-id": 1.1, "empty-link-name": 1.0, "missing-": 0.9,
+        "duplicate-id": 1.1,
+        "empty-link-name": 1.0,
+        "missing-": 0.9,
         # Console — часто шум
         "console/": 0.5,
         # Viewport — UX но часто намеренно
@@ -391,17 +407,17 @@ def compute_score(findings: list[Finding], pages_scanned: int = 1) -> int:
         base = _WEIGHTS[severity]
         cat_weight = _rule_weight(rule)
         pages = rule_pages.get(rule, 1)
-        
+
         # Игнорируем шум: правило на 1 странице только если MINOR
         if pages < 2 and severity == Severity.MINOR:
             continue
-        
+
         penalty = base * cat_weight
         total_penalty += penalty
 
     # Нормализуем по страницам
     total_penalty = total_penalty / page_norm
-    
+
     return max(0, min(100, int(100 - total_penalty)))
 
 

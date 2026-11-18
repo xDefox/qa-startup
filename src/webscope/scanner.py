@@ -172,13 +172,13 @@ def validate_target(url: str, allow_private: bool = False) -> str:
     except socket.gaierror as exc:
         raise ScanError(
             f"Не удалось открыть {url}: домен не найден. "
-            "Проверьте адрес на опечатку; возможно, DNS-запись ещё не создана."
+            "Проверьте адрес на опечатку; возможно, DNS-запись ещё не создана.",
         ) from exc
     for info in infos:
         address = ipaddress.ip_address(info[4][0].split("%", 1)[0])
         if is_forbidden_address(address):
             raise ScanError(
-                f"Хост {host} резолвится в непубличный адрес {address} — сканирование заблокировано"
+                f"Хост {host} резолвится в непубличный адрес {address} — сканирование заблокировано",
             )
 
     return url
@@ -321,7 +321,7 @@ def _form_login(page, auth: AuthCredentials, *, start_url: str, timeout_ms: int)
     passwords = page.locator(_PASSWORD_INPUT)
     if passwords.count() == 0:
         raise ScanError(
-            f"Не удалось войти: на {target} нет формы входа — укажите адрес страницы входа в настройках авторизации."
+            f"Не удалось войти: на {target} нет формы входа — укажите адрес страницы входа в настройках авторизации.",
         )
     password_input = passwords.first
 
@@ -364,7 +364,7 @@ def _form_login(page, auth: AuthCredentials, *, start_url: str, timeout_ms: int)
             gone_streak = 0  # страница перезагружается — проверим ещё раз
         page.wait_for_timeout(250)
     raise ScanError(
-        f"Не удалось войти на {target}: после отправки формы страница входа осталась — проверьте логин и пароль."
+        f"Не удалось войти на {target}: после отправки формы страница входа осталась — проверьте логин и пароль.",
     )
 
 
@@ -422,7 +422,7 @@ def _collect_archetype(page) -> dict:
             globalsPresent: globals.filter((g) => typeof window[g] !== 'undefined'),
           };
         }
-        """
+        """,
     )
     return detect_archetype(
         html=probe.get("html", ""),
@@ -542,7 +542,7 @@ def _scan_page(
         location = getattr(message, "location", None) or {}
         location_url = location.get("url", "") if isinstance(location, dict) else ""
         console_messages.append(
-            {"type": message.type, "text": message.text, "location": location_url, "location_url": location_url}
+            {"type": message.type, "text": message.text, "location": location_url, "location_url": location_url},
         )
 
     def on_request_failed(request) -> None:
@@ -553,7 +553,7 @@ def _scan_page(
                 "method": request.method,
                 "status": None,
                 "failure": getattr(failure, "error_text", None) or "request failed",
-            }
+            },
         )
 
     def on_page_error(error) -> None:
@@ -565,7 +565,7 @@ def _scan_page(
                 "text": f"Uncaught: {error}",
                 "location": "",
                 "location_url": "",
-            }
+            },
         )
 
     def on_response(response) -> None:
@@ -576,7 +576,7 @@ def _scan_page(
                     "method": response.request.method,
                     "status": response.status,
                     "failure": None,
-                }
+                },
             )
 
     page.on("console", on_console)
@@ -619,6 +619,11 @@ def _scan_page(
         except PlaywrightError:
             pass
 
+        # Check if the browser showed its own error page (chrome-error://) — indicates navigation failure
+        if page.url.startswith("chrome-error://"):
+            raise ScanError(diagnose_http_error(url, 401) + " (браузер открыл chrome-error:// вместо страницы)")
+
+        # Inject shared JS utils so checks can build stable selectors / accessible names
         page.evaluate(JS_UTILS)  # bypasses CSP
 
         archetype = _collect_archetype(page)
@@ -627,7 +632,7 @@ def _scan_page(
         bot_protection = detect_bot_protection(page, url)
         if bot_protection:
             notes.append(f"Bot protection: {bot_protection}")
-        
+
         ctx = ScanContext(
             url=url,
             final_url=page.url,
@@ -644,7 +649,7 @@ def _scan_page(
         if blocked_requests:
             ctx.notes.append(
                 f"Сайт пытался обратиться к внутренней сети ({len(blocked_requests)} запросов) — "
-                "запросы заблокированы защитой от SSRF."
+                "запросы заблокированы защитой от SSRF.",
             )
 
         findings: list[Finding] = []
@@ -716,7 +721,7 @@ def _duplicate_meta_findings(crawl_result: CrawlResult) -> list[Finding]:
                             "count": len(group),
                             "examples": [p.url for p in sorted_group[:5]],
                         },
-                    )
+                    ),
                 )
     return findings
 
@@ -944,7 +949,7 @@ def scan_site(
     if timed_out and scanned == 0:
         raise ScanError(
             f"Проверка вышла за лимит времени ({time_budget_s:.0f} с) до первой страницы — "
-            "увеличьте WEBSCOPE_SCAN_TIMEOUT или уменьшите число страниц"
+            "увеличьте WEBSCOPE_SCAN_TIMEOUT или уменьшите число страниц",
         )
 
     # Ни одна страница не открылась (например, сервер отверг учётные данные) —

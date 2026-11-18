@@ -36,7 +36,7 @@ def _finding(rule: str, severity: Severity, **details) -> Finding:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def client(tmp_path: Path):
     from fastapi.testclient import TestClient
 
@@ -214,7 +214,6 @@ def test_download_trigger_declares_a_popup(client) -> None:
 
 def test_download_block_hidden_without_report(client) -> None:
     """Нет отчёта — нечего сохранять: ни кнопки, ни модалки."""
-
     test_client, _site = client
     response = test_client.post("/sites", data={"url": "https://fresh.example.com"}, follow_redirects=False)
     new_id = int(response.headers["location"].rsplit("/", 1)[-1])
@@ -303,7 +302,7 @@ def test_filename_field_updates_download_links(client) -> None:
     assert all(checks.values()), checks
     assert payload["namedDownload"][0] == "мой отчёт за октябрь.html"
     assert payload["namedHrefs"][0].endswith(
-        "&filename=%D0%BC%D0%BE%D0%B9%20%D0%BE%D1%82%D1%87%D1%91%D1%82%20%D0%B7%D0%B0%20%D0%BE%D0%BA%D1%82%D1%8F%D0%B1%D1%80%D1%8C"
+        "&filename=%D0%BC%D0%BE%D0%B9%20%D0%BE%D1%82%D1%87%D1%91%D1%82%20%D0%B7%D0%B0%20%D0%BE%D0%BA%D1%82%D1%8F%D0%B1%D1%80%D1%8C",
     )
 
 
@@ -318,7 +317,7 @@ def test_download_button_is_not_a_view_toggle(client) -> None:
     assert "data-view" not in button
     # и обработчик слушает только переключатель (внешний скрипт страницы)
     site_js = (Path(__file__).parent.parent / "src" / "webscope" / "webapp" / "static" / "js" / "site.js").read_text(
-        encoding="utf-8"
+        encoding="utf-8",
     )
     assert "'.view-toggle .view-btn'" in site_js
     assert "if (mode !== 'list' && mode !== 'table') return;" in site_js

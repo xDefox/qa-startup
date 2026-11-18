@@ -3,26 +3,22 @@
 from __future__ import annotations
 
 import asyncio
-import hmac
 import hashlib
+import hmac
 import json
-from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
-from webscope.webapp.app import create_app
-from webscope.webapp.storage import Storage
+from webscope.watchdog import ChangeDetector, PageSnapshot
 from webscope.webapp.scheduler import Monitor, ScanOptions
 from webscope.webapp.services.site_service import create_site
-from webscope.watchdog import ChangeDetector, PageSnapshot, SiteSnapshot
-from webscope.webapp.webhook_queue import WebhookQueue, WebhookEvent, create_webhook_queue
-
+from webscope.webapp.storage import Storage
+from webscope.webapp.webhook_queue import WebhookEvent, WebhookQueue, create_webhook_queue
 
 # ============================================================
 # ChangeDetector tests
 # ============================================================
+
 
 def test_change_detector_first_run_returns_all_as_added():
     """Первый запуск: все страницы новые."""
@@ -34,7 +30,6 @@ def test_change_detector_first_run_returns_all_as_added():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site
     site = create_site(storage, url="https://example.com", organization_id=1)
 
     detector = ChangeDetector(storage)
@@ -57,12 +52,25 @@ def test_change_detector_no_changes_returns_empty():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site
     site = create_site(storage, url="https://example.com", organization_id=1)
 
     detector = ChangeDetector(storage)
-    current_pages = {site.url: PageSnapshot(url=site.url, content_hash="hash1", etag=None, last_modified=None, status_code=200)}
-    storage.save_site_snapshot(site.id, site.url, {site.url: {"content_hash": "hash1", "etag": None, "last_modified": None, "status_code": 200, "fetched_at": "2026-11-09T12:00:00"}})
+    current_pages = {
+        site.url: PageSnapshot(url=site.url, content_hash="hash1", etag=None, last_modified=None, status_code=200)
+    }
+    storage.save_site_snapshot(
+        site.id,
+        site.url,
+        {
+            site.url: {
+                "content_hash": "hash1",
+                "etag": None,
+                "last_modified": None,
+                "status_code": 200,
+                "fetched_at": "2026-11-09T12:00:00",
+            }
+        },
+    )
 
     added, changed, removed = detector.detect_changes(site.id, current_pages)
     assert added == []
@@ -80,13 +88,26 @@ def test_change_detector_detects_content_hash_change():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site
     site = create_site(storage, url="https://example.com", organization_id=1)
 
     detector = ChangeDetector(storage)
-    storage.save_site_snapshot(site.id, site.url, {site.url: {"content_hash": "hash1", "etag": None, "last_modified": None, "status_code": 200, "fetched_at": "2026-11-09T12:00:00"}})
+    storage.save_site_snapshot(
+        site.id,
+        site.url,
+        {
+            site.url: {
+                "content_hash": "hash1",
+                "etag": None,
+                "last_modified": None,
+                "status_code": 200,
+                "fetched_at": "2026-11-09T12:00:00",
+            }
+        },
+    )
 
-    current_pages = {site.url: PageSnapshot(url=site.url, content_hash="hash2", etag=None, last_modified=None, status_code=200)}
+    current_pages = {
+        site.url: PageSnapshot(url=site.url, content_hash="hash2", etag=None, last_modified=None, status_code=200)
+    }
     added, changed, removed = detector.detect_changes(site.id, current_pages)
     assert changed == [site.url]
     assert added == []
@@ -103,15 +124,28 @@ def test_change_detector_detects_new_page():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site
     site = create_site(storage, url="https://example.com", organization_id=1)
 
     detector = ChangeDetector(storage)
-    storage.save_site_snapshot(site.id, site.url, {site.url: {"content_hash": "hash1", "etag": None, "last_modified": None, "status_code": 200, "fetched_at": "2026-11-09T12:00:00"}})
+    storage.save_site_snapshot(
+        site.id,
+        site.url,
+        {
+            site.url: {
+                "content_hash": "hash1",
+                "etag": None,
+                "last_modified": None,
+                "status_code": 200,
+                "fetched_at": "2026-11-09T12:00:00",
+            }
+        },
+    )
 
     current_pages = {
         site.url: PageSnapshot(url=site.url, content_hash="hash1", etag=None, last_modified=None, status_code=200),
-        "https://example.com/about": PageSnapshot(url="https://example.com/about", content_hash="hash2", etag=None, last_modified=None, status_code=200),
+        "https://example.com/about": PageSnapshot(
+            url="https://example.com/about", content_hash="hash2", etag=None, last_modified=None, status_code=200
+        ),
     }
     added, changed, removed = detector.detect_changes(site.id, current_pages)
     assert "https://example.com/about" in added
@@ -129,16 +163,33 @@ def test_change_detector_detects_removed_page():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site
     site = create_site(storage, url="https://example.com", organization_id=1)
 
     detector = ChangeDetector(storage)
-    storage.save_site_snapshot(site.id, site.url, {
-        site.url: {"content_hash": "hash1", "etag": None, "last_modified": None, "status_code": 200, "fetched_at": "2026-11-09T12:00:00"},
-        "https://example.com/about": {"content_hash": "hash2", "etag": None, "last_modified": None, "status_code": 200, "fetched_at": "2026-11-09T12:00:00"},
-    })
+    storage.save_site_snapshot(
+        site.id,
+        site.url,
+        {
+            site.url: {
+                "content_hash": "hash1",
+                "etag": None,
+                "last_modified": None,
+                "status_code": 200,
+                "fetched_at": "2026-11-09T12:00:00",
+            },
+            "https://example.com/about": {
+                "content_hash": "hash2",
+                "etag": None,
+                "last_modified": None,
+                "status_code": 200,
+                "fetched_at": "2026-11-09T12:00:00",
+            },
+        },
+    )
 
-    current_pages = {site.url: PageSnapshot(url=site.url, content_hash="hash1", etag=None, last_modified=None, status_code=200)}
+    current_pages = {
+        site.url: PageSnapshot(url=site.url, content_hash="hash1", etag=None, last_modified=None, status_code=200)
+    }
     added, changed, removed = detector.detect_changes(site.id, current_pages)
     assert "https://example.com/about" in removed
     assert added == []
@@ -155,14 +206,27 @@ def test_change_detector_etag_comparison():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site
     site = create_site(storage, url="https://example.com", organization_id=1)
 
     detector = ChangeDetector(storage)
-    storage.save_site_snapshot(site.id, site.url, {site.url: {"content_hash": "hash1", "etag": "\"abc123\"", "last_modified": None, "status_code": 200, "fetched_at": "2026-11-09T12:00:00"}})
+    storage.save_site_snapshot(
+        site.id,
+        site.url,
+        {
+            site.url: {
+                "content_hash": "hash1",
+                "etag": '"abc123"',
+                "last_modified": None,
+                "status_code": 200,
+                "fetched_at": "2026-11-09T12:00:00",
+            }
+        },
+    )
 
-    current_pages = {site.url: PageSnapshot(url=site.url, content_hash="hash1", etag="\"def456\"", last_modified=None, status_code=200)}
-    added, changed, removed = detector.detect_changes(site.id, current_pages)
+    current_pages = {
+        site.url: PageSnapshot(url=site.url, content_hash="hash1", etag='"def456"', last_modified=None, status_code=200)
+    }
+    _added, changed, _removed = detector.detect_changes(site.id, current_pages)
     assert site.url in changed
 
 
@@ -176,20 +240,36 @@ def test_change_detector_last_modified_comparison():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site
     site = create_site(storage, url="https://example.com", organization_id=1)
 
     detector = ChangeDetector(storage)
-    storage.save_site_snapshot(site.id, site.url, {site.url: {"content_hash": "hash1", "etag": None, "last_modified": "2026-11-08T12:00:00", "status_code": 200, "fetched_at": "2026-11-09T12:00:00"}})
+    storage.save_site_snapshot(
+        site.id,
+        site.url,
+        {
+            site.url: {
+                "content_hash": "hash1",
+                "etag": None,
+                "last_modified": "2026-11-08T12:00:00",
+                "status_code": 200,
+                "fetched_at": "2026-11-09T12:00:00",
+            }
+        },
+    )
 
-    current_pages = {site.url: PageSnapshot(url=site.url, content_hash="hash1", etag=None, last_modified="2026-11-09T12:00:00", status_code=200)}
-    added, changed, removed = detector.detect_changes(site.id, current_pages)
+    current_pages = {
+        site.url: PageSnapshot(
+            url=site.url, content_hash="hash1", etag=None, last_modified="2026-11-09T12:00:00", status_code=200
+        )
+    }
+    _added, changed, _removed = detector.detect_changes(site.id, current_pages)
     assert site.url in changed
 
 
 # ============================================================
 # Site Snapshot tests
 # ============================================================
+
 
 def test_site_snapshot_save_and_load():
     """Сохранение и загрузка снимка сайта."""
@@ -201,19 +281,30 @@ def test_site_snapshot_save_and_load():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site
     site = create_site(storage, url="https://example.com", organization_id=1)
 
     pages_data = {
-        site.url: {"content_hash": "hash1", "etag": "\"abc123\"", "last_modified": "2026-11-09T12:00:00", "status_code": 200, "fetched_at": "2026-11-09T12:00:00"},
-        "https://example.com/about": {"content_hash": "hash2", "etag": "\"def456\"", "last_modified": "2026-11-09T12:00:00", "status_code": 200, "fetched_at": "2026-11-09T12:00:00"},
+        site.url: {
+            "content_hash": "hash1",
+            "etag": '"abc123"',
+            "last_modified": "2026-11-09T12:00:00",
+            "status_code": 200,
+            "fetched_at": "2026-11-09T12:00:00",
+        },
+        "https://example.com/about": {
+            "content_hash": "hash2",
+            "etag": '"def456"',
+            "last_modified": "2026-11-09T12:00:00",
+            "status_code": 200,
+            "fetched_at": "2026-11-09T12:00:00",
+        },
     }
     storage.save_site_snapshot(site.id, site.url, pages_data)
 
     snapshot = storage.get_site_snapshot(site.id)
     assert snapshot is not None
     assert snapshot["pages"][site.url]["content_hash"] == "hash1"
-    assert snapshot["pages"]["https://example.com/about"]["etag"] == "\"def456\""
+    assert snapshot["pages"]["https://example.com/about"]["etag"] == '"def456"'
 
 
 def test_site_snapshot_not_found_returns_none():
@@ -226,7 +317,6 @@ def test_site_snapshot_not_found_returns_none():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site
     site = create_site(storage, url="https://example.com", organization_id=1)
 
     snapshot = storage.get_site_snapshot(site.id)
@@ -236,6 +326,7 @@ def test_site_snapshot_not_found_returns_none():
 # ============================================================
 # ScanOptions with target_urls tests
 # ============================================================
+
 
 def test_scan_options_target_urls():
     """ScanOptions принимает target_urls."""
@@ -260,6 +351,7 @@ def test_monitor_with_target_urls():
 # ============================================================
 # Pay-per-scan packages tests
 # ============================================================
+
 
 def test_create_scan_package():
     """Создание пакета сканов."""
@@ -317,7 +409,7 @@ def test_get_active_package_for_org():
         )
         conn.commit()
 
-    pkg1 = storage.create_scan_package(organization_id=1, scans_total=10, price_cents=2900)
+    _pkg1 = storage.create_scan_package(organization_id=1, scans_total=10, price_cents=2900)
     pkg2 = storage.create_scan_package(organization_id=1, scans_total=50, price_cents=9900)
 
     active = storage.get_active_package_for_org(1)
@@ -330,6 +422,7 @@ def test_get_active_package_for_org():
 # Webhook payload parsing tests
 # ============================================================
 
+
 def test_parse_github_payload():
     """Парсинг GitHub deployment webhook."""
     from webscope.webapp.routes.api import _parse_deploy_payload
@@ -339,7 +432,6 @@ def test_parse_github_payload():
         "deployment": {"payload": {"url": "https://example.com"}, "sha": "abc123"},
         "repository": {"html_url": "https://github.com/org/repo"},
     }
-    import json
     body = json.dumps(payload).encode()
 
     result = _parse_deploy_payload("github", body)
@@ -359,7 +451,6 @@ def test_parse_gitlab_payload():
         "deployment": {"environment_url": "https://example.com", "id": 123},
         "commit": {"id": "abc123"},
     }
-    import json
     body = json.dumps(payload).encode()
 
     result = _parse_deploy_payload("gitlab", body)
@@ -376,7 +467,6 @@ def test_parse_vercel_payload():
         "type": "deployment.succeeded",
         "payload": {"url": "https://example.com", "deploymentId": "dep_123", "git": {"sha": "abc123"}},
     }
-    import json
     body = json.dumps(payload).encode()
 
     result = _parse_deploy_payload("vercel", body)
@@ -390,7 +480,6 @@ def test_parse_generic_payload():
     from webscope.webapp.routes.api import _parse_deploy_payload
 
     payload = {"url": "https://example.com", "version": "v1.0", "commit": "abc123"}
-    import json
     body = json.dumps(payload).encode()
 
     result = _parse_deploy_payload("generic", body)
@@ -403,11 +492,9 @@ def test_parse_generic_payload():
 # Webhook signature verification tests
 # ============================================================
 
+
 def test_hmac_verification_valid():
     """Валидная HMAC подпись проходит проверку."""
-    import hmac
-    import hashlib
-
     secret = "test-secret"
     body = b'{"test": "data"}'
     signature = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
@@ -418,9 +505,6 @@ def test_hmac_verification_valid():
 
 def test_hmac_verification_invalid():
     """Невалидная HMAC подпись не проходит проверку."""
-    import hmac
-    import hashlib
-
     secret = "test-secret"
     body = b'{"test": "data"}'
     signature = "sha256=invalid_signature"
@@ -432,6 +516,7 @@ def test_hmac_verification_invalid():
 # ============================================================
 # Webhook queue tests
 # ============================================================
+
 
 @pytest.mark.asyncio
 async def test_webhook_queue_enqueue_dequeue():
@@ -471,6 +556,7 @@ async def test_webhook_queue_full():
 # Incremental scan integration test
 # ============================================================
 
+
 def test_incremental_scan_with_target_urls():
     """Инкрементальный скан с target_urls."""
     storage = Storage(":memory:")
@@ -481,8 +567,7 @@ def test_incremental_scan_with_target_urls():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site
-    site = create_site(storage, url="https://example.com", organization_id=1)
+    _site = create_site(storage, url="https://example.com", organization_id=1)
 
     # Создаем пакет
     pkg = storage.create_scan_package(organization_id=1, scans_total=10, price_cents=2900)
@@ -493,8 +578,10 @@ def test_incremental_scan_with_target_urls():
     assert monitor.options.target_urls == ["https://example.com/specific-page"]
 
     # Проверяем, что scan_site вызывается с start_urls
-    from webscope.scanner import scan_site
     import inspect
+
+    from webscope.scanner import scan_site
+
     sig = inspect.signature(scan_site)
     assert "start_urls" in sig.parameters
 
@@ -503,17 +590,48 @@ def test_incremental_scan_with_target_urls():
 # Webhook integration test
 # ============================================================
 
+
 def test_webhook_handler_parsing():
     """Тест парсинга вебхуков разных провайдеров."""
     from webscope.webapp.routes.api import _parse_deploy_payload
-    import json
 
     test_cases = [
-        ("github", {"deployment_status": {"state": "success"}, "deployment": {"payload": {"url": "https://example.com"}, "sha": "abc123"}}, "https://example.com"),
-        ("gitlab", {"object_kind": "deployment", "deployment_status": "success", "deployment": {"environment_url": "https://example.com", "id": 123}, "commit": {"id": "abc123"}}, "https://example.com"),
-        ("vercel", {"type": "deployment.succeeded", "payload": {"url": "https://example.com", "deploymentId": "dep_123"}}, "https://example.com"),
-        ("netlify", {"state": "ready", "deploy_ssl_url": "https://example.com", "id": "dep_123"}, "https://example.com"),
-        ("cloudflare", {"event": "deployment_created", "payload": {"url": "https://example.com", "deployment_id": "dep_123", "status": "success"}}, "https://example.com"),
+        (
+            "github",
+            {
+                "deployment_status": {"state": "success"},
+                "deployment": {"payload": {"url": "https://example.com"}, "sha": "abc123"},
+            },
+            "https://example.com",
+        ),
+        (
+            "gitlab",
+            {
+                "object_kind": "deployment",
+                "deployment_status": "success",
+                "deployment": {"environment_url": "https://example.com", "id": 123},
+                "commit": {"id": "abc123"},
+            },
+            "https://example.com",
+        ),
+        (
+            "vercel",
+            {"type": "deployment.succeeded", "payload": {"url": "https://example.com", "deploymentId": "dep_123"}},
+            "https://example.com",
+        ),
+        (
+            "netlify",
+            {"state": "ready", "deploy_ssl_url": "https://example.com", "id": "dep_123"},
+            "https://example.com",
+        ),
+        (
+            "cloudflare",
+            {
+                "event": "deployment_created",
+                "payload": {"url": "https://example.com", "deployment_id": "dep_123", "status": "success"},
+            },
+            "https://example.com",
+        ),
     ]
 
     for provider, payload, expected_url in test_cases:
@@ -527,6 +645,7 @@ def test_webhook_handler_parsing():
 # Watchdog settings API tests
 # ============================================================
 
+
 def test_watchdog_settings_api():
     """API для настроек Watchdog."""
     storage = Storage(":memory:")
@@ -537,11 +656,18 @@ def test_watchdog_settings_api():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site, update_site
+    from webscope.webapp.services.site_service import update_site
+
     site = create_site(storage, url="https://example.com", organization_id=1)
 
     # Обновляем настройки Watchdog
-    updated = update_site(storage, site_id=site.id, watchdog_enabled=True, watchdog_triggers=["webhook", "content_hash"], watchdog_webhook_secret="test-secret")
+    updated = update_site(
+        storage,
+        site_id=site.id,
+        watchdog_enabled=True,
+        watchdog_triggers=["webhook", "content_hash"],
+        watchdog_webhook_secret="test-secret",
+    )
     assert updated.watchdog_enabled is True
     assert updated.watchdog_triggers == ["webhook", "content_hash"]
     assert updated.watchdog_webhook_secret == "test-secret"
@@ -557,7 +683,8 @@ def test_watchdog_triggers_serialization():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site, update_site
+    from webscope.webapp.services.site_service import update_site
+
     site = create_site(storage, url="https://example.com", organization_id=1)
 
     # Обновляем с массивом триггеров
@@ -574,16 +701,16 @@ def test_watchdog_triggers_serialization():
 # Incremental scan with target_urls integration test
 # ============================================================
 
+
 def test_incremental_scan_only_scans_target_urls():
     """Инкрементальный скан сканирует только target_urls."""
     # Этот тест проверяет логику передачи target_urls, но не делает реальных HTTP запросов
     # (требует мокирования scanner). Проверяем, что target_urls передается в scan_site.
-    from unittest.mock import patch, MagicMock
-    from webscope.scanner import scan_site
-    from webscope.webapp.scheduler import ScanOptions
-    from webscope.webapp.storage import Storage
+    from unittest.mock import MagicMock, patch
+
     from webscope.models import ScanResult
-    from webscope.scanner import CrawlResult
+    from webscope.scanner import CrawlResult, scan_site
+    from webscope.webapp.storage import Storage
 
     storage = Storage(":memory:")
     with storage._conn() as conn:
@@ -593,8 +720,7 @@ def test_incremental_scan_only_scans_target_urls():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site
-    site = create_site(storage, url="https://example.com", organization_id=1)
+    _site = create_site(storage, url="https://example.com", organization_id=1)
 
     # Создаем пакет
     pkg = storage.create_scan_package(organization_id=1, scans_total=10, price_cents=2900)
@@ -602,19 +728,25 @@ def test_incremental_scan_only_scans_target_urls():
 
     # Проверяем, что start_urls передается в scan_site
     # Используем MagicMock для полного мокирования
-    with patch('webscope.scanner.scan_site', new_callable=MagicMock) as mock_scan:
-        mock_scan.return_value = (ScanResult(
-            url="https://example.com",
-            final_url="https://example.com",
-            title="Test",
-            archetype={},
-            findings=[],
-            duration_ms=100,
-            pages_scanned=1,
-        ), CrawlResult(root="https://example.com", pages=[], templates=[], sitemap_used=False, robots_checked=False, skipped=[]))
-        
+    with patch("webscope.scanner.scan_site", new_callable=MagicMock) as mock_scan:
+        mock_scan.return_value = (
+            ScanResult(
+                url="https://example.com",
+                final_url="https://example.com",
+                title="Test",
+                archetype={},
+                findings=[],
+                duration_ms=100,
+                pages_scanned=1,
+            ),
+            CrawlResult(
+                root="https://example.com", pages=[], templates=[], sitemap_used=False, robots_checked=False, skipped=[]
+            ),
+        )
+
         from webscope.scanner import scan_site
-        result, _ = scan_site(
+
+        _result, _ = scan_site(
             "https://example.com",
             max_pages=1,
             max_depth=0,
@@ -637,6 +769,7 @@ def test_incremental_scan_only_scans_target_urls():
 # Watchdog settings persistence tests
 # ============================================================
 
+
 def test_site_to_dict_includes_watchdog_fields():
     """to_dict включает поля Watchdog."""
     storage = Storage(":memory:")
@@ -647,8 +780,14 @@ def test_site_to_dict_includes_watchdog_fields():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site
-    site = create_site(storage, url="https://example.com", organization_id=1, watchdog_enabled=True, watchdog_triggers=["webhook", "content_hash"], watchdog_webhook_secret="test-secret")
+    site = create_site(
+        storage,
+        url="https://example.com",
+        organization_id=1,
+        watchdog_enabled=True,
+        watchdog_triggers=["webhook", "content_hash"],
+        watchdog_webhook_secret="test-secret",
+    )
 
     payload = site.to_dict()
     assert payload["watchdog_enabled"] is True
@@ -669,7 +808,6 @@ def test_site_watchdog_property():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site
     site = create_site(storage, url="https://example.com", organization_id=1, watchdog_enabled=True)
     assert site.has_watchdog is True
 
@@ -677,13 +815,16 @@ def test_site_watchdog_property():
     assert site2.has_watchdog is False
 
     # С секретом но без enabled
-    site3 = create_site(storage, url="https://test2.com", organization_id=1, watchdog_enabled=False, watchdog_webhook_secret="secret")
+    site3 = create_site(
+        storage, url="https://test2.com", organization_id=1, watchdog_enabled=False, watchdog_webhook_secret="secret"
+    )
     assert site3.has_watchdog is False  # enabled=False, значит has_watchdog=False
 
 
 # ============================================================
 # Integration test: webhook -> change detection -> incremental scan
 # ============================================================
+
 
 def test_webhook_to_incremental_scan_flow():
     """Полный флоу: вебхук -> детектор изменений -> инкрементальный скан."""
@@ -695,29 +836,40 @@ def test_webhook_to_incremental_scan_flow():
         )
         conn.commit()
 
-    from webscope.webapp.services.site_service import create_site
-    from webscope.webapp.scheduler import Monitor, ScanOptions
-    from webscope.watchdog import ChangeDetector
-    from webscope.watchdog import PageSnapshot
+    from webscope.watchdog import ChangeDetector, PageSnapshot
 
     site = create_site(storage, url="https://example.com", organization_id=1)
     storage.update_site(site.id, watchdog_enabled=True, watchdog_triggers=["webhook"])
 
     # Создаем снимок
-    current_pages = {site.url: PageSnapshot(url=site.url, content_hash="hash1", etag=None, last_modified=None, status_code=200)}
-    pages_data = {url: {"content_hash": p.content_hash, "etag": p.etag, "last_modified": p.last_modified, "status_code": p.status_code, "fetched_at": p.fetched_at} for url, p in current_pages.items()}
+    current_pages = {
+        site.url: PageSnapshot(url=site.url, content_hash="hash1", etag=None, last_modified=None, status_code=200)
+    }
+    pages_data = {
+        url: {
+            "content_hash": p.content_hash,
+            "etag": p.etag,
+            "last_modified": p.last_modified,
+            "status_code": p.status_code,
+            "fetched_at": p.fetched_at,
+        }
+        for url, p in current_pages.items()
+    }
     storage.save_site_snapshot(site.id, site.url, pages_data)
 
     # Симулируем вебхук: контент изменился
     detector = ChangeDetector(storage)
-    current_pages = {site.url: PageSnapshot(url=site.url, content_hash="hash2", etag=None, last_modified=None, status_code=200)}
-    added, changed, removed = detector.detect_changes(site.id, current_pages)
+    current_pages = {
+        site.url: PageSnapshot(url=site.url, content_hash="hash2", etag=None, last_modified=None, status_code=200)
+    }
+    _added, changed, _removed = detector.detect_changes(site.id, current_pages)
 
     assert changed == ["https://example.com"]
-    changed_urls = changed + added
+    changed_urls = changed + _added
 
     # Запускаем инкрементальный скан с changed_urls
     from webscope.scanner import scan_site
+
     result, _ = scan_site(
         "https://example.com",
         max_pages=1,
@@ -731,10 +883,12 @@ def test_webhook_to_incremental_scan_flow():
     assert result.pages_scanned == 1
 
     # Проверяем, что пакет списался
-    from webscope.webapp.services.site_service import create_site as cs
     storage = Storage(":memory:")
     with storage._conn() as conn:
-        conn.execute("INSERT INTO organizations (name, owner_email, created_at) VALUES (?, ?, ?)", ("Test", "test@test.com", "2026-11-09T12:00:00"))
+        conn.execute(
+            "INSERT INTO organizations (name, owner_email, created_at) VALUES (?, ?, ?)",
+            ("Test", "test@test.com", "2026-11-09T12:00:00"),
+        )
         conn.commit()
     pkg = storage.create_scan_package(organization_id=1, scans_total=10, price_cents=2900)
     pkg = storage.consume_scan(pkg.id)

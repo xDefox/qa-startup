@@ -50,7 +50,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
                 url=url,
                 source="webscope.console",
                 details=details,
-            )
+            ),
         )
 
     for message in warnings[:_MAX_PER_KIND]:
@@ -66,7 +66,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
                 # Как и у ошибок: предупреждение из чужого SDK — не дефект сайта.
                 # Без owner такие находки попадали в балл сайта.
                 details={"owner": _owner(warning_url, url), "location": warning_url},
-            )
+            ),
         )
 
     for request in ctx.failed_requests[:_MAX_PER_KIND]:
@@ -95,7 +95,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
                 url=url,
                 source="webscope.console",
                 details={"status": status, "resource": res_url, "owner": owner},
-            )
+            ),
         )
 
     return findings

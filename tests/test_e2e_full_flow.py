@@ -8,17 +8,9 @@
 from __future__ import annotations
 
 import os
-import tempfile
-from pathlib import Path
 
 import pytest
 from playwright.sync_api import sync_playwright
-
-from fastapi.testclient import TestClient
-from webscope.webapp.app import create_app
-from webscope.webapp.storage import Storage
-from webscope.models import Finding, ScanResult, Severity
-
 
 # --- Фикстуры ---
 
@@ -45,12 +37,13 @@ def page(browser):
 
 # --- Вспомогательные функции ---
 
+
 def extract_site_id(url: str) -> int | None:
     """Извлекает site_id из URL. Возвращает None если site_id нет."""
     if "/sites/" not in url:
         return None
     try:
-        return int(url.split("/sites/")[-1].split("/")[0].split("?")[0])
+        return int(url.rsplit("/sites/", maxsplit=1)[-1].split("/", maxsplit=1)[0].split("?", maxsplit=1)[0])
     except (ValueError, IndexError):
         return None
 
@@ -80,7 +73,7 @@ def wait_for_scan_complete(page, site_id, timeout=180000):
     # Пробуем подождать, затем вручную перезагружаем страницу
     try:
         page.wait_for_selector("text=/100", timeout=min(timeout, 10000))
-    except Exception:
+    except Exception:  # noqa: BLE001 - playwright selectors raise broad errors on timeout
         # Перезагружаем страницу и ждём ещё
         page.reload()
         page.wait_for_load_state("networkidle")
@@ -88,6 +81,7 @@ def wait_for_scan_complete(page, site_id, timeout=180000):
 
 
 # --- Тесты полного пути ---
+
 
 @pytest.mark.e2e
 def test_smoke_all_pages_load(page):
@@ -108,9 +102,11 @@ def test_smoke_all_pages_load(page):
         page.wait_for_selector("h1", timeout=5000)
         h1 = page.locator("h1").first.text_content()
         # Normalize whitespace for comparison
-        h1_normalized = ' '.join(h1.split())
-        expected_normalized = ' '.join(expected_text.split())
-        assert expected_normalized in h1_normalized, f"Page {url}: expected '{expected_normalized}' in h1, got '{h1_normalized}'"
+        h1_normalized = " ".join(h1.split())
+        expected_normalized = " ".join(expected_text.split())
+        assert expected_normalized in h1_normalized, (
+            f"Page {url}: expected '{expected_normalized}' in h1, got '{h1_normalized}'"
+        )
 
     # Нет критических JS-ошибок
     critical_errors = [e for e in errors if "uncaught" in e.lower() or "referenceerror" in e.lower()]
@@ -184,12 +180,12 @@ def test_home_to_dashboard_flow(page):
         page.wait_for_load_state("networkidle")
 
         # 6. Включаем Watchdog
-        page.wait_for_selector('#watchdog-enabled', timeout=5000)
-        watchdog_toggle = page.locator('#watchdog-enabled')
+        page.wait_for_selector("#watchdog-enabled", timeout=5000)
+        watchdog_toggle = page.locator("#watchdog-enabled")
         if not watchdog_toggle.is_checked():
             watchdog_toggle.check()
-            page.wait_for_selector('#webhook-secret-field:not([hidden])', timeout=5000)
-            page.wait_for_selector('#watchdog-status:not([hidden])', timeout=5000)
+            page.wait_for_selector("#webhook-secret-field:not([hidden])", timeout=5000)
+            page.wait_for_selector("#watchdog-status:not([hidden])", timeout=5000)
 
         # Вводим секрет вебхука
         page.fill('input[name="watchdog_webhook_secret"]', "test-secret-123")
@@ -202,10 +198,10 @@ def test_home_to_dashboard_flow(page):
         # 7. Проверяем, что настройки сохранились
         page.goto(f"{BASE_URL}/sites/{site_id}/settings")
         page.wait_for_load_state("networkidle")
-        assert page.locator('#watchdog-enabled').is_checked()
+        assert page.locator("#watchdog-enabled").is_checked()
         # Парольное поле (webhook secret) не отображает значение в HTML — это нормально для безопасности
         # Проверяем только что поле существует и это password field
-        assert page.locator('input[name="watchdog_webhook_secret"]').get_attribute('type') == 'password'
+        assert page.locator('input[name="watchdog_webhook_secret"]').get_attribute("type") == "password"
 
 
 @pytest.mark.e2e
@@ -220,11 +216,11 @@ def test_auth_flow_form_login(page):
     page.select_option('select[name="organization_id"]', index=0)
 
     # Включаем авторизацию
-    page.check('#auth_enabled')
-    page.wait_for_selector('#auth-block:not([hidden])', timeout=5000)
+    page.check("#auth_enabled")
+    page.wait_for_selector("#auth-block:not([hidden])", timeout=5000)
 
     # Выбираем "Форма входа"
-    page.select_option('#auth_kind', value="form")
+    page.select_option("#auth_kind", value="form")
 
     # Заполняем креды
     page.fill('input[name="auth_login"]', "testuser")
@@ -251,21 +247,21 @@ def test_theme_persistence(page):
     page.goto(BASE_URL)
     page.wait_for_load_state("networkidle")
 
-    theme_toggle = page.locator('#theme-toggle')
+    theme_toggle = page.locator("#theme-toggle")
     theme_toggle.wait_for(state="visible", timeout=5000)
 
-    html = page.locator('html')
-    initial_theme = html.get_attribute('data-theme') or "light"
+    html = page.locator("html")
+    initial_theme = html.get_attribute("data-theme") or "light"
 
     # Переключаем
     theme_toggle.click()
     page.wait_for_timeout(500)
-    new_theme = html.get_attribute('data-theme') or "light"
+    new_theme = html.get_attribute("data-theme") or "light"
     # Если тема не изменилась, пробуем ещё раз
     if new_theme == initial_theme:
         theme_toggle.click()
         page.wait_for_timeout(500)
-        new_theme = html.get_attribute('data-theme') or "light"
+        new_theme = html.get_attribute("data-theme") or "light"
     assert new_theme != initial_theme, f"Theme didn't change: {initial_theme} -> {new_theme}"
 
     # Перезагружаем страницу
@@ -273,7 +269,7 @@ def test_theme_persistence(page):
     page.wait_for_load_state("networkidle")
 
     # Тема должна сохраниться
-    persisted_theme = html.get_attribute('data-theme') or "light"
+    persisted_theme = html.get_attribute("data-theme") or "light"
     assert persisted_theme == new_theme, f"Theme not persisted: {new_theme} -> {persisted_theme}"
 
 
@@ -288,12 +284,12 @@ def test_mobile_responsive(page):
     page.wait_for_timeout(200)
 
     # 1. Мобильное меню
-    menu_toggle = page.locator('#mobile-menu-toggle')
+    menu_toggle = page.locator("#mobile-menu-toggle")
     menu_toggle.wait_for(state="visible", timeout=5000)
     menu_toggle.click()
     page.wait_for_timeout(300)
 
-    mobile_nav = page.locator('#mobile-nav')
+    mobile_nav = page.locator("#mobile-nav")
     # Ждём, пока меню станет видимым (hidden атрибут удаляется)
     page.wait_for_function("() => !document.getElementById('mobile-nav').hidden", timeout=5000)
     mobile_nav.wait_for(state="visible", timeout=5000)
@@ -336,6 +332,8 @@ def test_delete_site(page):
 
 
 if __name__ == "__main__":
+    import sys
+
     import httpx
 
     # Проверяем, что сервер доступен
@@ -345,13 +343,15 @@ if __name__ == "__main__":
             if resp.status_code == 200:
                 print(f"✓ Server at {BASE_URL} is ready")
                 return True
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - health check: report any connection error
             print(f"✗ Server at {BASE_URL} not available: {e}")
-            print("Start server with: .venv/bin/python -m uvicorn webscope.webapp.app:create_app --factory --host 127.0.0.1 --port 8767")
+            print(
+                "Start server with: .venv/bin/python -m uvicorn webscope.webapp.app:create_app --factory --host 127.0.0.1 --port 8767"
+            )
             return False
         return False
 
     if check_server():
         pytest.main([__file__, "-v", "-m", "e2e", "--tb=short"])
     else:
-        exit(1)
+        sys.exit(1)

@@ -32,7 +32,7 @@ def register_filters(env) -> None:
             "score_tone": score_tone,
             "error_hint": error_hint,
             "ru_plural": ru_plural,
-        }
+        },
     )
 
 
@@ -76,8 +76,7 @@ def short_url(value: str | None, limit: int = 60) -> str:
         if text.startswith(prefix):
             text = text[len(prefix) :]
             break
-    if text.startswith("www."):
-        text = text[4:]
+    text = text.removeprefix("www.")
     text = text.rstrip("/") or text
     limit = max(12, int(limit))
     if len(text) <= limit:

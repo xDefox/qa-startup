@@ -40,18 +40,31 @@ class Plan:
     def registry(cls) -> dict[PlanName, Plan]:
         return {
             PlanName.FREE: Plan(
-                PlanName.FREE, 0, 5, 1, {"weekly_scan", "email_alert"}
+                PlanName.FREE,
+                0,
+                5,
+                1,
+                {"weekly_scan", "email_alert"},
             ),
             PlanName.STARTER: Plan(
-                PlanName.STARTER, 1900, 200, 5,
+                PlanName.STARTER,
+                1900,
+                200,
+                5,
                 {"weekly_scan", "email_alert", "telegram_alert", "diff_history"},
             ),
             PlanName.PRO: Plan(
-                PlanName.PRO, 5900, 1000, 25,
+                PlanName.PRO,
+                5900,
+                1000,
+                25,
                 {"weekly_scan", "branded_report", "api_access", "priority_queue"},
             ),
             PlanName.BUSINESS: Plan(
-                PlanName.BUSINESS, 19900, 5000, 100,
+                PlanName.BUSINESS,
+                19900,
+                5000,
+                100,
                 {"api_access", "white_label", "priority_queue", "custom_domain"},
             ),
         }

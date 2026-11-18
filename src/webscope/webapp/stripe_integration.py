@@ -17,6 +17,7 @@ LOGGER = logging.getLogger("webscope.stripe")
 @dataclass
 class StripeConfig:
     """Stripe configuration from environment."""
+
     secret_key: str | None = None
     publishable_key: str | None = None
     webhook_secret: str | None = None
@@ -55,7 +56,9 @@ class StripeClient:
     def is_configured(self) -> bool:
         return self.config.is_configured
 
-    def create_customer(self, email: str, name: str | None = None, metadata: dict | None = None) -> stripe.Customer | None:
+    def create_customer(
+        self, email: str, name: str | None = None, metadata: dict | None = None
+    ) -> stripe.Customer | None:
         """Create a Stripe customer."""
         if not self.is_configured:
             LOGGER.warning("Stripe not configured, cannot create customer")
@@ -182,8 +185,8 @@ def init_stripe(config: StripeConfig | None = None) -> StripeClient:
 async def handle_checkout_session_completed(event: stripe.Event, storage) -> None:
     """Handle successful checkout session."""
     session = event.data.object
-    customer_id = session.customer
-    subscription_id = session.subscription
+    _customer_id = session.customer
+    _subscription_id = session.subscription
     metadata = session.metadata or {}
 
     organization_id = metadata.get("organization_id")

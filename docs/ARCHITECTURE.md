@@ -104,16 +104,16 @@
 ```python
 # Признаки → действия
 {
-  "next": ["__NEXT_DATA__", "data-reactroot"],
-  "react": ["data-reactroot"],
-  "vue": ["Vue", "data-v-"],
-  "angular": ["ng-version"],
-  "wordpress": ["wp-content"],
-  "shopify": ["Shopify.theme", "cdn.shopify"],
-  "antd": ["ant-*"],
-  "mui": ["Mui*"],
-  "bootstrap": ["btn btn-", "col-"],
-  "tailwind": ["flex", "px-", "text-", "grid"]
+    "next": ["__NEXT_DATA__", "data-reactroot"],
+    "react": ["data-reactroot"],
+    "vue": ["Vue", "data-v-"],
+    "angular": ["ng-version"],
+    "wordpress": ["wp-content"],
+    "shopify": ["Shopify.theme", "cdn.shopify"],
+    "antd": ["ant-*"],
+    "mui": ["Mui*"],
+    "bootstrap": ["btn btn-", "col-"],
+    "tailwind": ["flex", "px-", "text-", "grid"],
 }
 ```
 

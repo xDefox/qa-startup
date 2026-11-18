@@ -90,7 +90,11 @@ def _fetch_with_retry(
 ) -> httpx.Response | None:
     """Fetch URL with retry on 403/401 using different User-Agents."""
     for attempt in range(max_retries):
-        headers = {"User-Agent": user_agent if attempt == 0 else _FALLBACK_USER_AGENTS[(attempt - 1) % len(_FALLBACK_USER_AGENTS)]}
+        headers = {
+            "User-Agent": user_agent
+            if attempt == 0
+            else _FALLBACK_USER_AGENTS[(attempt - 1) % len(_FALLBACK_USER_AGENTS)]
+        }
         try:
             response = client.get(url, headers=headers, timeout=10.0)
             if response.status_code < 400:
@@ -348,7 +352,9 @@ def crawl(
         try:
             homepage = _fetch_with_retry(client, root_url, user_agent)
             if homepage is None or homepage.status_code >= 400:
-                result.skipped.append({"url": root_url, "reason": f"HTTP {homepage.status_code if homepage else 'failed after retries'}"})
+                result.skipped.append(
+                    {"url": root_url, "reason": f"HTTP {homepage.status_code if homepage else 'failed after retries'}"}
+                )
                 homepage_html = ""
             else:
                 homepage_html = homepage.text
@@ -400,7 +406,12 @@ def crawl(
                 try:
                     response = _fetch_with_retry(client, url, user_agent)
                     if response is None or response.status_code >= 400:
-                        result.skipped.append({"url": url, "reason": f"HTTP {response.status_code if response else 'failed after retries'}"})
+                        result.skipped.append(
+                            {
+                                "url": url,
+                                "reason": f"HTTP {response.status_code if response else 'failed after retries'}",
+                            }
+                        )
                         continue
                     html = response.text
                 except httpx.HTTPError as exc:

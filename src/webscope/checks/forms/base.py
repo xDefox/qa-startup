@@ -72,7 +72,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
                 url=url,
                 source="webscope.forms",
                 **kwargs,
-            )
+            ),
         )
 
     for control in data.get("controls") or []:

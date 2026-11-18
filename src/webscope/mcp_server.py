@@ -65,6 +65,7 @@ def scan_page(url: str, checks: str = "", timeout_ms: int = 30000) -> dict:
         url: адрес страницы (http/https).
         checks: список проверок через запятую. Пусто — все проверки.
         timeout_ms: таймаут загрузки страницы.
+
     """
     result = _cached_scan(url, checks=checks, timeout_ms=timeout_ms)
     return result.to_dict()
@@ -77,6 +78,7 @@ def list_findings(url: str, min_severity: str = "minor") -> list[dict]:
     Args:
         url: адрес страницы.
         min_severity: минимальная серьёзность: critical, serious, moderate, minor.
+
     """
     result = _cached_scan(url)
     limit = Severity(min_severity).rank
@@ -102,6 +104,7 @@ def get_fix_prompt(url: str, rules: list[str] | None = None) -> str:
     Args:
         url: адрес страницы.
         rules: ограничить выборку конкретными правилами.
+
     """
     result = _cached_scan(url)
     return build_fix_prompt(result, rules)

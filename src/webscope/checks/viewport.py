@@ -76,7 +76,7 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
                 url=url,
                 source="webscope.viewport",
                 **kwargs,
-            )
+            ),
         )
 
     try:

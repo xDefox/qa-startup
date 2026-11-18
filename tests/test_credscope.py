@@ -120,7 +120,7 @@ class _Recorder(BaseHTTPRequestHandler):
                 "path": self.path,
                 "authorization": self.headers.get("Authorization"),
                 "cookie": self.headers.get("Cookie"),
-            }
+            },
         )
         payload = b"<?xml version='1.0'?><urlset></urlset>"
         self.send_response(200)

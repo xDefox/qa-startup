@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import smtplib
 from email.message import EmailMessage
+from email.utils import formataddr
 
 import httpx
 
@@ -22,6 +24,16 @@ from ..history import DiffReport
 LOGGER = logging.getLogger("webscope.alerts")
 
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
+
+# S10: простой валидатор email (RFC 5322 упрощённо) — защита от CRLF-инъекции
+_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+
+
+def _valid_email(value: str) -> bool:
+    """Проверяет, что строка — email без CRLF/пробелов (инъекция заголовков)."""
+    if not value or "\n" in value or "\r" in value or " " in value:
+        return False
+    return bool(_EMAIL_RE.match(value))
 
 
 def email_configured() -> bool:
@@ -83,21 +95,41 @@ def send_email(to: str, subject: str, body: str) -> bool:
         LOGGER.info("email не настроен (нужны SMTP_HOST и SMTP_USER)")
         return False
 
+    # S10: валидируем получателя — защита от CRLF-инъекции в заголовок To
+    if not _valid_email(to):
+        LOGGER.warning("email-адрес %r отклонён: не соответствует формату", to)
+        return False
+
     port = int(os.environ.get("SMTP_PORT", "587"))
     sender = os.environ.get("SMTP_FROM", user)
+
+    # S10: экранирование заголовков от CRLF-инъекции.
+    # subject/from/to — только для EmailMessage (он экранирует при сборке MIME).
+    # Но для явной защиты от инъекций — sanitize Subject.
+    safe_subject = subject.replace("\n", " ").replace("\r", " ")
+    safe_sender = formataddr(("webscope", sender))
+
     message = EmailMessage()
-    message["From"] = sender
+    message["From"] = safe_sender
     message["To"] = to
-    message["Subject"] = subject
+    message["Subject"] = safe_subject
     message.set_content(body)
 
     try:
-        with smtplib.SMTP(host, port, timeout=20) as server:
-            server.starttls()
-            password = os.environ.get("SMTP_PASSWORD")
-            if password:
-                server.login(user, password)
-            server.send_message(message)
+        # S12: поддержка SMTP_SSL (порт 465) и STARTTLS (587 и др.)
+        if port == 465:
+            with smtplib.SMTP_SSL(host, port, timeout=20) as server:
+                password = os.environ.get("SMTP_PASSWORD")
+                if password:
+                    server.login(user, password)
+                server.send_message(message)
+        else:
+            with smtplib.SMTP(host, port, timeout=20) as server:
+                server.starttls()
+                password = os.environ.get("SMTP_PASSWORD")
+                if password:
+                    server.login(user, password)
+                server.send_message(message)
     except (smtplib.SMTPException, OSError) as exc:
         LOGGER.warning("не удалось отправить письмо на %s: %s", to, exc)
         return False

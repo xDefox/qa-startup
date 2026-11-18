@@ -27,6 +27,10 @@ CSP = (
     "form-action 'self';"
 )
 
+# S9: дополнительно жесткие заголовки безопасности
+HSTS = "max-age=31536000; includeSubDomains; preload"
+PERMISSIONS_POLICY = "camera=(), microphone=(), geolocation=(), payment=()"
+
 
 def install(app: FastAPI) -> None:
     """Подключает middleware в правильном порядке."""
@@ -48,6 +52,15 @@ def install(app: FastAPI) -> None:
         response = await call_next(request)
         if not request.url.path.startswith("/__local/"):
             response.headers["Content-Security-Policy"] = CSP
+            # S9: HSTS — только если запрос был по HTTPS, иначе не имеет смысла
+            # и ломает http-only деплойменты. Схему определяем по X-Forwarded-Proto.
+            forwarded = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+            if forwarded == "https" or request.url.scheme == "https":
+                response.headers["Strict-Transport-Security"] = HSTS
+            response.headers["Permissions-Policy"] = PERMISSIONS_POLICY
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["Referrer-Policy"] = "same-origin"
+            response.headers["X-Frame-Options"] = "DENY"
         return response
 
 

@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ..deps import get_site_or_404, index_cards, scan_limit_response, trigger
 from ..forms import auth_fields
-from ..report_files import DOWNLOAD_FORMATS, default_report_stem, download_filename, human_date
+from ..report_files import DOWNLOAD_FORMATS, default_report_stem, human_date
 from ..services.site_service import (
     create_organization,
     get_organization,

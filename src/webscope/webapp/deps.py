@@ -64,10 +64,7 @@ def get_site_or_404(state: AppState, site_id: int) -> Site:
 
 def index_cards(state: AppState) -> list[SiteCard]:
     """Сайты с последним прогоном — данные главной и кабинета."""
-    return [
-        SiteCard(site=item, run=state.storage.latest_run(item.id))
-        for item in list_sites_service(state.storage)
-    ]
+    return [SiteCard(site=item, run=state.storage.latest_run(item.id)) for item in list_sites_service(state.storage)]
 
 
 def get_current_user(request: Request) -> dict:

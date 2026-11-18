@@ -85,8 +85,8 @@ def render_text(result: ScanResult) -> str:
     lines.append("")
     lines.append(
         "найдено:  "
-        + f"critical={summary['critical']} serious={summary['serious']} "
-        + f"moderate={summary['moderate']} minor={summary['minor']} total={summary['total']}"
+        f"critical={summary['critical']} serious={summary['serious']} "
+        f"moderate={summary['moderate']} minor={summary['minor']} total={summary['total']}",
     )
     if summary.get("external"):
         lines.append(f"в виджетах: {summary['external']} (чужие домены — не дефект сайта)")
@@ -171,10 +171,10 @@ def render_sarif(result: ScanResult) -> str:
                         "physicalLocation": {
                             "artifactLocation": {"uri": finding.url},
                             **({"region": region} if region else {}),
-                        }
-                    }
+                        },
+                    },
                 ],
-            }
+            },
         )
 
     return json.dumps(
@@ -188,10 +188,10 @@ def render_sarif(result: ScanResult) -> str:
                             "name": "webscope",
                             "informationUri": "https://github.com/webscope/webscope",
                             "rules": list(rules.values()),
-                        }
+                        },
                     },
                     "results": results,
-                }
+                },
             ],
         },
         ensure_ascii=False,
@@ -216,7 +216,7 @@ def render_junit(result: ScanResult) -> str:
         cases.append(
             f'    <testcase classname="webscope.{html_lib.escape(finding.rule)}" name="{html_lib.escape(finding.title)}">\n'
             f'      <failure message="{html_lib.escape(finding.message or finding.title)}" type="{finding.severity.value}"/>\n'
-            "    </testcase>"
+            "    </testcase>",
         )
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -231,7 +231,7 @@ def render_html(result: ScanResult) -> str:
     # Фильтруем FP
     display_findings = [f for f in result.findings if not is_false_positive(f)]
     fp_count = len(result.findings) - len(display_findings)
-    
+
     summary = result.summary
     archetype = result.archetype or {}
     stack = ", ".join(filter(None, [archetype.get("framework"), archetype.get("cms"), archetype.get("ui_kit")]))
@@ -249,7 +249,7 @@ def render_html(result: ScanResult) -> str:
   <td>{html_lib.escape(finding.message)}</td>
   <td>{selector}{snippet}</td>
   <td>{help_link}</td>
-</tr>"""
+</tr>""",
         )
 
     table = "\n".join(rows) or '<tr><td colspan="6">Проблем не найдено</td></tr>'
@@ -289,7 +289,7 @@ def render_html(result: ScanResult) -> str:
   <div class="card"><b>{summary["serious"]}</b>serious</div>
   <div class="card"><b>{summary["moderate"]}</b>moderate</div>
   <div class="card"><b>{summary["minor"]}</b>minor</div>
-  {f'<div class="card" style="border-color: #888;"><b>{fp_count}</b>FP (исключены)</div>' if fp_count else ''}
+  {f'<div class="card" style="border-color: #888;"><b>{fp_count}</b>FP (исключены)</div>' if fp_count else ""}
 </div>
 <table>
 <tr><th>#</th><th>severity</th><th>правило</th><th>почему это проблема</th><th>где</th><th>доки</th></tr>
@@ -329,12 +329,12 @@ def render_pdf(result: ScanResult) -> bytes:
     pdf.set_font("LiberationSans", size=11)
 
     # Color constants
-    COLOR_PRIMARY = (37, 99, 235)      # Blue
-    COLOR_SUCCESS = (34, 197, 94)      # Green
-    COLOR_WARNING = (234, 179, 8)      # Yellow
-    COLOR_DANGER = (239, 68, 68)       # Red
-    COLOR_GRAY = (107, 114, 128)       # Gray
-    COLOR_LIGHT_BG = (243, 244, 246)   # Light gray background
+    COLOR_PRIMARY = (37, 99, 235)  # Blue
+    COLOR_SUCCESS = (34, 197, 94)  # Green
+    COLOR_WARNING = (234, 179, 8)  # Yellow
+    COLOR_DANGER = (239, 68, 68)  # Red
+    COLOR_GRAY = (107, 114, 128)  # Gray
+    COLOR_LIGHT_BG = (243, 244, 246)  # Light gray background
     COLOR_WHITE = (255, 255, 255)
 
     def section_title(title: str):
@@ -363,12 +363,11 @@ def render_pdf(result: ScanResult) -> bytes:
         """Return (bg_color, text_color) for severity."""
         if severity == "critical":
             return COLOR_DANGER, COLOR_WHITE
-        elif severity == "serious":
+        if severity == "serious":
             return (249, 115, 22), COLOR_WHITE  # Orange
-        elif severity == "moderate":
+        if severity == "moderate":
             return COLOR_WARNING, (0, 0, 0)
-        else:
-            return COLOR_GRAY, COLOR_WHITE
+        return COLOR_GRAY, COLOR_WHITE
 
     # ========== HEADER ==========
     pdf.set_fill_color(*COLOR_PRIMARY)
@@ -401,12 +400,12 @@ def render_pdf(result: ScanResult) -> bytes:
 
     # ========== SCORE SUMMARY ==========
     section_title("Сводка результатов")
-    
+
     # Score box
     pdf.set_fill_color(*COLOR_LIGHT_BG)
     pdf.rect(pdf.l_margin, pdf.get_y(), pdf.w - pdf.l_margin - pdf.r_margin, 28, "F")
     pdf.set_xy(pdf.l_margin + 5, pdf.get_y() + 3)
-    
+
     # Score circle simulation
     if score >= 80:
         score_color = COLOR_SUCCESS
@@ -416,7 +415,7 @@ def render_pdf(result: ScanResult) -> bytes:
         score_color = (249, 115, 22)
     else:
         score_color = COLOR_DANGER
-    
+
     pdf.set_font("LiberationSans", "B", 10)
     pdf.set_text_color(*COLOR_GRAY)
     pdf.cell(40, 7, "ОЦЕНКА САЙТА", ln=True)
@@ -445,7 +444,7 @@ def render_pdf(result: ScanResult) -> bytes:
         ("Существенно", str(serious_count), (249, 115, 22)),
         ("Желательно", str(moderate_count), COLOR_WARNING),
     ]
-    
+
     for i, (label, value, color) in enumerate(metrics):
         x = pdf.l_margin + i * col_w
         pdf.set_xy(x, pdf.get_y())
@@ -476,13 +475,13 @@ def render_pdf(result: ScanResult) -> bytes:
             section_title("Приоритетные действия (Топ-3)")
             for index, finding in enumerate(actions, start=1):
                 meaning, fix = plain_impact(finding)
-                
+
                 # Action card background
                 y_start = pdf.get_y()
                 pdf.set_fill_color(*COLOR_LIGHT_BG)
                 pdf.rect(pdf.l_margin, y_start, pdf.w - pdf.l_margin - pdf.r_margin, 28, "F")
                 pdf.set_xy(pdf.l_margin + 3, y_start + 2)
-                
+
                 # Number badge
                 pdf.set_font("LiberationSans", "B", 10)
                 pdf.set_fill_color(*COLOR_PRIMARY)
@@ -491,12 +490,12 @@ def render_pdf(result: ScanResult) -> bytes:
                 pdf.set_text_color(0, 0, 0)
                 pdf.set_font("LiberationSans", "B", 11)
                 pdf.cell(0, 6, f" {meaning}", ln=True)
-                
+
                 pdf.set_x(pdf.l_margin + 12)
                 pdf.set_font("LiberationSans", size=10)
                 pdf.set_text_color(*COLOR_GRAY)
                 pdf.multi_cell(pdf.w - pdf.l_margin - pdf.r_margin - 12, 5, f"Что сделать: {fix}")
-                
+
                 if finding.url:
                     pdf.set_x(pdf.l_margin + 12)
                     pdf.set_font("LiberationSans", "I", 9)
@@ -510,6 +509,7 @@ def render_pdf(result: ScanResult) -> bytes:
 
         # Group by severity
         from collections import defaultdict
+
         by_severity = defaultdict(list)
         for f in own:
             by_severity[f.severity.value].append(f)
@@ -535,7 +535,7 @@ def render_pdf(result: ScanResult) -> bytes:
             col_rule = (pdf.w - pdf.l_margin - pdf.r_margin) * 0.35
             col_page = (pdf.w - pdf.l_margin - pdf.r_margin) * 0.25
             col_desc = (pdf.w - pdf.l_margin - pdf.r_margin) * 0.40
-            
+
             pdf.cell(col_rule, 7, "Правило", border=1, fill=True, align="C")
             pdf.cell(col_page, 7, "Страница", border=1, fill=True, align="C")
             pdf.cell(col_desc, 7, "Описание", border=1, fill=True, align="C")
@@ -595,7 +595,11 @@ def render_pdf(result: ScanResult) -> bytes:
     pdf.ln(3)
     pdf.set_font("LiberationSans", "I", 9)
     pdf.set_text_color(*COLOR_GRAY)
-    pdf.multi_cell(0, 5, "Отчёт сформирован автоматически системой webscope. Автоматизированные проверки покрывают лишь часть критериев WCAG — для полного аудита доступности рекомендуется ручная проверка специалистом.")
+    pdf.multi_cell(
+        0,
+        5,
+        "Отчёт сформирован автоматически системой webscope. Автоматизированные проверки покрывают лишь часть критериев WCAG — для полного аудита доступности рекомендуется ручная проверка специалистом.",
+    )
     pdf.set_text_color(0, 0, 0)
 
     return bytes(pdf.output())
@@ -689,7 +693,7 @@ def render_plain(result: ScanResult) -> str:
                 finding
                 for finding in own
                 if finding.severity.value == key and finding.rule != "interaction/button-blocked"
-            ]
+            ],
         )
         if not items:
             continue
@@ -759,7 +763,7 @@ def render_plain(result: ScanResult) -> str:
 
     lines.append(
         "Проверка автоматическая: она находит типовые проблемы доступности, скорости и "
-        "работоспособности, но не заменяет проверку человеком."
+        "работоспособности, но не заменяет проверку человеком.",
     )
     return "\n".join(lines)
 
@@ -818,7 +822,7 @@ def render_trend(points: list[dict]) -> str:
                 moderate=point.get("moderate", 0),
                 minor=point.get("minor", 0),
                 pages=point.get("pages_scanned", 0),
-            )
+            ),
         )
     return "\n".join(lines)
 
@@ -828,11 +832,11 @@ def build_fix_prompt(result: ScanResult, rules: list[str] | None = None) -> str:
 
     Это основная точка ценности: находки превращаются в задачу, которую агент
     может выполнить и проверить повторным сканом.
-    
+
     Ложные срабатывания (FP) исключаются — агент не должен их чинить.
     """
     from .scoring import is_false_positive
-    
+
     selected = [f for f in result.findings if not is_false_positive(f) and (not rules or f.rule in rules)]
     if not selected:
         return f"По URL {result.final_url or result.url} находок webscope нет — исправлять нечего."

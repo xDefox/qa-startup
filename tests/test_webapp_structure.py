@@ -66,7 +66,7 @@ def test_route_module_registers_routes(name: str) -> None:
     assert all(item.startswith("router.") for item in decorators), decorators
 
 
-@pytest.fixture()
+@pytest.fixture
 def app(tmp_path: Path, stub_scanner) -> FastAPI:
     return create_app(
         db_path=tmp_path / "db.sqlite",

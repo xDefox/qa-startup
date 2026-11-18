@@ -22,7 +22,7 @@ def test_console_warning_from_third_party_is_external() -> None:
                 "text": "Deprecation from vendor SDK",
                 "location": "https://cdn.vendor.net/sdk.js",
                 "location_url": "https://cdn.vendor.net/sdk.js",
-            }
+            },
         ],
     )
     findings = console.run(None, ctx)
@@ -44,7 +44,7 @@ def test_console_warning_from_site_is_own() -> None:
                 "text": "own warning",
                 "location": "https://site.com/app.js",
                 "location_url": "https://site.com/app.js",
-            }
+            },
         ],
     )
     findings = console.run(None, ctx)

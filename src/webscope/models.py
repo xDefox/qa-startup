@@ -95,7 +95,7 @@ class Finding:
                 (self.url or "").split("#", 1)[0].rstrip("/"),
                 self.selector or "",
                 _WHITESPACE.sub(" ", self.snippet or "").strip(),
-            )
+            ),
         )
         return hashlib.sha256(parts.encode("utf-8")).hexdigest()[:16]
 
@@ -194,12 +194,15 @@ class AuthCredentials:
 
 def sort_findings(findings: list[Finding]) -> list[Finding]:
     """Сортирует находки: сначала по серьёзности, затем по правилу и странице."""
+
     def _to_str(v):
         if isinstance(v, list):
             while isinstance(v, list) and v:
                 v = v[0]
-            return str(v) if v else ''
+            return str(v) if v else ""
         return str(v)
+
     def _rule_key(f):
         return (f.severity.rank, _to_str(f.rule), _to_str(f.url), _to_str(f.selector))
+
     return sorted(findings, key=_rule_key)

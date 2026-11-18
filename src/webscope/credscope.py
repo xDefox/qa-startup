@@ -81,7 +81,7 @@ def auth_origins(root_url: str) -> list[str]:
 
 
 def strip_out_of_scope_headers(root_url: str):
-    """httpx event hook: снимает Authorization/Cookie с чужих хостов.
+    """Httpx event hook: снимает Authorization/Cookie с чужих хостов.
 
     Краулер ходит одним клиентом по всему, что найдёт: sitemap-индексы и
     ссылки на sitemap с чужих хостов, редиректы. Хук срабатывает на каждый

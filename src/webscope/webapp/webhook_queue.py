@@ -20,6 +20,7 @@ LOGGER = logging.getLogger("webscope.webhook_queue")
 @dataclass
 class WebhookEvent:
     """Событие от вебхука для обработки в фоне."""
+
     provider: str
     site_id: int
     deploy_url: str
@@ -95,6 +96,7 @@ class WebhookQueue:
 
             # Определяем изменённые URL
             from ..watchdog import ChangeDetector
+
             detector = ChangeDetector(self.storage)
 
             # Создаём текущий снимок (упрощённо - в полной реализации будет краулер)
@@ -105,7 +107,7 @@ class WebhookQueue:
                     etag=None,
                     last_modified=None,
                     status_code=200,
-                )
+                ),
             }
 
             added, changed, _removed = detector.detect_changes(event.site_id, current_pages)
@@ -131,7 +133,7 @@ class WebhookQueue:
             temp_monitor = Monitor(
                 self.storage,
                 options=options,
-                scanner_func=self.storage.scanner_func if hasattr(self.storage, 'scanner_func') else None,
+                scanner_func=self.storage.scanner_func if hasattr(self.storage, "scanner_func") else None,
                 notifier=None,
             )
 
@@ -142,15 +144,15 @@ class WebhookQueue:
             # Отправляем алерт если есть новые проблемы
             from ..alerts import notify
             from ..history import diff_snapshots
-            
+
             # Получаем предыдущий успешный прогон для сравнения
             previous_run = self.storage.previous_run(event.site_id, run.id)
             if previous_run:
                 diff_report = diff_snapshots(
                     self.storage.snapshot_of(previous_run),
-                    self.storage.snapshot_of(run)
+                    self.storage.snapshot_of(run),
                 )
-                
+
                 if diff_report and (diff_report.new_findings or diff_report.worsened_findings):
                     notify(
                         site_url=event.deploy_url,
