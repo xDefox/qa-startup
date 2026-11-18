@@ -501,7 +501,7 @@ async def api_scan_oneshot(
     # Проверяем наличие активного пакета
     pkg = state.storage.get_active_package_for_org(organization_id)
     if not pkg:
-        return JSONResponse({"detail": "Нет активного пакета сканов. Купите пакет на /api/packages/buy"}, status_code=402)
+        return JSONResponse({"detail": "Нет активного пакета сканов"}, status_code=402)
 
     # Списываем скан
     pkg = state.storage.consume_scan(pkg.id)

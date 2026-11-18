@@ -12,7 +12,7 @@
   - `auth_configured()` — проверяет `WEBSCOPE_AUTH_PASSWORD` в env; если выключен, все маршруты открыты.
   - `is_authenticated(request)` — валидация HMAC-коokie: `secret, token = cookie.split("|")`; `hmac.compare_digest(hmac.new(secret.encode(), token.encode(), hashlib.sha256).hexdigest(), token)`.
   - `csrf_safe()` — проверяет `Origin` / `Referer` headers; при mismatch возвращает 403.
-  - Middleware `guard` в `app.py:450` оборачивает все маршруты, кроме `/healthz`, `/auth/*`, `/static`.
+  - Middleware `guard` в `app.py:450` оборачивает все маршруты, кроме публичных: `/`, `/landing`, `/healthz`, `/auth/*`, `/static/*`, `/__local/*`.
 - **Тест:** `test_security.py::test_pages_require_login`, `test_login_sets_session_and_grants_access`, `test_forged_cookie_is_rejected`, `test_csrf_blocks_foreign_origin`.
 
 ---

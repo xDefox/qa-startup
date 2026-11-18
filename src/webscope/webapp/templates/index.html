@@ -1,147 +1,175 @@
 {% extends "base.html" %}
-{% from "_macros.html" import hero_card, card, field, input, select, checkbox, btn_primary, btn_secondary, btn_lg, section_divider, steps_grid, flash, csrf_input %}
-{% block title %}webscope — проверка сайта{% endblock %}
-{% block scripts %}
-<script src="/static/js/index.js"></script>
-{% endblock %}
+{% from "_macros.html" import hero, quick_scan_form, section, steps_grid, problem_cards, table, plan_card, btn, card, score_dial, feature_grid %}
+{% from "_icons.html" import icon %}
+
+{% block title %}webscope — проверка кликов, форм и заявок на сайте{% endblock %}
+{% block description %}webscope проверяет клики, формы и консоль браузера. Оценка 0–100, три первых дела и отчёт, понятный владельцу сайта.{% endblock %}
+{% block scripts %}<script src="/static/js/scan.js"></script>{% endblock %}
+
 {% block content %}
-
-{{ flash(error, category="error") }}
-
-<!-- Toast container -->
-<div id="toast-container" aria-live="polite"></div>
-
-{{ hero_card(
+{% call hero(
+    badge="Проверка после каждого релиза",
     title="Сайт открывается.<br>Заявка — нет.",
-    subtitle="Проверьте свой сайт — бесплатно. Проверим, что на сайте не сломано: нет ли картинок без подписей, полей без подписей, кнопок без названия, ошибок в консоли и прокрутки вбок на телефоне. Покажем оценку и скажем, что исправить в первую очередь.",
-    cta_text="Проверить сайт бесплатно",
-    cta_href="/scan/oneshot",
+    lead="webscope проверяет клики, формы и консоль браузера — чтобы вы узнали о поломке раньше клиента. Без установки и без чтения логов.",
     secondary_text="Как это работает",
-    secondary_href="/landing#how-it-works",
-    trust_text="5 находок бесплатно · без карты · запуск за 30 секунд"
-) }}
-
-{{ section_divider() }}
-
-{% call card("Хотите проверять регулярно?", "Добавьте сайт в мониторинг — получите еженедельные отчёты, диффы и алерты в Telegram/Email.") %}
-<form method="post" action="/sites" id="site-form">
-
-    {{ field("Адрес сайта или загрузите локальную сборку", input("url", type="text", placeholder="https://example.com", autocomplete="url", class="flex-url-input", attrs={'inputmode': 'url'})) }}
-
-    <div class="row">
-        {{ field("Куда присылать отчёты (необязательно)", input("email", type="email", placeholder="you@example.com", autocomplete="email", attrs={'spellcheck': 'false'})) }}
-
-        {{ field("Как часто проверять", select("schedule", schedules)) }}
-
-        {{ field("", checkbox("auth_enabled", "Нужен вход", value="1", class="check-row check-row-no-margin"), class="field field-align-end") }}
-    </div>
-
-    <div class="auth-block" id="auth-block" hidden>
-        <p class="muted small">Сайт защищён логином и паролем — войдём перед проверкой.</p>
-        <div class="row">
-            {{ field("Как защищён сайт", select("auth_kind", [("basic", "Пароль на весь сайт (Basic)"), ("form", "Форма входа на странице")]), class="field") }}
-
-            {{ field("Логин", input("auth_login", type="text", autocomplete="off", attrs={'spellcheck': 'false'}), class="field") }}
-
-            {{ field("Пароль", input("auth_password", type="password", autocomplete="new-password"), class="field") }}
-        </div>
-        <div class="field" id="auth-login-url-field" hidden>
-            {{ field("Адрес страницы входа (если отличается от сайта)", input("auth_login_url", type="text", placeholder="example.com/wp-admin", attrs={'spellcheck': 'false'}), class="field") }}
-        </div>
-    </div>
-
-    <div class="actions">
-        {{ btn_primary("Добавить в мониторинг", class="btn btn-primary", attrs={"type": "submit"}) }}
-    </div>
-</form>
-
-<!-- File inputs OUTSIDE the form - used only for /upload -->
-<input type="file" id="local-file" accept=".html,.htm,.zip" hidden>
-<input type="file" id="local-dir" webkitdirectory directory multiple hidden>
-
-{% endcall %}
-
-{% call card("Загрузить локальную сборку") %}
-<div class="upload-zone" id="upload-zone">
-    <div class="upload-zone-content" id="upload-content">
-        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="17 8 12 3 7 8"></polyline>
-            <line x1="12" y1="3" x2="12" y2="15"></line>
-        </svg>
-        <p class="upload-title">Перетащите папку сборки или файл сюда</p>
-        <p class="upload-hint">Или нажмите кнопку ниже</p>
-        <div class="upload-actions">
-            <label class="btn-like secondary" for="local-file">
-                <svg class="icon-btn-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                </svg>Файл
-            </label>
-            <label class="btn-like secondary" for="local-dir">
-                <svg class="icon-btn-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                </svg>Папку
-            </label>
-        </div>
-    </div>
-    <div class="upload-selected" id="upload-selected" hidden>
-        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <polyline points="20 6 9 17 4 12"></polyline>
-        </svg>
-        <span id="upload-count">0 файлов</span>
-        <button type="button" class="btn-like secondary" id="upload-clear">Очистить</button>
-    </div>
-    <div class="upload-progress" id="upload-progress" hidden>
-        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-        <span class="progress-text" id="progress-text">Загрузка…</span>
-    </div>
+    secondary_href="#how-it-works",
+    note="Бесплатно · без установки · 30–60 секунд",
+    points=["Реальный браузер", "Понятный отчёт", "Алерты после деплоя"]
+) %}
+<div>
+  <h2>Проверить сайт</h2>
+  {% if not (auth_enabled and not is_authenticated(request)) %}
+  <p class="muted small">Вставьте адрес — покажем оценку и три первых дела.</p>
+  {% endif %}
+  {{ quick_scan_form(request, compact=True, note=None) }}
 </div>
 {% endcall %}
 
-{{ section_divider() }}
+{% call section(eyebrow="Проблема", title="Сайт меняется каждую неделю. Проверяют — раз в год.", lead="Заявка теряется не в CRM, а раньше: на кнопке, в форме или в упавшем скрипте.", id="problem") %}
+{% set problems = [
+    {"icon": icon("eye", 22), "title": "Кнопку нельзя нажать", "text": "Баннер, модалка или фиксированный блок перекрывает CTA. Клиент жмёт — ничего не происходит."},
+    {"icon": icon("send", 22), "title": "Форма не доходит", "text": "Ошибка JS, неверный endpoint или отправка в пустоту — заявка теряется бесследно."},
+    {"icon": icon("alert", 22), "title": "Сломалось после релиза", "text": "Обновили сайт — отвалился скрипт или стили. Владелец узнаёт из жалобы клиента."}
+] %}
+{{ problem_cards(problems) }}
+{% endcall %}
 
+{% call section(eyebrow="Решение", title="Что делает webscope", lead="Один прогон — и вы видите, где сайт теряет клиентов.", id="how-it-works") %}
 {{ steps_grid([
-    {"title": "1. Обходим сайт", "text": "Находим все типы страниц: главная, каталог, новости, контакты."},
-    {"title": "2. Проверяем в браузере", "text": "Реальный браузер, реальные ошибки — не догадки."},
-    {"title": "3. Показываем отчёт", "text": "Оценка, список проблем и три первых дела."}
+    {"title": "Обходим как клиент", "text": "Реальный браузер открывает страницы, скроллит и измеряет то, что видит посетитель."},
+    {"title": "Ловим ошибки в консоли и сети", "text": "JS-исключения, неудачные запросы и ошибки ресурсов — всё, что не видно в обычном аудите."},
+    {"title": "Проверяем клики и доступность", "text": "Перекрытые элементы, невидимые ссылки, поля без подписей, цели меньше 24×24 px."},
+    {"title": "Даём отчёт владельцу и ТЗ разработчику", "text": "Оценка 0–100, три приоритетных действия, селектор, фрагмент кода и что именно поправить."},
+    {"title": "Watchdog после деплоя", "text": "Вебхук от CI/CD или изменение контента запускает проверку. Алерт — в Telegram или на email."}
 ]) }}
-
-{{ section_divider() }}
-
-{% call card("Ваши сайты") %}
-{% if sites %}
-<div class="site-rows">
-    {% for item in sites %}
-    <a class="site-row" href="/sites/{{ item.site.id }}">
-        <div class="site-row-main">
-            <div class="site-row-url">{{ item.site.url }}</div>
-            <div class="site-row-meta muted small">
-                {% if not item.run %}
-                    проверка ещё не выполнялась
-                {% elif item.run.status == 'ok' %}
-                    последняя проверка: {{ item.run.finished_at[:16].replace('T', ' ') }}
-                {% elif item.run.status == 'running' %}
-                    проверка выполняется…
-                {% else %}
-                    <span class="status-error" title="{{ item.run.error or '' }}">последняя проверка не удалась{% if item.run.error %}: {{ item.run.error.split('\n')[0][:90] }}{% endif %}</span>
-                {% endif %}
-            </div>
-        </div>
-        {% if item.run and item.run.status == 'ok' %}
-        <div class="site-row-score">{{ item.run.score }}/100</div>
-        {% elif item.run and item.run.status == 'error' %}
-        <div class="site-row-score status-error" title="{{ item.run.error or '' }}">!</div>
-        {% else %}
-        <div class="site-row-arrow muted">→</div>
-        {% endif %}
-    </a>
-    {% endfor %}
-</div>
-{% else %}
-<p class="muted">Пока ни одного сайта. Вставьте адрес выше — и первая проверка начнётся сразу.</p>
-{% endif %}
 {% endcall %}
 
+{% call section(eyebrow="Пример отчёта", title="Как выглядит отчёт", lead="Не сырой список правил, а три дела, с которых стоит начать.", id="report") %}
+{% call card("example.com", "Проверка 16.11.2026 · 12 страниц · 34 секунды") %}
+<div class="grid grid--sidebar">
+  <div>
+    <div class="report-hero mb-0">
+      <div>
+        <p class="eyebrow"><span class="eyebrow__dot"></span>Оценка сайта</p>
+        <h3 class="report-hero__title">Хорошо, но есть что поправить</h3>
+        <p class="report-hero__meta">3 приоритетных дела · 2 критичных для заявок</p>
+      </div>
+      <div class="report-hero__side">{{ score_dial(87) }}</div>
+    </div>
+    <h4 class="mt-6">Что сделать в первую очередь</h4>
+    <ol class="actions-list">
+      <li><strong>Кнопку нельзя нажать</strong> — её перекрывает баннер. <code>#cta</code>: убрать перекрывающий элемент или поднять z-index.</li>
+      <li><strong>Форма отправляется в пустоту</strong> — в консоли ошибка JS. <code>form#lead</code>: проверить endpoint и обработчик.</li>
+      <li><strong>Поле email без подписи</strong> — скринридер не прочитает. <code>input[name="email"]</code>: добавить <code>&lt;label&gt;</code>.</li>
+    </ol>
+  </div>
+  <aside class="stack stack--sm">
+    <div class="metric"><span class="metric__value">12</span><span class="metric__label">страниц обошли</span></div>
+    <div class="metric"><span class="metric__value">34 сек</span><span class="metric__label">длилась проверка</span></div>
+    <div class="metric"><span class="metric__value">4</span><span class="metric__label">находки в чужих виджетах</span></div>
+  </aside>
+</div>
+{% endcall %}
+{% endcall %}
+
+{% call section(eyebrow="Сравнение", title="Почему не Lighthouse, uptime или ручной аудит?", lead="Они отвечают на разные вопросы. webscope отвечает на один: сайт теряет заявки или нет.", id="compare") %}
+{% set compare_headers = [
+    {"label": ""},
+    {"label": "Lighthouse"},
+    {"label": "Ручной аудит"},
+    {"label": "Uptime-мониторинг"},
+    {"label": "webscope", "class": "is-us"}
+] %}
+{% set compare_rows = [
+    {"cells": [
+        {"content": "Что проверяет"},
+        {"content": "Метрики и правила"},
+        {"content": "Всё, вручную"},
+        {"content": "Сервер отвечает"},
+        {"content": "<strong>Клики, формы, заявки</strong>", "class": "is-us"}
+    ]},
+    {"cells": [
+        {"content": "Когда"},
+        {"content": "Разово"},
+        {"content": "Раз в 2–3 недели"},
+        {"content": "24/7, поверхностно"},
+        {"content": "<strong>Еженедельно + дифф</strong>", "class": "is-us"}
+    ]},
+    {"cells": [
+        {"content": "Язык отчёта"},
+        {"content": "Технический"},
+        {"content": "Экспертный"},
+        {"content": "Технический"},
+        {"content": "<strong>Владельца сайта</strong>", "class": "is-us"}
+    ]},
+    {"cells": [
+        {"content": "Цена"},
+        {"content": "$0"},
+        {"content": "$200–3 000"},
+        {"content": "$6–35/мес"},
+        {"content": "<strong>Starter $19/мес</strong>", "class": "is-us"}
+    ]}
+] %}
+{{ table(compare_headers, compare_rows, class="compare-table") }}
+{% endcall %}
+
+{% call section(eyebrow="Тарифы", title="Тарифы и лимиты", lead="Планы на будущее: сейчас все проверки доступны без оплаты.", id="pricing") %}
+<div class="pricing-grid plans-grid">
+  {{ plan_card(
+      "Free", "$0", "навсегда",
+      ["5 находок всего", "1 сайт", "Ручной запуск", "HTML/JSON/PDF отчёты", {"text": "Watchdog: недоступен", "muted": True}]
+  ) }}
+  {{ plan_card(
+      "Starter", "$19", "в месяц",
+      ["200 находок в месяц", "5 сайтов", "Еженедельные проверки", "Дифф с прошлым прогоном", "Telegram/Email алерты", "Watchdog: вебхук и контент-хеш"]
+  ) }}
+  {{ plan_card(
+      "Pro", "$59", "в месяц",
+      ["1 000 находок в месяц", "25 сайтов", "Всё из Starter", "SARIF для GitHub", "REST API", "Watchdog: все триггеры и sitemap"]
+  ) }}
+</div>
+{% endcall %}
+
+{% call section(eyebrow="Безопасность", title="Безопасность — не опция, а основа", lead="Проверяем ваш сайт, не открывая доступ к вашей инфраструктуре.", id="security") %}
+{% set security_items = [
+    {"icon": icon("shield", 22), "title": "SSRF-защита", "text": "Только http/https, приватные IP заблокированы. Сканер не достучится до внутренней сети."},
+    {"icon": icon("lock", 22), "title": "Креды — только хосту сайта", "text": "Authorization и Cookie уходят только на домен проверяемого сайта, не на CDN и трекеры."},
+    {"icon": icon("file", 22), "title": "robots.txt уважается", "text": "По умолчанию сканер соблюдает robots.txt. Отключается галочкой для своих сайтов."},
+    {"icon": icon("key", 22), "title": "Пароли локально", "text": "Данные входа хранятся зашифрованно (Fernet) и нужны только для авторизации при проверке."}
+] %}
+{{ feature_grid(security_items) }}
+{% endcall %}
+
+{% call section(eyebrow="Вопросы", title="Коротко о важном", id="faq") %}
+<div class="faq">
+  <details>
+    <summary>Проверка действительно бесплатная?</summary>
+    <p>Да, быстрая проверка по адресу ничего не стоит: покажем оценку, находки и план действий. Тарифы пока не подключены — это ориентир на будущее.</p>
+  </details>
+  <details>
+    <summary>Вы трогаете мой сайт?</summary>
+    <p>Нет. Сканер открывает страницы и проверяет, дойдёт ли клик до кнопки. Формы в вашу CRM не отправляются, данные не меняются.</p>
+  </details>
+  <details>
+    <summary>Сколько занимает проверка?</summary>
+    <p>Обычно 30–60 секунд для сайта из 10–20 страниц. Большие сайты проверяются дольше — прогресс виден на странице отчёта.</p>
+  </details>
+  <details>
+    <summary>Что такое Watchdog?</summary>
+    <p>Автоматическая проверка после деплоя. CI/CD присылает вебхук или мы замечаем изменение контента — и запускаем скан. Если появились новые проблемы, приходит алерт.</p>
+  </details>
+  <details>
+    <summary>Можно проверить сайт за логином?</summary>
+    <p>Да. Поддерживаем Basic Auth и форму входа. Пароль хранится зашифрованно и передаётся только домену проверяемого сайта.</p>
+  </details>
+</div>
+{% endcall %}
+
+<section class="section section--tight">
+  <div class="cta-banner">
+    <h2>Что ещё умеет webscope</h2>
+    <p>Семь проверок, история, дифф и Watchdog — на отдельной странице.</p>
+    {{ btn("Посмотреть возможности", href="/landing", variant="ghost", size="lg", icon_name="arrow-right", icon_right=True) }}
+  </div>
+</section>
 {% endblock %}

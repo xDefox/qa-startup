@@ -1,35 +1,37 @@
-{% extends "auth_base.html" %}
-{% from "_macros.html" import card, btn_primary, field, input %}
+{% extends "base.html" %}
+{% from "_macros.html" import field, input, btn, alert %}
+{% from "_icons.html" import icon %}
 
-{% block title %}webscope — вход{% endblock %}
+{% block title %}Вход — webscope{% endblock %}
+{% block body_class %}auth-page{% endblock %}
+{% block main_class %}page page--tight{% endblock %}
+{% block container_class %}auth-shell{% endblock %}
+{% block header %}{% endblock %}
+{% block footer %}{% endblock %}
+
 {% block content %}
-
-<div class="card auth-card">
+<div class="auth-card">
+  <a class="brand mb-6" href="/" aria-label="webscope — на главную">
+    <span class="brand__mark">{{ icon("scan", 17) }}</span>
+    <span>webscope<span class="brand__dot">.</span></span>
+  </a>
   <h1>Вход в кабинет</h1>
-  <p class="muted small">
-    В отчётах — адреса сайтов, расписание проверок и адреса для алертов,
-    поэтому интерфейс закрыт паролем.
-  </p>
+  <p class="subtitle">В отчётах — адреса сайтов, расписание проверок и адреса для алертов, поэтому интерфейс закрыт паролем.</p>
 
-  {% if error %}
-  <div class="error">{{ error }}</div>
-  {% endif %}
+  {% if error %}{{ alert(error, variant="error", icon_name="alert") }}{% endif %}
 
   {% if auth_enabled %}
-  <form method="post" action="/auth/login">
-    {{ field('Логин', input('username', type='text', autocomplete='username', required=true, placeholder='Логин')) }}
-    {{ field('Пароль', input('password', type='password', autocomplete='current-password', required=true, placeholder='Пароль')) }}
-    <div class="actions">
-      {{ btn_primary('Войти', class='btn btn-primary') }}
+  <form method="post" action="/auth/login" class="stack">
+    {{ field("Логин", input("username", type="text", autocomplete="username", required=True, placeholder="Логин"), id="username") }}
+    {{ field("Пароль", input("password", type="password", autocomplete="current-password", required=True, placeholder="Пароль"), id="password") }}
+    <div class="form-actions">
+      {{ btn("Войти", type="submit", size="lg", icon_name="arrow-right", icon_right=True) }}
     </div>
   </form>
+  <p class="auth-meta"><a href="/">← На главную</a></p>
   {% else %}
-  <p>
-    Вход не настроен: интерфейс работает в демо-режиме и доступен всем, кто
-    дотянется до порта. Задайте <code>WEBSCOPE_AUTH_PASSWORD</code> и перезапустите
-    сервер, чтобы закрыть кабинет.
-  </p>
+  {{ alert("Вход не настроен: интерфейс работает в демо-режиме.", variant="info", icon_name="info") }}
+  <p class="muted small mt-4">Задайте <code>WEBSCOPE_AUTH_PASSWORD</code> и перезапустите сервер, чтобы закрыть кабинет.</p>
   {% endif %}
 </div>
-
 {% endblock %}

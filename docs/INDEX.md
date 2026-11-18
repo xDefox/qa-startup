@@ -18,7 +18,7 @@ Each document listed with audience, status and key decisions.
 ### /docs/ECONOMICS.md → §3 economics (v2.1 Watchdog)
 ### /docs/SECURITY.md → §2 audit P0 (S1–S7 closed)
 ### /docs/ROADMAP.md → §9 roadmap (Milestones 0–5)
-### /docs/BRANDING.md → BRANDBOOK.md (design tokens)
+### /docs/BRANDING.md → design system (tokens, components, copy)
 
 ---
 

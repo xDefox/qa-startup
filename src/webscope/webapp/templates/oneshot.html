@@ -1,110 +1,78 @@
 {% extends "base.html" %}
-{% from "_macros.html" import card, btn_primary, btn_secondary, field, input, select, checkbox, form_row, form_actions, card_header, section_divider, btn_lg, btn_primary %}
+{% from "_macros.html" import card, field, input, select, checkbox, btn, auth_fields, alert, empty_state %}
+{% block title %}Разовая проверка сайта — webscope{% endblock %}
+{% block description %}Разовая проверка сайта из пакета организации: один скан, отчёт с оценкой и планом действий.{% endblock %}
+{% block scripts %}<script src="/static/js/oneshot.js"></script>{% endblock %}
 
-{% block title %}Разовая проверка сайта{% endblock %}
-{% block head %}
-<link rel="stylesheet" href="/static/css/oneshot.css">
-{% endblock %}
-{% block scripts %}
-<script src="/static/js/oneshot.js"></script>
-{% endblock %}
 {% block content %}
-
-<div class="card hero">
-  <h1>Разовая проверка сайта</h1>
-  <p class="muted">Нет подписки? Купи пакет сканов — спишем только за факт проверки. Watchdog включён.</p>
-
-  {% if error %}
-  <div class="error">{{ error }}</div>
-  {% endif %}
-
-  <form method="post" action="/scan/oneshot" id="oneshot-form">
-    {{ field('Адрес сайта', input('url', type='url', placeholder='https://example.com', autocomplete='url', attrs={'inputmode': 'url', 'required': 'required'})) }}
-
-    <div class="row">
-      <div class="field">
-        <label for="organization">Организация</label>
-        <select id="organization" name="organization_id" required>
-          {% for org in organizations %}
-          <option value="{{ org.id }}">{{ org.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        {{ field('Макс. страниц', input('max_pages', type='number', value='10', attrs={'min': '1', 'max': '100'})) }}
-      </div>
-    </div>
-
-    <fieldset>
-      <legend>Проверки</legend>
-      <div class="check-row">
-        <input type="checkbox" id="check_a11y" name="checks" value="a11y" checked>
-        <label for="check_a11y">Доступность (a11y)</label>
-      </div>
-      <div class="check-row">
-        <input type="checkbox" id="check_console" name="checks" value="console" checked>
-        <label for="check_console">Консоль и сеть</label>
-      </div>
-      <div class="check-row">
-        <input type="checkbox" id="check_forms" name="checks" value="forms" checked>
-        <label for="check_forms">Формы и клики</label>
-      </div>
-      <div class="check-row">
-        <input type="checkbox" id="check_performance" name="checks" value="performance">
-        <label for="check_performance">Производительность</label>
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>Авторизация (если сайт защищён)</legend>
-      <div class="check-row">
-        <input type="checkbox" id="auth_enabled" name="auth_enabled" value="1">
-        <label for="auth_enabled">Сайт требует вход</label>
-      </div>
-      <div id="auth-block" hidden>
-        <div class="row">
-          <div class="field">
-            <label for="auth_kind">Тип защиты</label>
-            <select id="auth_kind" name="auth_kind">
-              <option value="basic">Basic Auth</option>
-              <option value="form">Форма входа</option>
-            </select>
-          </div>
-        </div>
-        <div class="row">
-          <div class="field">
-            <label for="auth_login">Логин</label>
-            <input id="auth_login" type="text" name="auth_login" autocomplete="off">
-          </div>
-          <div class="field">
-            <label for="auth_password">Пароль</label>
-            <input id="auth_password" type="password" name="auth_password" autocomplete="new-password">
-          </div>
-        </div>
-        <div class="field" id="auth-login-url-field" hidden>
-          <label for="auth_login_url">URL страницы входа (если отличается)</label>
-          <input id="auth_login_url" type="url" name="auth_login_url" placeholder="https://example.com/login">
-        </div>
-      </div>
-    </fieldset>
-
-    <button type="submit" class="btn btn-primary btn-lg">Проверить (1 скан из пакета)</button>
-  </form>
-
-  {% if result %}
-  <div id="result" hidden>
-    <h2>Результат проверки</h2>
-    <div class="result-card">
-      <div class="result-score">{{ result.score }}/100</div>
-      <div class="result-label">{{ result.score_label }}</div>
-      <div class="result-meta">
-        <span>Страниц: {{ result.pages_scanned }}</span>
-        <span>Находок: {{ result.findings_count }}</span>
-        <span>Пакет: осталось {{ result.package_scans_left }} сканов</span>
-      </div>
-      {{ btn_primary("Полный отчёт", href="/sites/{{ result.site_id }}", class="btn btn-primary") }}
-    </div>
+<div class="page-header">
+  <div>
+    <span class="eyebrow"><span class="eyebrow__dot"></span>Без подписки</span>
+    <h1>Разовая проверка сайта</h1>
+    <p class="page-header__meta">Проверка из пакета организации: один прогон списывает один скан. История отчётов включена.</p>
   </div>
-  {% endif %}
+  <div class="page-header__actions">
+    <a class="pill" href="/dashboard">Кабинет</a>
+  </div>
+</div>
 
+<div class="grid grid--sidebar">
+  <div>
+    {% call card("Параметры проверки", "Адрес, организация и набор проверок.") %}
+    <form method="post" action="/scan/oneshot" id="oneshot-form" class="stack">
+      {{ field("Адрес сайта", input("url", type="url", placeholder="https://example.com", autocomplete="url", required=True, attrs={"inputmode": "url"}), id="url") }}
+
+      <div class="row">
+        <div class="field">
+          <label for="organization">Организация</label>
+          <select id="organization" name="organization_id" required>
+            {% for org in organizations %}
+            <option value="{{ org.id }}">{{ org.name }}</option>
+            {% else %}
+            <option value="">Организаций нет</option>
+            {% endfor %}
+          </select>
+          <p class="field-hint">Скан спишется с пакета этой организации.</p>
+        </div>
+        {{ field("Макс. страниц", input("max_pages", type="number", value="10", attrs={"min": "1", "max": "100"}), help_text="Чем больше страниц, тем дольше проверка.", id="max_pages") }}
+      </div>
+
+      <fieldset class="field">
+        <legend class="field-label">Что проверять</legend>
+        <div class="grid grid--2">
+          {{ checkbox("checks", "Доступность (a11y)", value="a11y", checked=True) }}
+          {{ checkbox("checks", "Консоль и сеть", value="console", checked=True) }}
+          {{ checkbox("checks", "Формы и клики", value="forms", checked=True) }}
+        </div>
+      </fieldset>
+
+      <fieldset class="field">
+        <legend class="field-label">Авторизация</legend>
+        {{ auth_fields(None, intro=True, checkbox_id="auth_enabled") }}
+      </fieldset>
+
+      <div class="form-actions">
+        {{ btn("Проверить сайт", type="submit", size="lg", icon_name="play") }}
+      </div>
+    </form>
+    {% endcall %}
+  </div>
+
+  <aside class="stack">
+    {% call card("Что вы получите") %}
+    <ul class="plan-features">
+      <li>Оценку 0–100 и три первых дела</li>
+      <li>Список находок с селекторами и сниппетами</li>
+      <li>Отчёт в HTML, JSON, PDF и SARIF</li>
+      <li>Историю прогонов и дифф с прошлым разом</li>
+    </ul>
+    {% endcall %}
+
+    {% call card("Пакеты сканов") %}
+    <p class="muted small">Один прогон списывает один скан из пакета. Остаток виден в настройках сайта.</p>
+    {% endcall %}
+  </aside>
+</div>
+
+<div id="result" class="mt-4" aria-live="polite"></div>
 {% endblock %}

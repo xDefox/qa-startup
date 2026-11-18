@@ -1,6 +1,5 @@
 // ============================================================
-// Settings Page — Auth & Watchdog Toggles
-// Extracted from settings.html for CSP compliance
+// Настройки сайта: вход, Watchdog, подсказка и удаление.
 // ============================================================
 
 (function () {
@@ -8,29 +7,32 @@
   const block = document.getElementById('auth-block');
   const kind = document.getElementById('auth_kind');
   const loginUrlField = document.getElementById('auth-login-url-field');
-  function syncAuth() {
+  if (!toggle || !block || !kind) return;
+
+  function sync() {
     block.hidden = !toggle.checked;
-    loginUrlField.hidden = !(toggle.checked && kind.value === 'form');
+    if (loginUrlField) loginUrlField.hidden = !(toggle.checked && kind.value === 'form');
   }
-  toggle.addEventListener('change', syncAuth);
-  kind.addEventListener('change', syncAuth);
-  syncAuth();
+  toggle.addEventListener('change', sync);
+  kind.addEventListener('change', sync);
+  sync();
 })();
 
 (function () {
   const toggle = document.getElementById('watchdog-enabled');
   const secretField = document.getElementById('webhook-secret-field');
   const statusField = document.getElementById('watchdog-status');
-  function syncWatchdog() {
+  if (!toggle) return;
+
+  function sync() {
     const enabled = toggle.checked;
-    secretField.hidden = !enabled;
-    statusField.hidden = !enabled;
+    if (secretField) secretField.hidden = !enabled;
+    if (statusField) statusField.hidden = !enabled;
   }
-  toggle.addEventListener('change', syncWatchdog);
-  syncWatchdog();
+  toggle.addEventListener('change', sync);
+  sync();
 })();
 
-// Watchdog tooltip
 (function () {
   const trigger = document.querySelector('.tooltip-trigger');
   const tooltip = document.querySelector('.tooltip');
@@ -42,8 +44,7 @@
     isOpen = true;
     tooltip.hidden = false;
     trigger.setAttribute('aria-expanded', 'true');
-    // Position tooltip below trigger
-    positionTooltip();
+    place();
   }
 
   function close() {
@@ -52,31 +53,17 @@
     trigger.setAttribute('aria-expanded', 'false');
   }
 
-  function positionTooltip() {
-    const triggerRect = trigger.getBoundingClientRect();
-    const tooltipRect = tooltip.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-
-    // Default: below trigger
-    let top = triggerRect.bottom + window.scrollY + 8;
-    let left = triggerRect.left + window.scrollX + (triggerRect.width / 2) - (tooltipRect.width / 2);
-
-    // Keep within viewport horizontally
+  function place() {
+    const anchor = trigger.getBoundingClientRect();
+    const box = tooltip.getBoundingClientRect();
     const margin = 12;
-    if (left < margin) left = margin;
-    if (left + tooltipRect.width > viewportWidth - margin) {
-      left = viewportWidth - tooltipRect.width - margin;
-    }
-
-    // Keep within viewport vertically (prefer below, but if no space, show above)
-    if (top + tooltipRect.height > viewportHeight + window.scrollY - margin) {
-      top = triggerRect.top + window.scrollY - tooltipRect.height - 8;
-    }
-    if (top < margin) top = margin;
-
-    tooltip.style.top = top + 'px';
-    tooltip.style.left = left + 'px';
+    let left = anchor.left + anchor.width / 2 - box.width / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - box.width - margin));
+    let top = anchor.bottom + 8;
+    if (top + box.height > window.innerHeight - margin) top = anchor.top - box.height - 8;
+    top = Math.max(margin, top);
+    tooltip.style.left = Math.round(left) + 'px';
+    tooltip.style.top = Math.round(top) + 'px';
   }
 
   trigger.addEventListener('click', function (event) {
@@ -85,30 +72,24 @@
     else open();
   });
 
-  tooltip.addEventListener('click', function (event) {
-    event.stopPropagation();
-  });
-
-  document.addEventListener('click', function () {
-    if (isOpen) close();
-  });
-
+  tooltip.addEventListener('click', function (event) { event.stopPropagation(); });
+  document.addEventListener('click', function () { if (isOpen) close(); });
   document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape' && isOpen) close();
+    if (event.key === 'Escape' && isOpen) {
+      close();
+      trigger.focus();
+    }
   });
-
-  window.addEventListener('resize', function () {
-    if (isOpen) positionTooltip();
-  });
+  window.addEventListener('resize', function () { if (isOpen) place(); });
+  window.addEventListener('scroll', function () { if (isOpen) place(); }, true);
 })();
 
-// Delete site form confirmation
 (function () {
   const form = document.getElementById('delete-site-form');
   if (!form) return;
   form.addEventListener('submit', function (event) {
-    const siteUrl = form.action.split('/').slice(-2, -1)[0];
-    if (!confirm('Удалить ' + siteUrl + ' вместе с историей проверок?')) {
+    const url = form.dataset.siteUrl || 'этот сайт';
+    if (!window.confirm('Удалить ' + url + ' вместе с историей проверок?')) {
       event.preventDefault();
     }
   });

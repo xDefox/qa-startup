@@ -281,8 +281,8 @@ def test_reconcile_running_closes_stray_runs(tmp_path: Path) -> None:
     storage.close()
 
 
-def test_index_shows_failed_run_not_progress(tmp_path: Path) -> None:
-    """Упавший прогон на главной — «не удалась», а не «выполывается».
+def test_dashboard_shows_failed_run_not_progress(tmp_path: Path) -> None:
+    """Упавший прогон в кабинете — «не удалась», а не «выполняется».
 
     Регресс-тест: статус ошибки попадал в ветку elif и висел вечным
     «проверка выполняется…» — поломка была невидимой.
@@ -295,7 +295,7 @@ def test_index_shows_failed_run_not_progress(tmp_path: Path) -> None:
 
     app = create_app(db_path=tmp_path / "db.sqlite", scanner_func=_never, notifier=lambda **kwargs: [])
     with TestClient(app) as test_client:
-        body = test_client.get("/").text
+        body = test_client.get("/dashboard").text
 
     assert "проверка выполняется…" not in body
     assert "последняя проверка не удалась" in body

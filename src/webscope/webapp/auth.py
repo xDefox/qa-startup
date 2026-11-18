@@ -26,8 +26,9 @@ COOKIE_NAME = "webscope_session"
 # Методы без побочных эффектов: их не проверяем на CSRF.
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 
-# Что доступно без входа: сам вход, healthcheck, статические файлы и раздача загруженных файлов
-# (её открывает браузер-сканер без cookie; содержимое песочницы — см. app.py).
+# Что доступно без входа: сам вход, healthcheck, статические файлы, публичные
+# страницы витрины («/» и «/landing») и раздача загруженных файлов (её открывает
+# браузер-сканер без cookie; содержимое песочницы — см. app.py).
 PUBLIC_PREFIXES = ("/auth/", "/healthz", "/__local/", "/landing", "/static/")
 
 
@@ -60,6 +61,10 @@ def is_authenticated(request: Request) -> bool:
 
 
 def is_public_path(path: str) -> bool:
+    # Корень — витрина продукта, а не часть кабинета: открываем ровно "/",
+    # не задевая остальные страницы приложения.
+    if path == "/":
+        return True
     return any(path == prefix.rstrip("/") or path.startswith(prefix) for prefix in PUBLIC_PREFIXES)
 
 

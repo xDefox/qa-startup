@@ -1,201 +1,104 @@
 {% extends "base.html" %}
-{% from "_macros.html" import hero_card, problem_cards, steps_grid, table, card, simple_card, section_card, section_divider, btn_primary, btn_secondary, btn_outline, icon_shield, badge %}
+{% from "_macros.html" import page_header, section, steps_grid, problem_cards, card, btn, feature_grid %}
+{% from "_icons.html" import icon %}
 
-{% block title %}webscope — проверка кликов, форм и заявок на сайте{% endblock %}
+{% block title %}Возможности — webscope{% endblock %}
+{% block description %}Что проверяет webscope: клики, формы, консоль, доступность, ссылки, мобильная вёрстка и контент — в одном прогоне реального браузера.{% endblock %}
 
 {% block content %}
-
-{# Hero Section #}
-{{ hero_card(
-    title="Сайт открывается.<br>Заявка — нет." | safe,
-    subtitle="webscope проверяет клики, формы и консоль браузера — чтобы вы узнали о поломке раньше клиента.",
-    cta_text="Проверить сайт бесплатно",
-    cta_href="/scan/oneshot",
-    secondary_text="Как это работает",
-    secondary_href="#how-it-works",
-    trust_text="5 находок бесплатно · без карты · запуск за 30 секунд"
+{{ page_header(
+    "Возможности",
+    subtitle="Семь проверок в одном прогоне: от перекрытой кнопки до битой ссылки. Всё подтверждается в реальном браузере, а не по исходному коду.",
+    actions=btn("Проверить сайт", href="/scan", icon_name="arrow-right", icon_right=True)
 ) }}
 
-{{ section_divider() }}
-
-{# Problem Section #}
-{% call section_card("Проблема: сайт меняется каждую неделю. Проверяют — раз в год.", class="") %}
-{% set problems = [
-    {
-        "icon": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
-        "title": "Кнопку нельзя нажать",
-        "text": "Баннер, модалка или фиксированный блок перекрывает CTA. Клиент жмёт — ничего не происходит."
-    },
-    {
-        "icon": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
-        "title": "Форма не доходит",
-        "text": "Ошибка JS, неверный endpoint или отправка в пустоту — заявка теряется бесследно."
-    },
-    {
-        "icon": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
-        "title": "Сломалось после релиза",
-        "text": "Обновили сайт — отвалился скрипт или стили. Владелец узнаёт из жалобы клиента."
-    }
+{% call section(eyebrow="Проверки", title="Что именно ищем", lead="Каждая находка — с селектором, фрагментом кода и объяснением, что делать.", id="checks") %}
+{% set checks = [
+    {"icon": icon("eye", 22), "title": "Кликабельность", "text": "Перекрытые кнопки, CTA в неактивном слайде карусели, ссылки без доступного имени."},
+    {"icon": icon("send", 22), "title": "Формы", "text": "Поля без label и name, кнопки отправки без имени, placeholder вместо подписи."},
+    {"icon": icon("terminal", 22), "title": "Консоль и сеть", "text": "JS-исключения, предупреждения, упавшие запросы и ответы 4xx/5xx."},
+    {"icon": icon("shield", 22), "title": "Доступность", "text": "axe-core по WCAG 2.2 AA: контраст, alt, заголовки, ARIA, язык страницы."},
+    {"icon": icon("globe", 22), "title": "Ссылки", "text": "Битые внутренние ссылки, таймауты и небезопасные схемы."},
+    {"icon": icon("grid", 22), "title": "Мобильная вёрстка", "text": "Горизонтальная прокрутка на 320 и 768 px, цели меньше 24×24 px."},
+    {"icon": icon("file", 22), "title": "Контент и карточки ссылок", "text": "title, description, дубли id, Open Graph и Twitter Card для репостов."}
 ] %}
-{{ problem_cards(problems) }}
+{{ problem_cards(checks) }}
 {% endcall %}
 
-{{ section_divider() }}
-
-{# Solution Section #}
-{% call section_card("Что делает webscope", class="") %}
-{% set steps = [
-    {"title": "Обходим как клиент", "text": "Реальный браузер (Playwright) открывает страницы, кликает, скроллит, заполняет формы."},
-    {"title": "Ловим ошибки в консоли и сети", "text": "JS-исключения, неудачные запросы, ошибки ресурсов — всё, что не видно в Lighthouse."},
-    {"title": "Проверяем клики и доступность", "text": "Перекрытые элементы, невидимые ссылки, поля без подписей, цель клика меньше 44×44px."},
-    {"title": "Даём отчёт владельцу + ТЗ разработчику", "text": "Оценка 0–100, три приоритетных действий, селектор, фрагмент кода и что именно поправить."},
-    {"title": "Watchdog — автопроверка после деплоя", "text": "Вебхук от CI/CD или проверка контента — запускаем скан за 5 мин после релиза. Алерт в Telegram/Email."}
-] %}
-{{ steps_grid(steps) }}
+{% call section(eyebrow="Как идёт прогон", title="От адреса до отчёта", lead="Один запуск — один браузер, до 20 страниц и один понятный отчёт.", id="pipeline") %}
+{{ steps_grid([
+    {"title": "Собираем карту сайта", "text": "Читаем sitemap и ссылки, группируем адреса по шаблонам — проверяем по одной странице каждого типа."},
+    {"title": "Открываем реальный браузер", "text": "Chromium с мобильным и десктопным viewport. Смотрим то, что видит клиент, а не только HTML."},
+    {"title": "Измеряем поведение", "text": "Скроллим, проверяем hit-testing кнопок, размеры целей, консоль и сетевые запросы."},
+    {"title": "Подтверждаем находки", "text": "У каждой проблемы — селектор, фрагмент кода и причина. Случайные срабатывания отсекаем."},
+    {"title": "Считаем оценку", "text": "0–100 по серьёзности и количеству, три первых дела и дифф с прошлым прогоном."}
+]) }}
 {% endcall %}
 
-{{ section_divider() }}
-
-{# Report Preview #}
-{% call section_card("Как выглядит отчёт", class="") %}
-{% call card(class="") %}
-<div class="card-header-row">
-    <span class="badge ok">87/100</span>
-    <span class="muted">Хорошо</span>
+{% call section(eyebrow="Отчёт", title="Что получает владелец и разработчик", lead="Не список из трёхсот правил. Сначала — то, что мешает оставить заявку.", id="report") %}
+{% call card("Содержание отчёта", "Один документ для двух аудиторий: решение — владельцу, исправление — разработчику.") %}
+<div class="grid grid--2">
+  <div>
+    <h3>Владельцу сайта</h3>
+    <ul class="plan-features">
+      <li>Оценка 0–100 и динамика по прогонам</li>
+      <li>Три действия в порядке приоритета</li>
+      <li>Объяснение, почему это важно для заявок</li>
+      <li>Готовый HTML/PDF для клиента или архива</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Разработчику</h3>
+    <ul class="plan-features">
+      <li>Точный селектор и фрагмент HTML</li>
+      <li>Правило, серьёзность и ссылка на документацию</li>
+      <li>JSON, SARIF и JUnit для CI и GitHub</li>
+      <li>Дифф: что сломалось, что починили</li>
+    </ul>
+  </div>
 </div>
-<h4>Что сделать в первую очередь:</h4>
-<ol>
-    <li><strong>Кнопку нельзя нажать</strong> — её перекрывает баннер. <code>#cta</code> — убрать перекрывающий элемент или поднять z-index.</li>
-    <li><strong>Недостаточный контраст</strong> — текст на фоне не читается. <code>.price</code> — увеличить контраст до 4.5:1.</li>
-    <li><strong>Поле без подписи</strong> — скринридер не прочитает. <code>input[name="email"]</code> — добавить <code><label></code>.</li>
-</ol>
 {% endcall %}
 {% endcall %}
 
-{{ section_divider() }}
-
-{# Comparison Table #}
-{% set compare_headers = [
-    {"label": ""},
-    {"label": "Lighthouse"},
-    {"label": "Ручной аудит"},
-    {"label": "Uptime-мониторинг"},
-    {"label": "webscope"}
-] %}
-{% set compare_rows = [
-    {
-        "cells": [
-            {"content": "Что проверяет"},
-            {"content": "Метрики и правила"},
-            {"content": "Всё, вручную"},
-            {"content": "Сервер отвечает"},
-            {"content": "<strong>Клики, формы, заявки</strong>"}
-        ]
-    },
-    {
-        "cells": [
-            {"content": "Когда"},
-            {"content": "Разово"},
-            {"content": "Раз в 2–3 недели"},
-            {"content": "24/7, поверхностно"},
-            {"content": "<strong>Еженедельно + дифф</strong>"}
-        ]
-    },
-    {
-        "cells": [
-            {"content": "Язык отчёта"},
-            {"content": "Технический"},
-            {"content": "Экспертный"},
-            {"content": "Технический"},
-            {"content": "<strong>Владельца сайта</strong>"}
-        ]
-    },
-    {
-        "cells": [
-            {"content": "Цена"},
-            {"content": "$0"},
-            {"content": "$200–3 000"},
-            {"content": "$6–35/мес"},
-            {"content": "<strong>Starter $19/мес</strong>"}
-        ]
-    }
-] %}
-{% call section_card("Почему не Lighthouse / uptime / ручной аудит?", class="") %}
-{{ table(compare_headers, compare_rows, class="") }}
-{% endcall %}
-
-{{ section_divider() }}
-
-{# Plans/Pricing #}
-{% call section_card("Простой выбор", class="") %}
-<div class="row">
-    {% call card(title="Free", subtitle="$0 / навсегда", class="") %}
-    <ul>
-        <li>5 находок всего</li>
-        <li>1 сайт</li>
-        <li>Ручной запуск</li>
-        <li>PDF/JSON отчёты</li>
-        <li class="muted">Watchdog: недоступен</li>
-    </ul>
-    {{ btn_outline("Начать", href="/sites/new", class="btn btn-outline btn-block") }}
-    {% endcall %}
-
-    {% call card(title="Starter", subtitle="$19 / мес", class="popular") %}
-    {{ badge("Популярный", variant="ok") }}
-    <ul>
-        <li>200 находок/мес</li>
-        <li>5 сайтов</li>
-        <li>Еженедельные проверки</li>
-        <li>Дифф с прошлым прогоном</li>
-        <li>Telegram/Email алерты</li>
-        <li>Приоритетная очередь</li>
-        <li>Watchdog: вебхук + контент-хеш</li>
-    </ul>
-    {{ btn_primary("Попробовать", href="/sites/new", class="btn btn-primary btn-block") }}
-    {% endcall %}
-
-    {% call card(title="Pro", subtitle="$59 / мес", class="") %}
-    <ul>
-        <li>1 000 находок/мес</li>
-        <li>25 сайтов</li>
-        <li>Все Starter фичи</li>
-        <li>SARIF для GitHub</li>
-        <li>API доступ</li>
-        <li>Свои правила</li>
-        <li>Watchdog: все триггеры + sitemap</li>
-    </ul>
-    {{ btn_outline("Связаться", href="/sites/new", class="btn btn-outline btn-block") }}
-    {% endcall %}
+{% call section(eyebrow="История", title="Видно, что изменилось после релиза", lead="Каждый прогон сохраняется. Сравнение с прошлым показывает новые и исправленные находки.", id="history") %}
+<div class="grid grid--2">
+  {% call card("Динамика оценки", "Оценка и число проблем по каждому прогону.") %}
+  <div class="grid grid--3">
+    <div class="metric"><span class="metric__value score-ok">87</span><span class="metric__label">было</span></div>
+    <div class="metric"><span class="metric__value score-bad">74</span><span class="metric__label">стало</span></div>
+    <div class="metric"><span class="metric__value">−13</span><span class="metric__label">за неделю</span></div>
+  </div>
+  <p class="muted small mt-4">Если оценка упала после деплоя — это видно сразу, без сравнения скриншотов вручную.</p>
+  {% endcall %}
+  {% call card("Дифф находок", "Только то, что появилось или исчезло с прошлого раза.") %}
+  <div class="grid grid--2">
+    <div class="metric"><span class="metric__value score-bad">3</span><span class="metric__label">новые находки</span></div>
+    <div class="metric"><span class="metric__value score-ok">2</span><span class="metric__label">исправлено</span></div>
+  </div>
+  <p class="muted small mt-4">Повторно исправленное не попадает в отчёт и не отвлекает разработчика.</p>
+  {% endcall %}
 </div>
 {% endcall %}
 
-{{ section_divider() }}
-
-{# Security Section #}
-{% set security_items = [
-    {
-        "icon": icon_shield(),
-        "title": "SSRF защита",
-        "text": "Только http/https, private IP заблокированы. Сканер не достучится до внутренней сети."
-    },
-    {
-        "icon": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
-        "title": "Креды — только хосту сайта",
-        "text": "Authorization и Cookie уходят только на домен проверяемого сайта, не на CDN и трекеры."
-    },
-    {
-        "icon": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
-        "title": "robots.txt уважается",
-        "text": "По умолчанию сканер соблюдает robots.txt. Отключается галочкой для своих сайтов."
-    },
-    {
-        "icon": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
-        "title": "Пароли локально",
-        "text": "Креденшеалы для входа хранятся зашифрованно (Fernet), только для авторизации при проверке."
-    }
+{% call section(eyebrow="Watchdog", title="Проверка сразу после деплоя", lead="Не ждите еженедельного расписания: запускайте скан по событию.", id="watchdog") %}
+{% set watchdog_items = [
+    {"icon": icon("zap", 22), "title": "Вебхук от CI/CD", "text": "GitHub Actions, GitLab, Vercel, Netlify, Cloudflare Pages или свой сервис."},
+    {"icon": icon("refresh", 22), "title": "Изменение контента", "text": "Сравниваем хеш страниц и запускаем проверку, если контент действительно поменялся."},
+    {"icon": icon("list", 22), "title": "Изменения в sitemap.xml", "text": "Новые страницы попадают в обход без ручного добавления адресов."}
 ] %}
-{% call section_card("Безопасность — не опция, а основа", class="") %}
-{{ problem_cards(security_items) }}
+{{ feature_grid(watchdog_items) }}
+<p class="muted small mt-4">О новых проблемах сообщим в Telegram или на email. Watchdog настраивается в карточке сайта.</p>
 {% endcall %}
 
+{% call section(eyebrow="Интеграции", title="Встраивается в ваш процесс", lead="Без внешних трекеров и обязательных облачных сервисов.", id="integrations") %}
+{% set integration_items = [
+    {"icon": icon("send", 22), "title": "Telegram и email", "text": "Алерты о новых проблемах и падениях проверки — в чат или на почту."},
+    {"icon": icon("zap", 22), "title": "Вебхуки CI/CD", "text": "Проверка после успешного деплоя по HMAC-подписи."},
+    {"icon": icon("code", 22), "title": "REST API", "text": "Сайты, прогоны, находки и отчёты. Работает поверх сессии кабинета."},
+    {"icon": icon("download", 22), "title": "Шесть форматов отчёта", "text": "HTML, JSON, TXT, JUnit, SARIF и PDF — для людей, CI и GitHub."},
+    {"icon": icon("upload", 22), "title": "Локальные сборки", "text": "Папка или один HTML-файл: проверяем до публикации, в песочнице."},
+    {"icon": icon("users", 22), "title": "Организации", "text": "Сайты и пакеты сканов группируются по командам и клиентам."}
+] %}
+{{ feature_grid(integration_items) }}
+{% endcall %}
 {% endblock %}

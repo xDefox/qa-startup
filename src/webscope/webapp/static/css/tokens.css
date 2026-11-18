@@ -1,0 +1,162 @@
+/* ============================================================
+   webscope — design tokens
+   Единственный источник цветов, отступов, радиусов и теней.
+   Брендбук: docs/BRANDING.md
+   ============================================================ */
+
+:root {
+  /* Поверхности */
+  --bg: #f6f7fb;
+  --bg-soft: #eef2f8;
+  --card: #ffffff;
+  --card-soft: #fbfcfe;
+  --ink: #131a2a;
+  --ink-soft: #26314a;
+  --muted: #5d6b82;
+  --muted-strong: #475467;
+  --line: #e2e7ef;
+  --line-strong: #cfd7e4;
+
+  /* Акцент */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #eaf0ff;
+  --accent-ink: #1e40af;
+  --accent-contrast: #ffffff;
+
+  /* Семантика серьёзности */
+  --critical: #b42318;
+  --critical-soft: #fee4e2;
+  --serious: #d97706;
+  --serious-ink: #92400e;
+  --serious-soft: #fef0c7;
+  --moderate: #b54708;
+  --moderate-soft: #fdf1e3;
+  --minor: #667085;
+  --minor-soft: #f2f4f7;
+  --ok: #087443;
+  --ok-soft: #dcfae6;
+
+  /* Типографика */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+  /* Сетка и отступы (шаг 4px) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 80px;
+  --space-10: 96px;
+  --container: 1120px;
+  --container-narrow: 720px;
+  --container-wide: 1280px;
+
+  /* Радиусы */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-full: 999px;
+
+  /* Тени */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px -6px rgba(15, 23, 42, 0.10);
+  --shadow-md: 0 2px 4px rgba(15, 23, 42, 0.04), 0 12px 28px -12px rgba(15, 23, 42, 0.18);
+  --shadow-lg: 0 4px 8px rgba(15, 23, 42, 0.04), 0 24px 56px -24px rgba(15, 23, 42, 0.28);
+  --shadow-accent: 0 8px 24px -12px rgba(37, 99, 235, 0.55);
+
+  /* Движение */
+  --dur-fast: 120ms;
+  --dur-base: 160ms;
+  --dur-slow: 240ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Служебное */
+  --header-h: 64px;
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0b1026;
+  --bg-soft: #0e1530;
+  --card: #111830;
+  --card-soft: #141c36;
+  --ink: #e8ecf5;
+  --ink-soft: #d3d9e6;
+  --muted: #9aa5bc;
+  --muted-strong: #b3bdd0;
+  --line: #232c45;
+  --line-strong: #33405e;
+
+  --accent: #6aa8ff;
+  --accent-hover: #8bbcff;
+  --accent-soft: #17284a;
+  --accent-ink: #bfd6ff;
+  --accent-contrast: #06101f;
+
+  --critical: #f87171;
+  --critical-soft: #3b1620;
+  --serious: #fbbf24;
+  --serious-ink: #fde68a;
+  --serious-soft: #3a2a0c;
+  --moderate: #fb923c;
+  --moderate-soft: #3a2110;
+  --minor: #9aa5bc;
+  --minor-soft: #1c2439;
+  --ok: #34d399;
+  --ok-soft: #0f2e25;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 14px -8px rgba(0, 0, 0, 0.7);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 14px 30px -14px rgba(0, 0, 0, 0.8);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.3), 0 28px 60px -28px rgba(0, 0, 0, 0.9);
+  --shadow-accent: 0 8px 24px -12px rgba(106, 168, 255, 0.5);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1026;
+    --bg-soft: #0e1530;
+    --card: #111830;
+    --card-soft: #141c36;
+    --ink: #e8ecf5;
+    --ink-soft: #d3d9e6;
+    --muted: #9aa5bc;
+    --muted-strong: #b3bdd0;
+    --line: #232c45;
+    --line-strong: #33405e;
+
+    --accent: #6aa8ff;
+    --accent-hover: #8bbcff;
+    --accent-soft: #17284a;
+    --accent-ink: #bfd6ff;
+    --accent-contrast: #06101f;
+
+    --critical: #f87171;
+    --critical-soft: #3b1620;
+    --serious: #fbbf24;
+    --serious-ink: #fde68a;
+    --serious-soft: #3a2a0c;
+    --moderate: #fb923c;
+    --moderate-soft: #3a2110;
+    --minor: #9aa5bc;
+    --minor-soft: #1c2439;
+    --ok: #34d399;
+    --ok-soft: #0f2e25;
+
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 14px -8px rgba(0, 0, 0, 0.7);
+    --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 14px 30px -14px rgba(0, 0, 0, 0.8);
+    --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.3), 0 28px 60px -28px rgba(0, 0, 0, 0.9);
+    --shadow-accent: 0 8px 24px -12px rgba(106, 168, 255, 0.5);
+    color-scheme: dark;
+  }
+}

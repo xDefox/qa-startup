@@ -13,6 +13,7 @@ from fastapi import BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from .limits import max_concurrent_scans
+from .presentation import SiteCard
 from .scheduler import Site
 from .services.site_service import list_sites as list_sites_service
 from .state import AppState
@@ -61,10 +62,10 @@ def get_site_or_404(state: AppState, site_id: int) -> Site:
     return site
 
 
-def index_cards(state: AppState) -> list[dict]:
-    """Сайты с последним прогоном — данные главной страницы (нужны и в ошибках)."""
+def index_cards(state: AppState) -> list[SiteCard]:
+    """Сайты с последним прогоном — данные главной и кабинета."""
     return [
-        {"site": item, "run": state.storage.latest_run(item.id)}
+        SiteCard(site=item, run=state.storage.latest_run(item.id))
         for item in list_sites_service(state.storage)
     ]
 

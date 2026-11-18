@@ -1,14 +1,105 @@
 {% extends "base.html" %}
-{% from "_macros.html" import card, btn_primary, btn_secondary, field, input, select, checkbox, form_row, form_actions, card_header, dashboard_header, dashboard_tabs, dashboard_header_row, sites_table, btn_sm %}
-{% block title %}Дашборд — webscope{% endblock %}
+{% from "_macros.html" import page_header, dashboard_tabs, card, field, input, select, auth_fields, btn, site_row, empty_state %}
+{% from "_icons.html" import icon %}
+{% block title %}Кабинет — webscope{% endblock %}
+{% block description %}Сайты, последние проверки и оценки в одном месте.{% endblock %}
+{% block scripts %}<script src="/static/js/dashboard.js"></script>{% endblock %}
+
 {% block content %}
-{{ dashboard_header("Дашборд", back_url="/", back_text="← На главную") }}
+{{ page_header(
+    "Кабинет",
+    subtitle="Управление сайтами, отчётами и проверками.",
+    actions=btn("Добавить сайт", href="#add-site", icon_name="plus")
+) }}
 
 {{ dashboard_tabs('sites') }}
 
-<div class="card">
-  {{ dashboard_header_row("Мои сайты ({{ cards|length }})", actions=btn_primary("Добавить сайт", href="/sites/new", class="btn btn-primary")) }}
-
-  {{ sites_table(cards) }}
+<div class="grid grid--4 mb-6">
+  <div class="metric"><span class="metric__value">{{ summary.total }}</span><span class="metric__label">сайтов в мониторинге</span></div>
+  <div class="metric"><span class="metric__value score-ok">{{ summary.ok }}</span><span class="metric__label">успешных проверок</span></div>
+  <div class="metric"><span class="metric__value">{{ summary.pending }}</span><span class="metric__label">проверяются сейчас</span></div>
+  <div class="metric"><span class="metric__value score-bad">{{ summary.failed }}</span><span class="metric__label">с ошибкой</span></div>
 </div>
+
+<div id="add-site">
+{% call card("Добавить сайт", "Поставим адрес в мониторинг или проверим локальную сборку до публикации.") %}
+<form method="post" action="/sites" id="site-form">
+  <div class="grid grid--sidebar">
+    <div class="stack">
+      <div class="row">
+        {{ field("Адрес сайта", input("url", placeholder="example.com", autocomplete="url", attrs={"inputmode": "url"}), help_text="Можно вставить адрес страницы целиком — нормализуем сами.", id="url") }}
+        {{ field("Куда присылать отчёты", input("email", type="email", placeholder="you@example.com", autocomplete="email", attrs={"spellcheck": "false"}), help_text="Необязательно. Можно указать Telegram ниже.", id="email") }}
+      </div>
+      <div class="row">
+        {{ field("Как часто проверять", select("schedule", schedule_options), id="schedule") }}
+        {{ field("Telegram: id чата или @канал", input("telegram_chat", placeholder="-1001234567890", attrs={"spellcheck": "false"}), help_text="Необязательно. Алерты приходят при новых проблемах.", id="telegram_chat") }}
+      </div>
+
+      {{ auth_fields(None) }}
+
+      <div class="form-actions">
+        {{ btn("Добавить в мониторинг", type="submit", icon_name="plus") }}
+        <span class="muted small">Первая проверка начнётся сразу после добавления.</span>
+      </div>
+    </div>
+
+    <div>
+      <p class="field-label">Локальная сборка</p>
+      <p class="muted small">Папка или один HTML-файл. Адрес подставится автоматически.</p>
+      <input type="file" id="local-file" accept=".html,.htm,.zip" hidden>
+      <input type="file" id="local-dir" webkitdirectory directory multiple hidden>
+      <div class="upload-zone" id="upload-zone">
+        <div class="upload-zone-content" id="upload-content">
+          <span class="upload-icon">{{ icon("upload", 28) }}</span>
+          <p class="upload-title">Перетащите папку сборки или файл сюда</p>
+          <p class="upload-hint">Или выберите файл кнопкой ниже</p>
+          <div class="upload-actions">
+            <label class="btn btn-secondary btn-sm" for="local-file">{{ icon("file", 16) }} Файл</label>
+            <label class="btn btn-ghost btn-sm" for="local-dir">{{ icon("folder", 16) }} Папку</label>
+          </div>
+        </div>
+        <div class="upload-selected" id="upload-selected" hidden>
+          <div class="upload-selected-head">
+            <span class="upload-icon">{{ icon("check", 24) }}</span>
+            <span id="upload-count">0 файлов</span>
+            <button type="button" class="btn btn-ghost btn-sm" id="upload-clear">Очистить</button>
+          </div>
+          <div class="upload-file-list" id="upload-file-list"></div>
+        </div>
+        <div class="upload-progress" id="upload-progress" hidden>
+          <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+          <span class="progress-text" id="progress-text">Загрузка…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+{% endcall %}
+</div>
+
+{% call card("Мои сайты (" ~ (cards | length) ~ ")", "Последняя проверка, оценка и расписание — по каждому адресу.") %}
+{% if cards %}
+<div class="site-rows">
+  {% for item in cards %}{{ site_row(item) }}{% endfor %}
+</div>
+{% else %}
+{{ empty_state("globe", "Сайтов пока нет", "Добавьте адрес — первая проверка начнётся сразу.", "Добавить сайт", "#add-site", action_icon="plus") }}
+{% endif %}
+{% endcall %}
+
+{% if organizations %}
+<section class="section section--tight">
+  {% call card("Организации", "Сайты и пакеты сканов группируются по организациям.") %}
+  <div class="actions">
+    {% for org in organizations[:6] %}
+    <span class="pill">{{ org.name }}</span>
+    {% endfor %}
+    {% if organizations|length > 6 %}
+    <span class="pill">и ещё {{ organizations|length - 6 }}</span>
+    {% endif %}
+    <a class="btn btn-sm btn-secondary" href="/dashboard/organizations">Управлять</a>
+  </div>
+  {% endcall %}
+</section>
+{% endif %}
 {% endblock %}

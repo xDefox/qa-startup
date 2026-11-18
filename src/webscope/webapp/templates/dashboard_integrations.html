@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_header, dashboard_tabs, card, table, alert, btn %}
+{% from "_icons.html" import icon %}
+{% block title %}Интеграции — webscope{% endblock %}
+
+{% block content %}
+{{ page_header(
+    "Интеграции",
+    subtitle="Вебхуки после деплоя и REST API для своих задач.",
+    actions=btn("Мои сайты", href="/dashboard", variant="secondary")
+) }}
+
+{{ dashboard_tabs('api_keys') }}
+
+<div class="grid grid--2">
+  {% call card("Вебхуки CI/CD", "GitHub Actions, GitLab, Vercel, Netlify и Cloudflare могут запускать проверку после успешного деплоя.") %}
+  <div class="stack stack--sm">
+    {% for provider, path in [
+        ("GitHub", "/webhook/github"),
+        ("GitLab", "/webhook/gitlab"),
+        ("Vercel", "/webhook/vercel"),
+        ("Netlify", "/webhook/netlify"),
+        ("Cloudflare Pages", "/webhook/cloudflare"),
+        ("Другой сервис", "/webhook/generic")
+    ] %}
+    <div class="api-key-row cluster">
+      <span class="strong">{{ provider }}</span>
+      <code>{{ base_url }}{{ path }}</code>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="muted small mt-4">Секрет вебхука задаётся в настройках сайта: «Watchdog» → «Секрет вебхука». Без секрета запросы принимаются только с доверенного адреса.</p>
+  {% endcall %}
+
+  {% call card("REST API", "Те же данные, что в кабинете: сайты, прогоны, находки и отчёты.") %}
+  {% set headers = [{"label": "Метод"}, {"label": "Адрес"}, {"label": "Что делает"}] %}
+  {% set rows = [
+      {"cells": [{"content": "GET"}, {"content": "<code>/api/sites</code>"}, {"content": "Список сайтов и последних прогонов"}]},
+      {"cells": [{"content": "GET"}, {"content": "<code>/api/sites/{id}</code>"}, {"content": "Сайт и находки последнего прогона"}]},
+      {"cells": [{"content": "POST"}, {"content": "<code>/api/sites/{id}/scan</code>"}, {"content": "Запустить проверку"}]},
+      {"cells": [{"content": "GET"}, {"content": "<code>/api/sites/{id}/report.json</code>"}, {"content": "Отчёт в JSON"}]}
+  ] %}
+  {{ table(headers, rows, class="table--compact") }}
+  <p class="muted small mt-4">API использует сессию кабинета. Отдельных API-ключей в этой версии нет — не храните пароль в CI-переменных, используйте вебхуки.</p>
+  {% endcall %}
+</div>
+
+{% call card("Пример запроса", "Проверьте, что API отвечает, из терминала.") %}
+<pre class="code-block">curl -s -b "webscope_session=$WEBSCOPE_SESSION" \\
+  "{{ base_url }}/api/sites" | head -c 400</pre>
+<p class="muted small">Имя cookie — <code>{{ cookie_name }}</code>. Значение берётся из браузера после входа; в скриптах храните его как секрет.</p>
+{% endcall %}
+{% endblock %}

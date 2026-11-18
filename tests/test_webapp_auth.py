@@ -38,10 +38,18 @@ def test_auth_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_pages_require_login(guarded_app) -> None:
     client, _app = guarded_app
-    for path in ("/", "/sites/1", "/sites/1/settings", "/sites/1/history"):
+    for path in ("/dashboard", "/scan", "/sites/1", "/sites/1/settings", "/sites/1/history"):
         response = client.get(path, follow_redirects=False)
         assert response.status_code == 303, path
         assert response.headers["location"].startswith("/auth/login")
+
+
+def test_marketing_pages_are_public(guarded_app) -> None:
+    """Витрина доступна без входа, кабинет — нет."""
+    client, _app = guarded_app
+    for path in ("/", "/landing"):
+        response = client.get(path, follow_redirects=False)
+        assert response.status_code == 200, path
 
 
 def test_api_requires_login_with_401(guarded_app) -> None:
@@ -70,7 +78,7 @@ def test_login_with_wrong_password(guarded_app) -> None:
     response = client.post("/auth/login", data={"username": USERNAME, "password": "nope"})
     assert response.status_code == 200
     assert "Неверные" in response.text
-    assert client.get("/", follow_redirects=False).status_code == 303
+    assert client.get("/dashboard", follow_redirects=False).status_code == 303
 
 
 def test_login_sets_session_and_grants_access(guarded_app) -> None:
@@ -83,9 +91,9 @@ def test_login_sets_session_and_grants_access(guarded_app) -> None:
     assert response.status_code == 303
     assert response.headers["location"] == "/sites"
 
-    page = client.get("/")
+    page = client.get("/dashboard")
     assert page.status_code == 200
-    assert "Сайт открывается" in page.text
+    assert "Кабинет" in page.text
 
     # cookie не содержит пароля и подписана HMAC'ом
     token = client.cookies.get(COOKIE_NAME)
@@ -97,7 +105,7 @@ def test_forged_cookie_is_rejected(guarded_app) -> None:
     """Раньше cookie со значением «auth» никто не проверял — её подделывал любой."""
     client, _app = guarded_app
     client.cookies.set(COOKIE_NAME, "auth")
-    assert client.get("/", follow_redirects=False).status_code == 303
+    assert client.get("/dashboard", follow_redirects=False).status_code == 303
 
 
 def test_csrf_blocks_foreign_origin(guarded_app) -> None:

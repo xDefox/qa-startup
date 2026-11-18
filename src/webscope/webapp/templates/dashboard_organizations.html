@@ -1,18 +1,31 @@
 {% extends "base.html" %}
-{% from "_macros.html" import card, btn_primary, btn_secondary, field, input, select, checkbox, form_row, form_actions, card_header, dashboard_header, dashboard_tabs, dashboard_header_row, orgs_table, btn_sm, btn_primary %}
-
+{% from "_macros.html" import page_header, dashboard_tabs, card, orgs_table, btn, field, input %}
 {% block title %}Организации — webscope{% endblock %}
-{% block scripts %}
-<script src="/static/js/dashboard_organizations.js"></script>
-{% endblock %}
+{% block scripts %}<script src="/static/js/dashboard_organizations.js"></script>{% endblock %}
+
 {% block content %}
-{{ dashboard_header("Организации", back_text="← К сайтам") }}
+{{ page_header(
+    "Организации",
+    subtitle="Группируйте сайты и пакеты сканов по командам и клиентам.",
+    actions=btn("Создать организацию", variant="primary", icon_name="plus", attrs={"id": "create-org-btn"})
+) }}
 
 {{ dashboard_tabs('organizations') }}
 
-<div class="card">
-  {{ dashboard_header_row("Организации ({{ organizations|length }})", actions=btn_primary("Создать", id="create-org-btn", class="btn")) }}
+{% call card("Организации (" ~ (organizations | length) ~ ")", "Название и email владельца видны только в кабинете.") %}
+{{ orgs_table(organizations) }}
+{% endcall %}
 
-  {{ orgs_table(organizations) }}
-</div>
+<dialog id="org-dialog" class="dialog">
+  <form method="dialog" id="org-form" class="stack">
+    <h2 id="org-dialog-title">Новая организация</h2>
+    <input type="hidden" id="org-id" name="id" value="">
+    {{ field("Название", input("org-name", placeholder="Например, «Студия»", required=True), id="org-name") }}
+    {{ field("Email владельца", input("org-email", type="email", placeholder="owner@example.com"), help_text="Необязательно.", id="org-email") }}
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" value="save">Сохранить</button>
+      <button type="button" class="btn btn-ghost" id="org-cancel">Отмена</button>
+    </div>
+  </form>
+</dialog>
 {% endblock %}

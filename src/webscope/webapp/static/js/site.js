@@ -1,9 +1,13 @@
 // ============================================================
-// Site Page — Scan Progress, Download Panel, FP Toggle, View Toggle
-// Extracted from site.html for CSP compliance
+// Страница отчёта: прогресс проверки, выбор прогона,
+// переключатель вида находок, панель скачивания и FP.
 // ============================================================
 
-// Show scan progress indicator
+function siteIdFromLocation() {
+  const match = window.location.pathname.match(/^\/sites\/(\d+)/);
+  return match ? match[1] : null;
+}
+
 function showScanProgress() {
   if (document.getElementById('scan-progress')) return;
   const box = document.createElement('div');
@@ -18,45 +22,79 @@ function showScanProgress() {
   text.className = 'scan-progress-text';
   text.textContent = 'Идёт проверка сайта… это занимает до минуты. Страница обновится сама.';
   box.append(spinner, text);
-  const card = document.querySelector('main .card');
-  if (card) card.parentNode.insertBefore(box, card);
+  const anchor = document.querySelector('main .report-hero') || document.querySelector('main .card');
+  if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(box, anchor);
   else document.querySelector('main').prepend(box);
 }
 
-// Poll for scan completion
 async function checkScanCompletion(siteId) {
   try {
     const response = await fetch('/api/sites/' + siteId + '/runs');
     const data = await response.json();
-    const running = (data.runs || []).some((run) => run.status === 'running');
+    const running = (data.runs || []).some(function (run) { return run.status === 'running'; });
     if (!running) {
       window.location.reload();
       return;
     }
   } catch (error) {
-    // молча пробуем ещё раз
+    // сеть моргнула — пробуем ещё раз
   }
-  setTimeout(() => checkScanCompletion(siteId), 3000);
+  window.setTimeout(function () { checkScanCompletion(siteId); }, 3000);
 }
 
-// Initialize scan form handler
 (function () {
   const form = document.querySelector('form.scan-form');
   if (!form) return;
-
-  form.addEventListener('submit', async (event) => {
+  form.addEventListener('submit', async function (event) {
     event.preventDefault();
     showScanProgress();
     try {
       await fetch(form.action, { method: 'POST', credentials: 'same-origin' });
-      setTimeout(() => checkScanCompletion(new URL(form.action).pathname.split('/')[3]), 1000);
+      const siteId = siteIdFromLocation();
+      if (siteId) window.setTimeout(function () { checkScanCompletion(siteId); }, 1000);
     } catch (error) {
       form.submit();
     }
   });
 })();
 
-// Download panel handler
+(function () {
+  const pending = document.getElementById('scan-progress');
+  const siteId = siteIdFromLocation();
+  if (pending && siteId) window.setTimeout(function () { checkScanCompletion(siteId); }, 3000);
+})();
+
+(function () {
+  const select = document.getElementById('run-select');
+  if (!select) return;
+  select.addEventListener('change', function () {
+    const siteId = siteIdFromLocation();
+    if (siteId && this.value) window.location.href = '/sites/' + siteId + '/runs/' + this.value;
+  });
+})();
+
+// --- переключатель вида находок ---
+function setFindingsView(mode) {
+  if (mode !== 'list' && mode !== 'table') return;
+  document.querySelectorAll('.findings-view').forEach(function (panel) {
+    panel.hidden = panel.dataset.mode !== mode;
+  });
+  document.querySelectorAll('.view-toggle .view-btn').forEach(function (btn) {
+    btn.setAttribute('aria-pressed', btn.dataset.view === mode ? 'true' : 'false');
+  });
+  localStorage.setItem('webscope_view', mode);
+}
+
+document.querySelectorAll('.view-toggle .view-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () { setFindingsView(btn.dataset.view); });
+});
+
+(function () {
+  const saved = localStorage.getItem('webscope_view') || 'list';
+  setFindingsView(saved === 'table' ? 'table' : 'list');
+})();
+
+// --- панель скачивания ---
 (function () {
   const opener = document.getElementById('download-open');
   const pop = document.getElementById('download-pop');
@@ -72,9 +110,7 @@ async function checkScanCompletion(siteId) {
     let left = anchor.right - box.width;
     left = Math.max(margin, Math.min(left, window.innerWidth - box.width - margin));
     let top = anchor.bottom + gap;
-    if (top + box.height > window.innerHeight - margin) {
-      top = Math.max(margin, anchor.top - box.height - gap);
-    }
+    if (top + box.height > window.innerHeight - margin) top = Math.max(margin, anchor.top - box.height - gap);
     pop.style.left = Math.round(left) + 'px';
     pop.style.top = Math.round(top) + 'px';
   }
@@ -123,7 +159,8 @@ async function checkScanCompletion(siteId) {
     if (focusBack) opener.focus();
   }
 
-  opener.addEventListener('click', function () {
+  opener.addEventListener('click', function (event) {
+    event.stopPropagation();
     if (isOpen) close(true);
     else open();
   });
@@ -137,85 +174,39 @@ async function checkScanCompletion(siteId) {
   window.addEventListener('resize', function () { if (isOpen) place(); });
   window.addEventListener('scroll', function () { if (isOpen) place(); }, true);
 
-  pop.querySelectorAll('a[download]').forEach(function (link) {
+  links.forEach(function (link) {
     link.addEventListener('click', function () { close(false); });
   });
 })();
 
-// FP (false positive) toggle button handler
+// --- ложные находки ---
 (function () {
-  document.querySelectorAll('.btn-fp').forEach(function (btn) {
-    btn.addEventListener('click', async function () {
+  document.querySelectorAll('.btn-fp').forEach(function (button) {
+    button.addEventListener('click', async function () {
       const findingId = this.dataset.findingId;
-      const currentFp = this.dataset.fp === 'true';
-      const newFp = !currentFp;
+      const current = this.dataset.fp === 'true';
+      const next = !current;
 
-      this.dataset.fp = newFp.toString();
-      this.textContent = newFp ? '✓ Ложная находка' : '🚫 Это ложная находка';
+      this.dataset.fp = String(next);
+      this.textContent = next ? '✓ Ложная находка' : 'Это ложная находка';
       this.disabled = true;
 
       try {
         const response = await fetch('/api/findings/' + findingId + '/fp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fp: newFp }),
+          body: JSON.stringify({ fp: next }),
           credentials: 'same-origin'
         });
-        if (!response.ok) throw new Error('Server error');
-        if (window.showToast) {
-          window.showToast(newFp ? 'Находка отмечена как ложная' : 'Находка восстановлена', 'success');
-        }
+        if (!response.ok) throw new Error('Сервер не принял отметку');
+        if (window.showToast) window.showToast(next ? 'Находка отмечена как ложная' : 'Находка восстановлена', 'success');
       } catch (error) {
-        this.dataset.fp = currentFp.toString();
-        this.textContent = currentFp ? '✓ Ложная находка' : '🚫 Это ложная находка';
-        if (window.showToast) {
-          window.showToast('Ошибка: ' + error.message, 'error');
-        }
+        this.dataset.fp = String(current);
+        this.textContent = current ? '✓ Ложная находка' : 'Это ложная находка';
+        if (window.showToast) window.showToast('Ошибка: ' + error.message, 'error');
       } finally {
         this.disabled = false;
       }
     });
-  });
-})();
-
-// View toggle (list/table)
-function setFindingsView(mode) {
-  if (mode !== 'list' && mode !== 'table') return;
-  document.querySelectorAll('.findings-view').forEach(function (panel) {
-    panel.hidden = panel.dataset.mode !== mode;
-  });
-  document.querySelectorAll('.view-toggle .view-btn').forEach(function (btn) {
-    btn.setAttribute('aria-pressed', btn.dataset.view === mode ? 'true' : 'false');
-  });
-  localStorage.setItem('webscope_view', mode);
-}
-
-document.querySelectorAll('.view-toggle .view-btn').forEach(function (btn) {
-  btn.addEventListener('click', function () { setFindingsView(btn.dataset.view); });
-});
-
-(function () {
-  const saved = localStorage.getItem('webscope_view') || 'list';
-  setFindingsView(saved === 'table' ? 'table' : 'list');
-})();
-
-// Auto-check for pending scan on page load
-(function () {
-  const pending = document.getElementById('scan-progress');
-  if (pending) {
-    const siteId = new URL(window.location.href).pathname.split('/')[3];
-    if (siteId) setTimeout(() => checkScanCompletion(siteId), 3000);
-  }
-})();
-
-// Run selector handler
-(function () {
-  const select = document.getElementById('run-select');
-  if (!select) return;
-  select.addEventListener('change', function () {
-    const siteId = new URL(window.location.href).pathname.split('/')[3];
-    if (siteId && this.value) {
-      window.location.href = '/sites/' + siteId + '/runs/' + this.value;
-    }
   });
 })();

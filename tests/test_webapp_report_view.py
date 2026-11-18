@@ -180,7 +180,7 @@ def test_download_trigger_sits_next_to_view_toggle(client) -> None:
     trigger = html.index('id="download-open"', head)
     table = html.index('class="findings-table"', head)
     assert head < toggle < trigger < table, "кнопка сохранения — в шапке, сразу за переключателем вида"
-    assert trigger > html.index("Проверить ещё раз"), "и ниже шапки страницы"
+    assert trigger > html.index("Проверить сайт"), "и ниже шапки страницы"
 
 
 def test_download_panel_is_hidden_until_opened(client) -> None:
@@ -316,9 +316,12 @@ def test_download_button_is_not_a_view_toggle(client) -> None:
     assert "view-btn" not in button, "класс view-btn навесил бы переключатель вида на сохранение"
     assert "icon-btn" in button
     assert "data-view" not in button
-    # и обработчик слушает только переключатель
-    assert "'.view-toggle .view-btn'" in html
-    assert "if (mode !== 'list' && mode !== 'table') return;" in html
+    # и обработчик слушает только переключатель (внешний скрипт страницы)
+    site_js = (Path(__file__).parent.parent / "src" / "webscope" / "webapp" / "static" / "js" / "site.js").read_text(
+        encoding="utf-8"
+    )
+    assert "'.view-toggle .view-btn'" in site_js
+    assert "if (mode !== 'list' && mode !== 'table') return;" in site_js
 
 
 # --- имя файла, выбранное пользователем ---

@@ -56,8 +56,8 @@ def extract_site_id(url: str) -> int | None:
 
 
 def create_test_site(page, base_url, url="https://example.com"):
-    """Создаёт сайт через UI и возвращает site_id (или None если редирект на список)."""
-    page.goto(base_url)
+    """Создаёт сайт через UI кабинета и возвращает site_id."""
+    page.goto(f"{base_url.rstrip('/')}/dashboard")
     page.wait_for_load_state("networkidle")
 
     page.fill('input[name="url"]', url)
@@ -93,8 +93,8 @@ def wait_for_scan_complete(page, site_id, timeout=180000):
 def test_smoke_all_pages_load(page):
     """Smoke: все основные страницы отдают 200 и рендерятся без JS-ошибок."""
     pages = [
-        (BASE_URL, "Проверьте свой сайт — бесплатно"),
-        (f"{BASE_URL}/landing", "Сайт открывается.Заявка — нет."),
+        (BASE_URL, "Сайт открывается"),
+        (f"{BASE_URL}/landing", "Возможности"),
         (f"{BASE_URL}/scan", "Быстрая проверка"),
         (f"{BASE_URL}/scan/oneshot", "Разовая проверка"),
     ]
@@ -118,39 +118,30 @@ def test_smoke_all_pages_load(page):
 
 
 @pytest.mark.e2e
-def test_landing_to_oneshot_to_report(page):
-    """Полный путь: Лендинг → One-shot скан → Отчёт."""
-    # 1. Заходим на лендинг
+def test_landing_to_scan_to_report(page):
+    """Полный путь: «Возможности» → быстрая проверка → отчёт."""
+    # 1. Заходим на страницу возможностей
     page.goto(f"{BASE_URL}/landing")
     page.wait_for_load_state("networkidle")
     page.wait_for_selector("h1", timeout=5000)
 
-    assert "Сайт открывается" in page.locator("h1").first.text_content()
+    assert "Возможности" in page.locator("h1").first.text_content()
 
-    # 2. Кликаем "Проверить сайт бесплатно" → попадаем на /scan/oneshot
-    page.click('a:has-text("Проверить сайт бесплатно")')
+    # 2. Кликаем «Проверить сайт» → попадаем на /scan
+    page.click('a:has-text("Проверить сайт")')
     page.wait_for_load_state("networkidle")
-    page.wait_for_selector("h1:has-text('Разовая проверка')", timeout=5000)
+    page.wait_for_selector("h1:has-text('Быстрая проверка')", timeout=5000)
 
-    assert "/scan/oneshot" in page.url
+    assert "/scan" in page.url
 
-    # 3. Заполняем форму one-shot
+    # 3. Заполняем форму быстрой проверки
     page.fill('input[name="url"]', "https://example.com")
-    page.wait_for_selector('select[name="organization_id"]')
-    page.select_option('select[name="organization_id"]', index=0)
-
-    # Отправляем форму
     page.click('button[type="submit"]')
     page.wait_for_load_state("networkidle")
 
-    # 4. Должно появиться сообщение о запуске проверки
-    page.wait_for_selector("text=Проверка запущена", timeout=30000)
-    page.wait_for_selector("a:has-text('Открыть отчёт')", timeout=15000)
-
-    # 5. Кликаем "Открыть отчёт" → попадаем на страницу сайта с отчётом
-    page.click('a:has-text("Открыть отчёт")')
-    page.wait_for_load_state("networkidle")
+    # 4. После отправки открывается страница сайта с отчётом
     site_id = extract_site_id(page.url)
+    assert site_id is not None, f"Expected /sites/<id>, got: {page.url}"
     wait_for_scan_complete(page, site_id, timeout=60000)
 
     # Проверяем, что отчёт показывает находки (любые)
@@ -159,13 +150,13 @@ def test_landing_to_oneshot_to_report(page):
 
 @pytest.mark.e2e
 def test_home_to_dashboard_flow(page):
-    """Путь: Главная → Добавление сайта → Дашборд → Настройки → Watchdog."""
-    # 1. Главная страница
-    page.goto(BASE_URL)
+    """Путь: Кабинет → Добавление сайта → Отчёт → Настройки → Watchdog."""
+    # 1. Кабинет
+    page.goto(f"{BASE_URL}/dashboard")
     page.wait_for_load_state("networkidle")
     page.wait_for_selector("h1", timeout=5000)
 
-    # 2. Добавляем сайт через форму на главной
+    # 2. Добавляем сайт через форму в кабинете
     page.fill('input[name="url"]', "https://dashboard-test.example.com")
     page.select_option('select[name="schedule"]', value="weekly")
     page.click('button[type="submit"]')
@@ -179,8 +170,8 @@ def test_home_to_dashboard_flow(page):
     if site_id is not None:
         wait_for_scan_complete(page, site_id)
 
-    # 4. Проверяем, что сайт появился в списке на главной
-    page.goto(BASE_URL)
+    # 4. Проверяем, что сайт появился в списке кабинета
+    page.goto(f"{BASE_URL}/dashboard")
     page.wait_for_load_state("networkidle")
     if site_id is not None:
         page.wait_for_selector(f'a[href="/sites/{site_id}"]', timeout=5000)

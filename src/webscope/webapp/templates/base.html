@@ -3,51 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#f6f7f9">
+<meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b1026" media="(prefers-color-scheme: dark)">
+<meta name="description" content="{% block description %}webscope проверяет клики, формы и консоль браузера — чтобы вы узнали о поломке раньше клиента.{% endblock %}">
+<meta name="color-scheme" content="light dark">
 <title>{% block title %}webscope — проверка сайта{% endblock %}</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/css/tokens.css">
 <link rel="stylesheet" href="/static/css/base.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/pages.css">
 {% block head %}{% endblock %}
 </head>
-<body>
-  <header class="top">
-      <div class="logo"><a href="/">webscope<span>.</span></a></div>
-      <nav class="top-nav" aria-label="Главная навигация">
-        <a href="/landing" class="nav-link {% if request.path == '/landing' %}active{% endif %}">Лендинг</a>
-        <a href="/sites" class="nav-link {% if request.path.startswith('/sites') and not request.path.startswith('/sites/') %}active{% endif %}">Сайты</a>
-        {% if auth_enabled %}
-        <a href="/dashboard" class="nav-link {% if request.path.startswith('/dashboard') %}active{% endif %}">Дашборд</a>
-        {% endif %}
-      </nav>
-      <div class="top-actions">
-        {% if auth_enabled %}
-        <a class="pill" href="/auth/logout">Выйти</a>
-        {% endif %}
-        <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Сменить тему">
-          <span class="theme-icon" aria-hidden="true"></span>
-        </button>
-        <button type="button" id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Меню" aria-expanded="false" aria-controls="mobile-nav">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></svg>
-        </button>
-      </div>
-    </header>
-  <nav id="mobile-nav" class="mobile-nav" aria-label="Мобильная навигация" hidden>
-    <a href="/landing" class="mobile-nav-link">Лендинг</a>
-    <a href="/sites" class="mobile-nav-link">Сайты</a>
-    {% if auth_enabled %}
-    <a href="/dashboard" class="mobile-nav-link">Дашборд</a>
-    {% endif %}
-  </nav>
-  <main>
-    {% block content %}{% endblock %}
-  </main>
-  <footer>
-    Проверка автоматическая: она находит типовые проблемы доступности, работоспособности
-    и удобства на телефоне, но не заменяет проверку человеком.
-  </footer>
-  <script src="/static/js/base.js"></script>
-  {% block scripts %}{% endblock %}
+<body class="{% block body_class %}{% endblock %}">
+<a class="skip-link" href="#main">Перейти к содержанию</a>
 
-  <!-- Chart.js for score history charts (UMD build) -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% block header %}{% from "_layout.html" import app_header %}{{ app_header(request) }}{% endblock %}
+
+<main id="main" class="{% block main_class %}page{% endblock %}">
+  <div class="{% block container_class %}container{% endblock %}">
+    {% block content %}{% endblock %}
+  </div>
+</main>
+
+{% block footer %}{% from "_layout.html" import app_footer %}{{ app_footer() }}{% endblock %}
+
+<div id="toast-container" aria-live="polite" aria-atomic="false"></div>
+<script src="/static/js/base.js"></script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

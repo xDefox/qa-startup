@@ -40,7 +40,7 @@ DOWNLOAD_FORMATS = (
     {"ext": "txt", "label": "TXT", "hint": "Прочитать в терминале или письмом"},
     {"ext": "xml", "label": "JUnit", "hint": "Для CI: Jenkins, GitLab, pytest"},
     {"ext": "sarif", "label": "SARIF", "hint": "Для GitHub Code Scanning"},
-    {"ext": "pdf", "label": "PDF", "hint": "Отчёт для рассылки и存档"},
+    {"ext": "pdf", "label": "PDF", "hint": "Отчёт для рассылки и архива"},
 )
 
 # Сколько символов имени файла разрешаем: длиннее браузеры и файловые

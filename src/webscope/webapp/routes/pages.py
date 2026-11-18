@@ -24,28 +24,21 @@ from ..services.site_service import (
 )
 from ..state import AppState, get_state
 from ..urls import normalize_url
-from ..views import SCHEDULE_LABELS, build_report_view
+from ..views import SCHEDULE_LABELS, SCHEDULE_OPTIONS, build_report_view
 
 router = APIRouter()
 
 
 @router.get("/landing", response_class=HTMLResponse)
 def landing(request: Request, state: AppState = Depends(get_state)):
-    """Лендинг-страница — публичная, доступна без входа."""
-    return _page(state, request, "landing.html", {
-        "organizations": get_organizations(state.storage),
-    })
+    """Возможности: публичная страница с подробным описанием проверок."""
+    return _page(state, request, "landing.html", {})
 
 
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request, state: AppState = Depends(get_state)):
-    """Публичная лендинг-страница — главная страница, доступна без входа."""
-    return _page(state, request, "index.html", {
-        "sites": index_cards(state),
-        "schedules": SCHEDULE_LABELS,
-        "error": None,
-        "organizations": get_organizations(state.storage),
-    })
+    """Главная: публичный лендинг с быстрой проверкой адреса."""
+    return _page(state, request, "index.html", {"error": None})
 
 
 @router.get("/scan/oneshot", response_class=HTMLResponse)
@@ -145,40 +138,38 @@ def sites_index():
     return RedirectResponse(url="/dashboard", status_code=303)
 
 
+def _report_context(state: AppState, site, run, *, pending=None, last_error=None) -> dict:
+    """Один контекст для страницы сайта и детального прогона."""
+    runs = [item for item in state.storage.list_runs(site.id, limit=60) if item.status == "ok"]
+    org = get_organization(state.storage, site.organization_id) if site.organization_id else None
+    return {
+        "site": site,
+        "view": build_report_view(state.storage, run) if run else None,
+        "run": run,
+        "pending": pending,
+        "last_error": last_error,
+        "schedule_label": SCHEDULE_LABELS.get(site.schedule, site.schedule),
+        "download_formats": DOWNLOAD_FORMATS,
+        "download_default_name": default_report_stem(site, run) if run else None,
+        "download_date": human_date(run.started_at) if run else None,
+        "organization_name": org.name if org else None,
+        "runs": runs,
+        "current_run_id": run.id if run else None,
+    }
+
+
 @router.get("/sites/{site_id}", response_class=HTMLResponse)
 def site_page(request: Request, site_id: int, state: AppState = Depends(get_state)):
     site = get_site_or_404(state, site_id)
-
     pending = state.storage.running_run(site.id)
     last = state.storage.latest_ok_run(site.id)
     newest = state.storage.latest_run(site.id)
     last_error = newest.error if newest and newest.status == "error" else None
-    view = build_report_view(state.storage, last) if last else None
-
-    # Все успешные прогоны для dropdown выбора итерации
-    runs = [run for run in state.storage.list_runs(site.id, limit=60) if run.status == "ok"]
-
-    org = get_organization(state.storage, site.organization_id) if site.organization_id else None
-    organization_name = org.name if org else None
-
     return _page(
         state,
         request,
         "site.html",
-        {
-            "site": site,
-            "view": view,
-            "pending": pending,
-            "last_error": last_error,
-            "schedule_label": SCHEDULE_LABELS.get(site.schedule, site.schedule),
-            "download_formats": DOWNLOAD_FORMATS,
-            "download_sample": download_filename(site, last, "json") if last else None,
-            "download_default_name": default_report_stem(site, last) if last else None,
-            "download_date": human_date(last.started_at) if last else None,
-            "organization_name": organization_name,
-            "runs": runs,
-            "current_run_id": last.id if last else None,
-        },
+        _report_context(state, site, last, pending=pending, last_error=last_error),
     )
 
 
@@ -207,28 +198,9 @@ def run_detail(request: Request, site_id: int, run_id: int, state: AppState = De
     run = state.storage.get_run(run_id)
     if not run or run.site_id != site.id:
         raise HTTPException(status_code=404, detail="Прогон не найден")
-    
-    findings = state.storage.get_findings(run.id)
-    # Создаём временный ScanResult для рендеринга
-    from ..models import ScanResult
-    result = ScanResult(
-        url=site.url,
-        final_url=run.final_url,
-        title=run.title,
-        archetype=run.archetype,
-        findings=findings,
-        duration_ms=run.duration_ms,
-        pages_scanned=run.pages_scanned,
-        notes=run.notes or [],
-    )
-    view = build_report_view(result, state.storage)
-    return _page(state, request, "site.html", {
-        "site": site,
-        "result": result,
-        "view": view,
-        "run": run,
-        "is_history": True,
-    })
+    context = _report_context(state, site, run)
+    context["is_history"] = True
+    return _page(state, request, "site.html", context)
 
 
 @router.get("/sites/{site_id}/settings", response_class=HTMLResponse)
@@ -244,7 +216,7 @@ def site_settings(request: Request, site_id: int, state: AppState = Depends(get_
             "site": site,
             "organization_name": org.name if org else None,
             "organizations": get_organizations(state.storage),
-            "schedules": SCHEDULE_LABELS,
+            "schedules": SCHEDULE_OPTIONS,
             "saved": saved,
             "packages": packages,
         },

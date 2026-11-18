@@ -345,9 +345,9 @@ def web(tmp_path: Path):
         yield client, app.state.webscope.storage
 
 
-def test_index_renders_auth_checkbox(web) -> None:
+def test_dashboard_renders_auth_checkbox(web) -> None:
     client, _ = web
-    response = client.get("/")
+    response = client.get("/dashboard")
     assert response.status_code == 200
     assert "Нужен вход" in response.text
     assert 'name="auth_enabled"' in response.text

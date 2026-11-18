@@ -1,53 +1,38 @@
 {% extends "base.html" %}
-{% from "_macros.html" import card, btn_primary, btn_secondary, field, input, select, checkbox, form_row, form_actions, card_header, section_divider, steps_grid, problem_cards, btn_lg, btn_primary, hero_card %}
-
+{% from "_macros.html" import card, btn, flash, quick_scan_form, steps_grid %}
 {% block title %}Быстрая проверка сайта — webscope{% endblock %}
-{% block scripts %}
-<script src="/static/js/scan.js"></script>
-{% endblock %}
+{% block description %}Вставьте адрес — проверим доступность, формы, консоль и мобильную вёрстку. Без установки и настройки.{% endblock %}
+{% block scripts %}<script src="/static/js/scan.js"></script>{% endblock %}
+
 {% block content %}
+{{ flash(error, category="error") }}
 
-{% if error %}
-<div class="error">{{ error }}</div>
-{% endif %}
-
-<!-- Toast container -->
-<div id="toast-container" aria-live="polite"></div>
-
-{{ hero_card(
-    title="Быстрая проверка сайта",
-    subtitle="Вставьте адрес — проверим доступность, формы, консоль и мобильную вёрстку. Бесплатно, без карты, результат за 30–60 секунд.",
-    cta_text="Проверить сайт",
-    cta_href="/scan/oneshot",
-    cta_class="btn btn-primary btn-lg btn-hero",
-    secondary_text="Как это работает",
-    secondary_href="#how-it-works",
-    trust_text="5 находок бесплатно · без карты · запуск за 30 секунд"
-) }}
-
-<form method="post" action="/sites" id="scan-form">
-  {{ field('Адрес сайта', input('url', type='url', placeholder='https://example.com', autocomplete='url', attrs={'inputmode': 'url', 'required': 'required'})) }}
-  <div class="actions">
-    <button type="submit" class="btn btn-primary btn-lg" id="scan-submit">Проверить сайт</button>
+<div class="page-header">
+  <div>
+    <span class="eyebrow"><span class="eyebrow__dot"></span>Бесплатно</span>
+    <h1>Быстрая проверка сайта</h1>
+    <p class="page-header__meta">{% if auth_enabled and not is_authenticated(request) %}Проверка запускается из кабинета: войдите, и адрес откроется в форме.{% else %}Вставьте адрес — проверим доступность, формы, консоль и мобильную вёрстку. Результат за 30–60 секунд.{% endif %}</p>
   </div>
-</form>
-<p class="muted small">Проверяем: a11y (axe-core, WCAG 2.2 AA), консоль и сеть, формы и клики, мобильная вёрстка. Результат — оценка 0–100 и топ-3 задачи.</p>
-
-{{ section_divider() }}
-
-{{ steps_grid([
-    {title: 'Доступность (a11y)', text: 'axe-core: WCAG 2.2 AA, контраст, ARIA, заголовки.'},
-    {title: 'Консоль и сеть', text: 'JS-ошибки, упавшие запросы (4xx/5xx), uncaught exceptions.'},
-    {title: 'Формы и клики', text: 'Поля без label, кнопки без имени, перекрытые элементы.'},
-    {title: 'Мобильная вёрстка', text: 'Горизонтальный скролл на 320/768px, таргеты < 44×44px.'}
-]) }}
-
-{{ section_divider() }}
-
-<div class="card">
-  <h2>Хотите проверять регулярно?</h2>
-  <p class="muted">Добавьте сайт в мониторинг — получите еженедельные отчёты, диффы и алерты в Telegram/Email.</p>
-  <a href="/auth/login?next=/sites/new" class="btn btn-primary">Добавить сайт в кабинет</a>
 </div>
 
+{% call card(class="card--accent") %}
+{{ quick_scan_form(request, note="Бесплатно · без установки") }}
+{% endcall %}
+
+<section class="section section--tight">
+  <div class="section-head section-head--left">
+    <h2>Что проверим</h2>
+    <p>Без установки и настройки — как это увидит клиент.</p>
+  </div>
+  {{ steps_grid([
+      {"title": "Доступность", "text": "WCAG 2.2 AA: контраст, ARIA, заголовки, подписи полей."},
+      {"title": "Консоль и сеть", "text": "JS-ошибки, упавшие запросы 4xx/5xx, uncaught exceptions."},
+      {"title": "Формы и клики", "text": "Перекрытые кнопки, поля без label, невидимые ссылки."},
+      {"title": "Мобильная вёрстка", "text": "Горизонтальная прокрутка на 320/768px, цели меньше 24×24px."}
+  ]) }}
+</section>
+
+{% call card("Хотите проверять регулярно?", "Добавьте сайт в мониторинг: еженедельные отчёты, диффы и алерты в Telegram или на email.") %}
+{{ btn("Открыть кабинет", href="/dashboard", icon_name="arrow-right", icon_right=True) }}
+{% endcall %}
 {% endblock %}

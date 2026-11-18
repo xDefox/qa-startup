@@ -1,0 +1,110 @@
+{# ============================================================
+   webscope — каркас: шапка, подвал, служебные блоки
+   ============================================================ #}
+{% from "_icons.html" import icon %}
+
+{% macro brand(href="/") -%}
+<a class="brand" href="{{ href }}" aria-label="webscope — на главную">
+  <span class="brand__mark">{{ icon("scan", 17) }}</span>
+  <span>webscope<span class="brand__dot">.</span></span>
+</a>
+{%- endmacro %}
+
+{% macro app_header(request) -%}
+{%- set path = request.url.path if request else "/" -%}
+{%- set is_home = path == "/" -%}
+{%- set is_landing = path.startswith("/landing") -%}
+{%- set is_dashboard = path.startswith("/dashboard") or path.startswith("/sites") -%}
+{%- set show_scan_cta = path not in ("/", "/landing") and not path.startswith("/scan") and not path.startswith("/sites") -%}
+<header class="app-header">
+  <div class="container app-header__inner">
+    {{ brand() }}
+    <nav class="site-nav" aria-label="Главная навигация">
+      <a href="/" class="nav-link{% if is_home %} active{% endif %}">Главная</a>
+      <a href="/landing" class="nav-link{% if is_landing %} active{% endif %}">Возможности</a>
+      <a href="/dashboard" class="nav-link{% if is_dashboard %} active{% endif %}">Кабинет</a>
+    </nav>
+    <div class="header-actions">
+      {% if auth_enabled and is_authenticated(request) %}
+      <a class="pill" href="/auth/logout">Выйти</a>
+      {% endif %}
+      {% if show_scan_cta %}
+      <a class="btn btn-sm btn-secondary" href="/scan">Проверить сайт</a>
+      {% endif %}
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Сменить тему">
+        <span class="theme-icon" aria-hidden="true">{{ icon("sun", 19) }}</span>
+      </button>
+      <button type="button" id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Меню" aria-expanded="false" aria-controls="mobile-nav">
+        {{ icon("menu", 20) }}
+      </button>
+    </div>
+  </div>
+</header>
+<nav id="mobile-nav" class="mobile-nav" aria-label="Мобильная навигация" hidden>
+  <a href="/" class="mobile-nav-link{% if is_home %} active{% endif %}">Главная {{ icon("arrow-right", 18) }}</a>
+  <a href="/landing" class="mobile-nav-link{% if is_landing %} active{% endif %}">Возможности {{ icon("arrow-right", 18) }}</a>
+  <a href="/dashboard" class="mobile-nav-link{% if is_dashboard %} active{% endif %}">Кабинет {{ icon("arrow-right", 18) }}</a>
+  {% if auth_enabled and is_authenticated(request) %}
+  <a href="/auth/logout" class="mobile-nav-link">Выйти {{ icon("arrow-right", 18) }}</a>
+  {% endif %}
+  {% if show_scan_cta %}
+  <div class="mobile-nav__footer">
+    <a class="btn btn-primary btn-block" href="/scan">Проверить сайт</a>
+  </div>
+  {% endif %}
+</nav>
+{%- endmacro %}
+
+{% macro auth_header() -%}
+<header class="app-header">
+  <div class="container app-header__inner">
+    {{ brand() }}
+    <div class="header-actions">
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Сменить тему">
+        <span class="theme-icon" aria-hidden="true">{{ icon("sun", 19) }}</span>
+      </button>
+    </div>
+  </div>
+</header>
+{%- endmacro %}
+
+{% macro app_footer() -%}
+<footer class="app-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        {{ brand() }}
+        <p class="mt-2">Проверяем клики, формы и консоль браузера. Чтобы вы узнали о поломке раньше клиента.</p>
+      </div>
+      <div>
+        <p class="footer-title">Продукт</p>
+        <div class="footer-links">
+          <a href="/scan">Быстрая проверка</a>
+          <a href="/landing">Возможности</a>
+          <a href="/#pricing">Тарифы</a>
+          <a href="/dashboard">Кабинет</a>
+        </div>
+      </div>
+      <div>
+        <p class="footer-title">Как работает</p>
+        <div class="footer-links">
+          <a href="/#how-it-works">Обход сайта</a>
+          <a href="/#report">Пример отчёта</a>
+          <a href="/#faq">Вопросы и ответы</a>
+        </div>
+      </div>
+      <div>
+        <p class="footer-title">На связи</p>
+        <div class="footer-links">
+          <a href="mailto:hello@webscope.dev">hello@webscope.dev</a>
+          <a href="/#security">Как хранятся данные</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 webscope. Проверка автоматическая: она не заменяет проверку человеком.</span>
+      <span>Работает на вашем сервере · без внешних трекеров</span>
+    </div>
+  </div>
+</footer>
+{%- endmacro %}

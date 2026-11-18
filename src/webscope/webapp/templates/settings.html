@@ -1,30 +1,30 @@
 {% extends "base.html" %}
-{% from "_macros.html" import card, btn_primary, btn_secondary, field, input, select, checkbox, form_row, form_actions, card_header, auth_block, watchdog_section, section_divider, packages_table, flash %}
+{% from "_macros.html" import page_header, card, field, input, select, btn, auth_block, watchdog_section, packages_grid, flash, alert %}
+{% from "_icons.html" import icon %}
 
 {% block title %}{{ site.url }} — настройки{% endblock %}
-{% block scripts %}
-<script src="/static/js/settings.js"></script>
-{% endblock %}
+{% block scripts %}<script src="/static/js/settings.js"></script>{% endblock %}
+
 {% block content %}
+{{ page_header(
+    "Настройки сайта",
+    subtitle=site.url,
+    back_url="/sites/" ~ site.id,
+    back_text="К отчёту",
+    actions=btn("История проверок", href="/sites/" ~ site.id ~ "/history", variant="secondary", icon_name="history")
+) }}
 
-<div class="card">
-  <h1>Настройки сайта</h1>
-  <p class="muted small"><a href="/sites/{{ site.id }}">← к отчёту</a> · {{ site.url }}</p>
+{% if saved %}{{ alert("Настройки сохранены.", variant="success", icon_name="check") }}{% endif %}
 
-  {{ flash() }}
+{% call card("Уведомления и расписание", "Куда присылать отчёты и как часто проверять сайт.") %}
+<form method="post" action="/sites/{{ site.id }}/settings" class="stack">
+  <div class="row">
+    {{ field("Куда присылать отчёты", input("email", type="email", value=site.email or "", placeholder="you@example.com", autocomplete="email", attrs={"spellcheck": "false"}), help_text="Можно оставить пустым, если хватает Telegram.", id="email") }}
+    {{ field("Telegram: id чата или @канал", input("telegram_chat", value=site.telegram_chat or "", placeholder="-1001234567890", attrs={"spellcheck": "false"}), help_text="Алерты о новых проблемах и восстановлении.", id="telegram_chat") }}
+  </div>
 
-  <form method="post" action="/sites/{{ site.id }}/settings">
-    <div class="row">
-      <div class="field settings-field-flex">
-        {{ field('Куда присылать отчёты', input('email', value=site.email or '', placeholder='you@example.com', autocomplete='email', attrs={'spellcheck': 'false'})) }}
-      </div>
-      <div class="field settings-field-flex">
-        {{ field('Telegram: id чата или @канал', input('telegram_chat', value=site.telegram_chat or '', placeholder='-1001234567890', attrs={'spellcheck': 'false'})) }}
-      </div>
-    </div
-    <div class="field">
-      {{ field('Как часто проверять', select('schedule', schedules, value=site.schedule)) }}
-    </div>
+  <div class="row">
+    {{ field("Как часто проверять", select("schedule", schedules, value=site.schedule), help_text="Расписание применяется к следующей проверке.", id="schedule") }}
     <div class="field">
       <label for="organization">Организация</label>
       <select id="organization" name="organization_id">
@@ -32,76 +32,32 @@
         <option value="{{ org.id }}" {% if site.organization_id == org.id %}selected{% endif %}>{{ org.name }}</option>
         {% endfor %}
       </select>
+      <p class="field-hint">Группирует сайты и пакеты сканов.</p>
     </div>
+  </div>
+
+  <fieldset class="field">
+    <legend class="field-label">Вход на защищённый сайт</legend>
     {{ auth_block(site) }}
-    <div class="actions">
-      <button type="submit" class="btn btn-primary">Сохранить</button>
-    </div>
-  </form>
-</div>
+  </fieldset>
 
-{{ section_divider() }}
-
-<div class="card">
-  <h2>Мои пакеты сканов</h2>
-  <p class="muted small">Пакеты не сгорают — списываются за факт сканирования. Watchdog включён в каждый пакет.</p>
-  
-  <div class="actions actions-margin">
-    {{ btn_primary("Купить пакет / Разовая проверка", href="/scan/oneshot") }}
+  <div class="form-actions">
+    {{ btn("Сохранить", type="submit", icon_name="check") }}
   </div>
-  
-  {% if packages %}
-  <div class="packages-grid">
-    {% for pkg in packages %}
-    <div class="package-card {% if not pkg.is_active %}inactive{% endif %}">
-      <div class="package-header">
-        <span class="package-scans">{{ pkg.scans_left }} / {{ pkg.scans_total }}</span>
-        <span class="package-status {% if pkg.is_active %}active{% else %}inactive{% endif %}">{{ 'Активен' if pkg.is_active else 'Исчерпан' }}</span>
-      </div>
-      <div class="package-details">
-        <div class="package-row">
-          <span>Цена:</span>
-          <span>${{ (pkg.price_cents / 100) | round(2) }} {{ pkg.currency }}</span>
-        </div>
-        <div class="package-row">
-          <span>Куплен:</span>
-          <span>{{ pkg.created_at[:10] }}</span>
-        </div>
-        <div class="package-row">
-          <span>Статус:</span>
-          <span class="status-badge {{ pkg.status }}">{{ pkg.status }}</span>
-        </div>
-      </div>
-      {% if pkg.is_active %}
-      <div class="package-actions">
-        {{ btn_primary("Использовать ({{ pkg.scans_left }} сканов)", href="/scan/oneshot", class="btn btn-primary btn-sm") }}
-      </div>
-      {% endif %}
-    </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <p class="muted">Пакетов пока нет. <a href="/scan/oneshot">Купить первый пакет</a></p>
-  {% endif %}
-</div>
+</form>
+{% endcall %}
 
-{{ section_divider() }}
+{% call card("Пакеты сканов", "Пакеты не сгорают: один прогон списывает один скан.") %}
+{{ packages_grid(packages) }}
+{% endcall %}
 
 {{ watchdog_section(site) }}
 
-{{ section_divider() }}
-
-<div class="card">
-  <h2>Удаление сайта</h2>
-  <p class="muted small">
-    Сайт, все прогоны и история проверок будут удалены безвозвратно.
-    Проверки по расписанию прекратятся.
-  </p>
-  <form method="post" action="/sites/{{ site.id }}/delete" id="delete-site-form">
-    <div class="actions">
-      <button type="submit" class="btn btn-danger">Удалить сайт и историю</button>
-    </div>
-  </form>
-</div>
-
+{% call card("Удаление сайта", "Сайт, все прогоны и история проверок будут удалены безвозвратно. Проверки по расписанию прекратятся.", class="card--danger") %}
+<form method="post" action="/sites/{{ site.id }}/delete" id="delete-site-form" data-site-url="{{ site.url }}">
+  <div class="form-actions">
+    {{ btn("Удалить сайт и историю", type="submit", variant="danger", icon_name="trash") }}
+  </div>
+</form>
+{% endcall %}
 {% endblock %}

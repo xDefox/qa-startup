@@ -1,63 +1,64 @@
 {% extends "base.html" %}
-{% from "_macros.html" import card, btn_primary, btn_secondary, field, input, select, checkbox, form_row, form_actions, card_header, section_divider, btn_sm, btn_primary %}
-
+{% from "_macros.html" import page_header, card, score_chart, table, empty_state %}
 {% block title %}{{ site.url }} — история проверок{% endblock %}
-{% block scripts %}
-<script src="/static/js/history.js"></script>
-{% endblock %}
+{% block description %}История проверок {{ site.url }}: оценки, находки по серьёзности и динамика.{% endblock %}
+
 {% block content %}
+{{ page_header(
+    "История проверок",
+    subtitle=site.url,
+    back_url="/sites/" ~ site.id,
+    back_text="К отчёту"
+) }}
 
-<div class="card">
-  <h1>История проверок</h1>
-  <p class="muted small"><a href="/sites/{{ site.id }}">← к отчёту</a> · {{ site.url }}</p>
+{% if runs %}
+{% set scores = runs | map(attribute='score') | list %}
+{% set best = scores | max %}
+{% set worst = scores | min %}
 
-  {% if runs %}
-    {% set scores = runs | map(attribute='score') | list %}
-    {% set best = scores | max %}
-    {% set worst = scores | min %}
-    {% set labels = [] %}
-    {% set data = [] %}
-    {% for run in runs %}
-      {% set _ = labels.append((run.finished_at or run.started_at)[:16].replace('T', ' ')) %}
-      {% set _ = data.append(run.score or 0) %}
-    {% endfor %}
-    <div class="margin-vertical-lg">
-      <canvas id="scoreChart" height="120" aria-label="Динамика оценка" data-labels="{{ labels | tojson }}" data-data="{{ data | tojson }}"></canvas>
-      <div class="muted small">Оценка по прогонам: от {{ worst }} до {{ best }}</div>
-    </div>
-
-    <table>
-      <thead>
-        <tr>
-          <th>Когда</th>
-          <th>Статус</th>
-          <th class="num">Оценка</th>
-          <th class="num">Критично</th>
-          <th class="num">Существенно</th>
-          <th class="num">Желательно</th>
-          <th class="num">Мелочи</th>
-          <th class="num">Страниц</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for run in runs %}
-        {% set bucket = counts.get(run.id, {}) %}
-        <tr>
-          <td><a href="/sites/{{ site.id }}/runs/{{ run.id }}">{{ run.finished_at[:16].replace('T', ' ') if run.finished_at else run.started_at[:16].replace('T', ' ') }}</a></td>
-          <td>{% if run.status == 'ok' %}Ок{% elif run.status == 'error' %}Ошибка{% else %}{{ run.status }}{% endif %}</td>
-          <td class="num">{% if run.status == 'ok' %}<b>{{ run.score }}</b>{% else %}—{% endif %}</td>
-          <td class="num">{% if run.status == 'ok' %}{{ bucket.get('critical', 0) }}{% else %}—{% endif %}</td>
-          <td class="num">{% if run.status == 'ok' %}{{ bucket.get('serious', 0) }}{% else %}—{% endif %}</td>
-          <td class="num">{% if run.status == 'ok' %}{{ bucket.get('moderate', 0) }}{% else %}—{% endif %}</td>
-          <td class="num">{% if run.status == 'ok' %}{{ bucket.get('minor', 0) }}{% else %}—{% endif %}</td>
-          <td class="num">{% if run.status == 'ok' %}{{ run.pages_scanned }}{% else %}—{% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p class="muted">История пуста — сделайте первую проверку.</p>
-  {% endif %}
+<div class="grid grid--3 metrics-row mb-6">
+  <div class="metric"><span class="metric__value">{{ runs | length }}</span><span class="metric__label">{{ runs | length | ru_plural("успешная проверка", "успешные проверки", "успешных проверок") }}</span></div>
+  <div class="metric"><span class="metric__value score-ok">{{ best }}</span><span class="metric__label">лучшая оценка</span></div>
+  <div class="metric"><span class="metric__value score-{{ worst | score_tone }}">{{ worst }}</span><span class="metric__label">худшая оценка</span></div>
 </div>
 
+{% call card("Динамика оценки", "От старых проверок к новым. Наведите на точку, чтобы увидеть дату и балл.") %}
+{{ score_chart(runs | reverse | list) }}
+{% if runs | length < 2 %}
+<p class="muted small mt-2">Пока одна проверка — график появится после второго прогона.</p>
+{% endif %}
+{% endcall %}
+
+{% set headers = [
+    {"label": "Когда"},
+    {"label": "Статус"},
+    {"label": "Оценка", "class": "num"},
+    {"label": "Критично", "class": "num"},
+    {"label": "Существенно", "class": "num"},
+    {"label": "Желательно", "class": "num"},
+    {"label": "Мелочи", "class": "num"},
+    {"label": "Страниц", "class": "num"}
+] %}
+{% set rows = [] %}
+{% for run in runs %}
+  {% set bucket = counts.get(run.id, {}) %}
+  {% set _ = rows.append({"cells": [
+      {"content": '<a href="/sites/' ~ site.id ~ '/runs/' ~ run.id ~ '">' ~ (run.finished_at | dt) ~ '</a>'},
+      {"content": '<span class="status-badge ' ~ run.status ~ '">' ~ ('Ок' if run.status == 'ok' else 'Ошибка' if run.status == 'error' else run.status) ~ '</span>'},
+      {"content": ('<b>' ~ run.score ~ '</b>') if run.status == 'ok' else '—', "class": "num"},
+      {"content": bucket.get('critical', 0) if run.status == 'ok' else '—', "class": "num"},
+      {"content": bucket.get('serious', 0) if run.status == 'ok' else '—', "class": "num"},
+      {"content": bucket.get('moderate', 0) if run.status == 'ok' else '—', "class": "num"},
+      {"content": bucket.get('minor', 0) if run.status == 'ok' else '—', "class": "num"},
+      {"content": run.pages_scanned if run.status == 'ok' else '—', "class": "num"}
+  ]}) %}
+{% endfor %}
+
+{% call card("Все прогоны", "Нажмите на дату, чтобы открыть отчёт конкретной проверки.") %}
+{{ table(headers, rows, class="table--compact runs-table") }}
+{% endcall %}
+
+{% else %}
+{{ empty_state("history", "История пуста", "Сделайте первую проверку — здесь появятся оценки и динамика.", "Проверить сайт", "/sites/" ~ site.id) }}
+{% endif %}
 {% endblock %}

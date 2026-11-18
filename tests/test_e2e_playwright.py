@@ -43,29 +43,29 @@ async def test_homepage_loads(page):
     h1_text = await page.locator("h1").first.text_content()
     assert "Сайт открывается" in h1_text
 
-    # Проверяем CTA кнопки
-    cta_primary = page.locator('a:has-text("Проверить сайт бесплатно")')
+    # Проверяем CTA: форма в герое и ссылка на объяснение
+    cta_primary = page.locator('button:has-text("Проверить сайт")')
     cta_secondary = page.locator('a:has-text("Как это работает")')
     await cta_primary.wait_for(state="visible", timeout=5000)
     await cta_secondary.wait_for(state="visible", timeout=5000)
 
     # Проверяем trust badge
-    trust_badge = page.locator("text=5 находок бесплатно")
+    trust_badge = page.locator("text=Бесплатно · без установки")
     await trust_badge.wait_for(state="visible", timeout=5000)
 
 
 @pytest.mark.e2e
-async def test_hero_cta_redirects_to_oneshot(page):
-    """Клик по основной CTA кнопке перенаправляет на /scan/oneshot."""
-    await page.goto(BASE_URL)
+async def test_landing_cta_redirects_to_scan(page):
+    """Клик по CTA на странице возможностей ведёт на быструю проверку."""
+    await page.goto(f"{BASE_URL}/landing")
     await page.wait_for_load_state("networkidle")
 
-    cta = page.locator('a:has-text("Проверить сайт бесплатно")').first
+    cta = page.locator('a:has-text("Проверить сайт")').first
     await cta.click()
     await page.wait_for_load_state("networkidle")
 
-    assert "/scan/oneshot" in page.url
-    await page.wait_for_selector("h1:has-text('Разовая проверка')", timeout=5000)
+    assert "/scan" in page.url
+    await page.wait_for_selector("h1:has-text('Быстрая проверка')", timeout=5000)
 
 
 @pytest.mark.e2e
@@ -78,24 +78,24 @@ async def test_how_it_works_scroll(page):
     await cta.click()
     await page.wait_for_load_state("networkidle")
 
-    # Должен быть якорь #how-it-works или /landing#how-it-works
-    assert "#how-it-works" in page.url or "/landing#how-it-works" in page.url
+    # Должен быть якорь #how-it-works на главной
+    assert "#how-it-works" in page.url
 
 
 @pytest.mark.e2e
 async def test_landing_page_loads(page):
-    """Лендинг загружается с ключевыми секциями."""
+    """Страница «Возможности» загружается с ключевыми секциями."""
     await page.goto(f"{BASE_URL}/landing")
     await page.wait_for_load_state("networkidle")
 
     await page.wait_for_selector("h1", timeout=5000)
     h1_text = await page.locator("h1").first.text_content()
-    assert "Сайт открывается" in h1_text
+    assert "Возможности" in h1_text
 
     # Проверяем ключевые секции
-    await page.wait_for_selector("#how-it-works", timeout=5000)
-    await page.wait_for_selector("#problem", timeout=5000)
-    await page.wait_for_selector(".plans-grid", timeout=5000)
+    await page.wait_for_selector("#checks", timeout=5000)
+    await page.wait_for_selector("#pipeline", timeout=5000)
+    await page.wait_for_selector("#watchdog", timeout=5000)
 
 
 @pytest.mark.e2e

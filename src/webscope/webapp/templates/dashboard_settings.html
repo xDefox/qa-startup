@@ -1,48 +1,41 @@
 {% extends "base.html" %}
-{% from "_macros.html" import card, btn_primary, btn_secondary, field, input, select, checkbox, form_row, form_actions, card_header, dashboard_header, dashboard_tabs, dashboard_header_row, btn_sm, btn_primary %}
+{% from "_macros.html" import page_header, dashboard_tabs, card, btn, alert %}
+{% from "_icons.html" import icon %}
+{% block title %}Аккаунт — webscope{% endblock %}
 
-{% block title %}Настройки профиля — webscope{% endblock %}
 {% block content %}
-{{ dashboard_header("Настройки профиля", back_text="← К сайтам") }}
+{{ page_header(
+    "Аккаунт",
+    subtitle="Доступ к кабинету и уведомления по умолчанию.",
+    actions=btn("Мои сайты", href="/dashboard", variant="secondary")
+) }}
 
 {{ dashboard_tabs('settings') }}
 
-<div class="card">
-  <h3>Профиль</h3>
-  <form method="post" action="/dashboard/settings">
-    <div class="row">
-      <div class="field">
-        <label>Логин</label>
-        <input type="text" value="{{ user.username }}" disabled>
-        <small class="muted">Логин задаётся через переменную окружения WEBSCOPE_AUTH_USER</small>
-      </div>
-      <div class="field">
-        {{ field('Новый пароль', input('new_password', type='password', placeholder='Оставьте пустым, чтобы не менять', autocomplete='new-password')) }}
-      </div>
-      <div class="field">
-        {{ field('Подтвердите пароль', input('confirm_password', type='password', autocomplete='new-password')) }}
-      </div>
-    </div>
-    <div class="actions">
-      <button type="submit" class="btn btn-primary">Сохранить</button>
-    </div>
-  </form>
+<div class="grid grid--2">
+  {% call card("Профиль") %}
+  <div class="stack stack--sm">
+    <div class="metric"><span class="metric__label">Логин</span><span class="metric__value small">{{ user.username }}</span></div>
+    <div class="metric"><span class="metric__label">Роль</span><span class="metric__value small">{{ "Администратор" if user.is_admin else "Пользователь" }}</span></div>
+  </div>
+  <p class="muted small mt-4">Логин задаётся переменной окружения <code>WEBSCOPE_AUTH_USER</code> при запуске сервера.</p>
+  {% endcall %}
+
+  {% call card("Доступ") %}
+  {% if auth_enabled %}
+  {{ alert("Кабинет закрыт паролем: без входа открыта только витрина, страницы отчётов и API требуют входа.", variant="success", icon_name="lock") }}
+  {% else %}
+  {{ alert("Вход не настроен: интерфейс работает в демо-режиме и доступен всем, кто дотянется до порта.", variant="warning", icon_name="alert") }}
+  {% endif %}
+  <p class="muted small mt-3">Пароль задаётся через <code>WEBSCOPE_AUTH_PASSWORD</code>. После изменения перезапустите сервер — активные сессии завершатся.</p>
+  {% endcall %}
 </div>
 
-<div class="card margin-top-xl">
-  <h3>Уведомления</h3>
-  <form method="post" action="/dashboard/settings/notifications">
-    <div class="row">
-      <div class="field">
-        {{ field('Email для отчётов', input('email', placeholder='you@example.com', autocomplete='email')) }}
-      </div>
-      <div class="field">
-        {{ field('Telegram Chat ID', input('telegram_chat', placeholder='-1001234567890')) }}
-      </div>
-    </div>
-    <div class="actions">
-      <button type="submit" class="btn btn-primary">Сохранить</button>
-    </div>
-  </form>
+{% call card("Уведомления по умолчанию", "Эти адреса используются, пока у сайта не заданы свои.") %}
+<div class="grid grid--2">
+  <div class="metric"><span class="metric__label">Email</span><span class="metric__value small">из настроек сайта</span></div>
+  <div class="metric"><span class="metric__label">Telegram</span><span class="metric__value small">из настроек сайта</span></div>
 </div>
+<p class="muted small mt-4">Отчёты и алерты настраиваются на странице каждого сайта: «Настройки» → «Уведомления и расписание».</p>
+{% endcall %}
 {% endblock %}

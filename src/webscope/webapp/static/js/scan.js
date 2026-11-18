@@ -1,16 +1,17 @@
 // ============================================================
-// Scan Page — Form Submit Button State
-// Extracted from scan.html for CSP compliance
+// Быстрая проверка: блокируем кнопку, пока идёт отправка формы.
 // ============================================================
 
 (function () {
   const form = document.getElementById('scan-form');
   const submitBtn = document.getElementById('scan-submit');
-  if (!form) return;
+  if (!form || !submitBtn) return;
 
-  form.addEventListener('submit', async (e) => {
+  form.addEventListener('submit', function () {
+    const span = submitBtn.querySelector('span');
+    if (span) span.textContent = 'Проверяем…';
+    else submitBtn.textContent = 'Проверяем…';
     submitBtn.disabled = true;
-    submitBtn.textContent = 'Проверяем…';
     submitBtn.classList.add('btn-secondary');
     submitBtn.classList.remove('btn-primary');
   });

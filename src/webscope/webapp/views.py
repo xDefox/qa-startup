@@ -28,10 +28,19 @@ EXTERNAL_TITLE = "Замечания сканирования — не дефе�
 FP_TITLE = "Ложные срабатывания (FP) — исключены из оценки и плана действий"
 
 SCHEDULE_LABELS = {
-    "off": "без автоматических проверок",
+    "off": "выключено",
     "daily": "каждый день",
     "weekly": "каждую неделю",
     "monthly": "каждый месяц",
+}
+
+# Подписи для select: в отличие от SCHEDULE_LABELS, это не продолжение
+# фразы «Расписание проверок: …», а самостоятельные варианты выбора.
+SCHEDULE_OPTIONS = {
+    "off": "Только вручную",
+    "daily": "Каждый день",
+    "weekly": "Каждую неделю",
+    "monthly": "Каждый месяц",
 }
 
 SEVERITY_LABELS = {
@@ -141,7 +150,14 @@ def build_report_view(storage: Storage, run: Run) -> dict:
             "score_before": diff.score_before,
             "score_after": diff.score_after,
             "new": [
-                {"title": entry.title, "url": entry.url, "severity": entry.severity_after}
+                {
+                    "title": entry.title,
+                    "url": entry.url,
+                    "severity": entry.severity_after,
+                    "severity_label": SEVERITY_LABELS.get(
+                        entry.severity_after or "", entry.severity_after or ""
+                    ),
+                }
                 for entry in diff.new_findings[:10]
             ],
             "fixed": [{"title": entry.title, "url": entry.url} for entry in diff.fixed_findings[:10]],
@@ -183,6 +199,7 @@ __all__ = [
     "BLOCKER_RULE",
     "EXTERNAL_TITLE",
     "SCHEDULE_LABELS",
+    "SCHEDULE_OPTIONS",
     "SEVERITY_GROUPS",
     "SEVERITY_LABELS",
     "build_report_view",

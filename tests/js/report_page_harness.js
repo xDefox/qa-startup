@@ -9,6 +9,7 @@
 // stdout: { "ok": true, ... } либо { "ok": false, "error": "..." }
 
 const fs = require("fs");
+const path = require("path");
 const vm = require("vm");
 
 const VOID = new Set([
@@ -121,7 +122,8 @@ function makeWrapper(raw, focused) {
     },
     removeEventListener() {},
     dispatch(type, event) {
-      (listeners[type] || []).forEach((fn) => fn(event || {}));
+      const safeEvent = Object.assign({ stopPropagation() {}, preventDefault() {} }, event || {});
+      (listeners[type] || []).forEach((fn) => fn(safeEvent));
     },
     hasListener(type) {
       return Boolean((listeners[type] || []).length);
@@ -215,18 +217,34 @@ function main() {
     },
   };
 
+  // Внешние скрипты страницы (CSP запрещает inline): читаем файлы,
+  // на которые ссылается HTML. Путь /static/js/x.js → src/webscope/webapp/static/js/x.js.
+  const staticRoot = path.join(__dirname, "..", "..", "src", "webscope", "webapp", "static");
   const scripts = [];
-  const scriptRe = /<script>([\s\S]*?)<\/script>/g;
+  const scriptRe = /<script\b([^>]*)>([\s\S]*?)<\/script>/g;
   let match;
   while ((match = scriptRe.exec(input.html)) !== null) {
-    if (match[1].includes("setFindingsView")) scripts.push(match[1]);
+    const srcMatch = /\bsrc\s*=\s*"([^"]+)"/.exec(match[1]);
+    if (srcMatch) {
+      const src = srcMatch[1];
+      const relative = src.startsWith("/static/") ? src.slice("/static/".length) : null;
+      if (relative) {
+        const file = path.join(staticRoot, relative);
+        if (fs.existsSync(file)) {
+          const code = fs.readFileSync(file, "utf8");
+          if (code.includes("setFindingsView")) scripts.push({ code, filename: relative });
+        }
+      }
+      continue;
+    }
+    if (match[2].includes("setFindingsView")) scripts.push({ code: match[2], filename: "inline" });
   }
   if (scripts.length === 0) throw new Error("на странице нет скрипта переключения вида");
 
   const sandbox = {
     document: documentApi,
     window: {
-      location: { href: "", assign(value) { this.href = value; } },
+      location: { href: "", pathname: "/sites/1", assign(value) { this.href = value; } },
       innerWidth: 1200,
       innerHeight: 900,
       matchMedia: () => ({ matches: false, addEventListener() {}, addListener() {} }),
@@ -252,9 +270,9 @@ function main() {
   };
   sandbox.globalThis = sandbox;
 
-  for (const code of scripts) {
-    vm.createContext(sandbox);
-    vm.runInContext(code, sandbox, { filename: "site-inline.js" });
+  vm.createContext(sandbox);
+  for (const script of scripts) {
+    vm.runInContext(script.code, sandbox, { filename: script.filename });
   }
 
   const panels = documentApi.querySelectorAll(".findings-view");
