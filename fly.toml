@@ -20,6 +20,7 @@ primary_region = "fra"
     timeout = "10s"
 
 [env]
+  PORT = "8080"
   WEBSCOPE_HOST = "0.0.0.0"
   WEBSCOPE_PORT = "8080"
 
