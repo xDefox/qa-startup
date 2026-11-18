@@ -17,6 +17,7 @@ WORKDIR /app
 
 # Install Python deps via pip (cached layer)
 COPY pyproject.toml ./
+COPY src/ ./src/
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir .
 

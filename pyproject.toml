@@ -44,6 +44,9 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 include = ["webscope*"]
 
+[tool.setuptools.package-dir]
+src = "src"
+
 [tool.setuptools.package-data]
 webscope = ["vendor/*.js"]
 "webscope.webapp" = ["templates/*.html"]
