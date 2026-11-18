@@ -75,5 +75,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/healthz || exit 1
 
-# Entry point
-CMD ["python", "-m", "uvicorn", "webscope.webapp.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+# Entry point (honors $PORT for Railway/Render; defaults to 8000)
+CMD ["sh", "-c", "python -m uvicorn webscope.webapp.app:create_app --factory --host 0.0.0.0 --port ${PORT:-8000}"]
