@@ -222,6 +222,17 @@ hr {
 }
 .skip-link:focus { top: var(--space-3); }
 
+/* Полоса «демо-режим»: честно предупреждает, что сканер отключён. */
+.demo-banner {
+  padding: 9px var(--space-4);
+  border-bottom: 1px solid var(--serious-soft);
+  background: var(--serious-soft);
+  color: var(--serious-ink);
+  font-size: 13px;
+  font-weight: 550;
+  text-align: center;
+}
+
 /* ---------- Фокус ---------- */
 
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {

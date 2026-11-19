@@ -91,6 +91,7 @@ def create_app(
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     templates.env.globals["auth_enabled"] = auth_configured()
     templates.env.globals["is_authenticated"] = is_authenticated
+    templates.env.globals["mock_scanner_enabled"] = os.environ.get("WEBSCOPE_MOCK_SCANNER") == "1"
     register_filters(templates.env)
 
     @asynccontextmanager

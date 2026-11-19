@@ -18,6 +18,12 @@
 <body class="{% block body_class %}{% endblock %}">
 <a class="skip-link" href="#main">Перейти к содержанию</a>
 
+{% if mock_scanner_enabled %}
+<div class="demo-banner" role="status">
+  Демо-режим: сканер заменён заглушкой — отчёты одинаковые для всех сайтов.
+</div>
+{% endif %}
+
 {% block header %}{% from "_layout.html" import app_header %}{{ app_header(request) }}{% endblock %}
 
 <main id="main" class="{% block main_class %}page{% endblock %}">
