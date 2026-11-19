@@ -14,3 +14,7 @@ evidence/
 *.db
 *.sqlite
 pitch/
+
+# Локальные секреты деплоя (DuckDNS token и т.п.) — только на машине
+.deploy-secrets
+docs/.deploy-secrets

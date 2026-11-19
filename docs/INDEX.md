@@ -11,7 +11,7 @@ Each document listed with audience, status and key decisions.
 
 | Subfolder | Contents |
 |---|---|
-| **/** | INDEX.md, ARCHITECTURE.md, AUDIT.md, BRANDING.md, ECONOMICS.md, PLAN.md, ROADMAP.md, SECURITY.md |
+| **/** | INDEX.md, ARCHITECTURE.md, AUDIT.md, BRANDING.md, DEPLOY.md, ECONOMICS.md, PLAN.md, ROADMAP.md, SECURITY.md |
 | **/legacy/** | OLD versions of all md files (archived) |
 
 ### /docs/ARCHITECTURE.md → §6 PLAN.md (structure src/)
@@ -31,6 +31,7 @@ Each document listed with audience, status and key decisions.
 | **AUDIT.md** | §1–19 | Full security audit + P1/P2 fixes |
 | **BRANDING.md** | — | Design system (tokens, typography, severity scale) |
 | **ECONOMICS.md** | — | Pricing, unit economics, persona, risks |
+| **DEPLOY.md** | — | Fly.io: домен DuckDNS, TLS, диск, секреты, цена, диагностика |
 
 ### /docs/legacy/ (archived, never deleted)
 | File | Description |

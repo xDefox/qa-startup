@@ -148,6 +148,9 @@ API (JSON) для интеграций: `/api/sites`, `/api/sites/{id}`, `/api/s
 `/api/sites/{id}/report.{html,json,txt,xml,sarif}` (`?download=1` — отдать файлом
 с `Content-Disposition: attachment`), `POST /api/sites/{id}/scan`.
 
+Продовый стенд — Fly.io: <https://webscope.duckdns.org/>. Домен, сертификат,
+диск, секреты, стоимость и диагностика — в [docs/DEPLOY.md](docs/DEPLOY.md).
+
 ## Проверки
 
 | Check | Что ловит |
