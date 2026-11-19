@@ -15,16 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install Python deps via pip (cached layer)
+# Install the project with web extras (templates + static are package data)
 COPY pyproject.toml ./
 COPY src/ ./src/
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir ".[web]"
-
-# Copy source code
-COPY src/ ./src/
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir .
 
 # ---- Stage 2: Runtime ----
 FROM python:3.13-slim AS runtime
@@ -57,29 +52,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-6 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Playwright + Chromium
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir playwright && \
-    playwright install chromium
-
 # Create non-root user
 RUN groupadd -r webscope && useradd -r -g webscope -d /app -s /bin/bash webscope
 
 WORKDIR /app
 
-# Copy installed packages from builder
+# Copy installed packages and console scripts from builder
 COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
+# Ставим браузер уже после копирования пакетов: версия Chromium совпадает
+# с версией playwright из builder, иначе сканер падает на несовместимом бинарнике.
+RUN playwright install chromium && chmod -R 755 /ms-playwright
+
 # Copy application code
 COPY --from=builder /app/src ./src
+
+# Copy entrypoint (chown of the mounted volume + drop privileges)
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create directories for data, uploads, logs
 RUN mkdir -p /data /uploads /var/log/webscope && \
     chown -R webscope:webscope /app /data /uploads /var/log/webscope
 
-# Switch to non-root user
-USER webscope
+# Entrypoint starts as root (to fix volume ownership), then switches to webscope
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1 \

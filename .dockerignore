@@ -1,0 +1,22 @@
+# Docker-контекст: в образ попадают только src/ и pyproject.toml (см. Dockerfile).
+.git
+.github
+.venv
+.idea
+.vscode
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+data
+media
+pitch
+docs
+tests
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*

@@ -49,7 +49,14 @@ src = "src"
 
 [tool.setuptools.package-data]
 webscope = ["vendor/*.js"]
-"webscope.webapp" = ["templates/*.html"]
+# Без static/* установленный пакет (Docker, `pip install .`) падает на старте:
+# FastAPI/Starlette ищет webapp/static рядом с установленным app.py.
+"webscope.webapp" = [
+    "templates/*.html",
+    "static/*.svg",
+    "static/css/*.css",
+    "static/js/*.js",
+]
 
 [tool.ruff]
 line-length = 120
