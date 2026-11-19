@@ -1,6 +1,6 @@
 # fly.toml - Fly.io deployment config for WebScope
 app = "webscope"
-primary_region = "fra"
+primary_region = "nrt"
 
 [build]
   dockerfile = "Dockerfile"
@@ -23,8 +23,15 @@ primary_region = "fra"
   PORT = "8080"
   WEBSCOPE_HOST = "0.0.0.0"
   WEBSCOPE_PORT = "8080"
+  # База на постоянном диске (см. [[mounts]]), иначе данные теряются при деплое.
+  WEBSCOPE_DB_PATH = "/data/webscope.db"
+
+[[mounts]]
+  source = "webscope_data"
+  destination = "/data"
 
 [[vm]]
-  memory = "512mb"
+  # Сканер держит Chromium; на 512 МБ рендерер падает по памяти.
+  memory = "1024mb"
   cpu_kind = "shared"
   cpus = 1
