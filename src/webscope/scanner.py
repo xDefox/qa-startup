@@ -184,13 +184,18 @@ def validate_target(url: str, allow_private: bool = False) -> str:
     return url
 
 
+# Флаги для контейнеров: в Docker/Fly /dev/shm обычно всего 64 МБ, из-за чего
+# рендерер Chromium падает («Target crashed»), а user namespaces недоступны.
+_CHROMIUM_ARGS = ["--disable-dev-shm-usage", "--no-sandbox"]
+
+
 def _launch_chromium(playwright, headless: bool):
     try:
-        return playwright.chromium.launch(headless=headless)
+        return playwright.chromium.launch(headless=headless, args=_CHROMIUM_ARGS)
     except PlaywrightError:
         for candidate in _CHROMIUM_CANDIDATES:
             if Path(candidate).exists():
-                return playwright.chromium.launch(headless=headless, executable_path=candidate)
+                return playwright.chromium.launch(headless=headless, executable_path=candidate, args=_CHROMIUM_ARGS)
         raise
 
 
