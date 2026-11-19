@@ -22,7 +22,7 @@
   {% endcall %}
 
   {% call card("Доступ") %}
-  {% if auth_enabled %}
+  {% if auth_enabled() %}
   {{ alert("Кабинет закрыт паролем: без входа открыта только витрина, страницы отчётов и API требуют входа.", variant="success", icon_name="lock") }}
   {% else %}
   {{ alert("Вход не настроен: интерфейс работает в демо-режиме и доступен всем, кто дотянется до порта.", variant="warning", icon_name="alert") }}

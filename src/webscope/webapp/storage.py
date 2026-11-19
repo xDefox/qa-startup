@@ -6,7 +6,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import os
 import sqlite3
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
@@ -49,6 +52,17 @@ CREATE TABLE IF NOT EXISTS organizations (
     owner_email TEXT NOT NULL,
     created_at  TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS users (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    email           TEXT NOT NULL UNIQUE,
+    password_hash   TEXT NOT NULL,
+    organization_id INTEGER NOT NULL DEFAULT 0,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 CREATE TABLE IF NOT EXISTS runs (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -156,6 +170,25 @@ def utcnow() -> datetime:
 
 def now_iso() -> str:
     return utcnow().isoformat()
+
+
+def _hash_password(password: str) -> str:
+    """Хеширует пароль через scrypt (stdlib). Формат: scrypt$salt_hex$hash_hex."""
+    salt = os.urandom(16)
+    dk = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=16384, r=8, p=1, dklen=32)
+    return f"scrypt${salt.hex()}${dk.hex()}"
+
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    """Проверяет пароль против хеша. Возвращает True/False."""
+    try:
+        _, salt_hex, hash_hex = stored_hash.split("$")
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(hash_hex)
+        dk = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=16384, r=8, p=1, dklen=32)
+        return hmac.compare_digest(dk, expected)
+    except (ValueError, AttributeError):
+        return False
 
 
 @dataclass
@@ -1000,6 +1033,61 @@ class Storage:
         with self._conn() as conn:
             conn.execute("DELETE FROM site_snapshots WHERE site_id = ?", (site_id,))
             conn.commit()
+
+    # --- Пользователи (регистрация / вход) ---
+
+    def create_user(self, email: str, password: str, organization_id: int = 0) -> int:
+        """Создаёт пользователя. Возвращает id. Hashes password via scrypt."""
+        password_hash = _hash_password(password)
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO users (email, password_hash, organization_id, created_at) VALUES (?, ?, ?, ?)",
+                (email, password_hash, organization_id, now_iso()),
+            )
+            conn.commit()
+            return cur.lastrowid or 0
+
+    def get_user_by_email(self, email: str) -> dict | None:
+        """Возвращает словарь с полями пользователя или None."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT id, email, password_hash, organization_id, is_active, created_at FROM users WHERE email = ?",
+                (email,),
+            ).fetchone()
+        if not row:
+            return None
+        return dict(row)
+
+    def verify_user_password(self, email: str, password: str) -> dict | None:
+        """Проверяет пароль пользователя. Возвращает данные пользователя или None."""
+        user = self.get_user_by_email(email)
+        if not user or not user.get("is_active"):
+            return None
+        if not _verify_password(password, user.get("password_hash", "")):
+            return None
+        return user
+
+    def user_exists(self, email: str) -> bool:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM users WHERE email = ?", (email,)
+            ).fetchone()
+        return row is not None
+
+    def has_users(self) -> bool:
+        with self._conn() as conn:
+            row = conn.execute("SELECT 1 FROM users LIMIT 1").fetchone()
+        return row is not None
+
+    def get_user_by_id(self, user_id: int) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT id, email, password_hash, organization_id, is_active, created_at FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return dict(row)
 
 
 def _finding_from_row(row: sqlite3.Row) -> Finding:

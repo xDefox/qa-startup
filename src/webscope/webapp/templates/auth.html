@@ -20,7 +20,7 @@
 
   {% if error %}{{ alert(error, variant="error", icon_name="alert") }}{% endif %}
 
-  {% if auth_enabled %}
+  {% if auth_enabled() %}
   <form method="post" action="/auth/login" class="stack">
     {{ field("Логин", input("username", type="text", autocomplete="username", required=True, placeholder="Логин"), id="username") }}
     {{ field("Пароль", input("password", type="password", autocomplete="current-password", required=True, placeholder="Пароль"), id="password") }}
@@ -28,7 +28,7 @@
       {{ btn("Войти", type="submit", size="lg", icon_name="arrow-right", icon_right=True) }}
     </div>
   </form>
-  <p class="auth-meta"><a href="/">← На главную</a></p>
+  <p class="auth-meta"><a href="/auth/register">Регистрация</a> · <a href="/">← На главную</a></p>
   {% else %}
   {{ alert("Вход не настроен: интерфейс работает в демо-режиме.", variant="info", icon_name="info") }}
   <p class="muted small mt-4">Задайте <code>WEBSCOPE_AUTH_PASSWORD</code> и перезапустите сервер, чтобы закрыть кабинет.</p>

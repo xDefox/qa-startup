@@ -21,6 +21,8 @@ from urllib.parse import urlparse
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
+from .state import STATE_KEY
+
 COOKIE_NAME = "webscope_session"
 
 # Методы без побочных эффектов: их не проверяем на CSRF.
@@ -29,12 +31,19 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 # Что доступно без входа: сам вход, healthcheck, статические файлы, публичные
 # страницы витрины («/» и «/landing») и раздача загруженных файлов (её открывает
 # браузер-сканер без cookie; содержимое песочницы — см. app.py).
-PUBLIC_PREFIXES = ("/auth/", "/healthz", "/__local/", "/landing", "/static/")
+PUBLIC_PREFIXES = ("/auth/", "/healthz", "/__local/", "/landing", "/static/", "/api/register")
 
 
-def auth_configured() -> bool:
-    """Включён ли вход: задан непустой пароль в окружении."""
-    return bool((os.environ.get("WEBSCOPE_AUTH_PASSWORD") or "").strip())
+def auth_configured(storage=None) -> bool:
+    """Включён ли вход: задан непустой пароль в окружении или есть пользователи в БД.
+
+    Если storage передан, проверяет существование пользователей в БД.
+    """
+    if (os.environ.get("WEBSCOPE_AUTH_PASSWORD") or "").strip():
+        return True
+    if storage is not None:
+        return storage.has_users()
+    return False
 
 
 def auth_username() -> str:
@@ -55,9 +64,86 @@ def check_credentials(username: str, password: str) -> bool:
     return hmac.compare_digest(username.strip(), auth_username()) and hmac.compare_digest(password, _password())
 
 
-def is_authenticated(request: Request) -> bool:
+def _auth_secret() -> str:
+    return os.environ.get("WEBSCOPE_AUTH_SECRET") or "webscope-dev-auth-secret-change-me"
+
+
+def _db_session_token(user_id: int, password_hash: str) -> str:
+    """Токен сессии для БД-пользователя: HMAC(user_id:password_hash, secret)."""
+    payload = f"{user_id}:{password_hash}"
+    return hmac.new(payload.encode("utf-8"), _auth_secret().encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _make_db_cookie(user_id: int, password_hash: str) -> str:
+    """Cookie значение: 'user_id:hmac_sig'."""
+    return f"{user_id}:{_db_session_token(user_id, password_hash)}"
+
+
+def _parse_db_cookie(cookie: str) -> tuple[int, str] | None:
+    """Разбирает cookie 'user_id:sig' → (user_id, sig)."""
+    if ":" not in cookie:
+        return None
+    parts = cookie.split(":", 1)
+    if not parts[0].isdigit():
+        return None
+    return int(parts[0]), parts[1]
+
+
+def _get_storage(request: Request):
+    """Достаёт storage из app.state, если доступно."""
+    state = getattr(request.app.state, STATE_KEY, None)
+    return getattr(state, "storage", None) if state else None
+
+
+def get_current_user(request: Request) -> dict | None:
+    """Возвращает данные текущего авторизованного пользователя или None."""
+    if not is_authenticated(request):
+        return None
     token = request.cookies.get(COOKIE_NAME) or ""
-    return bool(token) and hmac.compare_digest(token, session_token())
+    parsed = _parse_db_cookie(token)
+    if parsed:
+        user_id, sig = parsed
+        storage = _get_storage(request)
+        if storage is not None:
+            user = storage.get_user_by_id(user_id)
+            if user and user.get("is_active"):
+                if hmac.compare_digest(sig, _db_session_token(user["id"], user["password_hash"])):
+                    return user
+    return None
+
+
+def is_authenticated(request: Request) -> bool:
+    """Проверка сессии: env-режим (HMAC от логина/пароля) и БД-режим (user_id:hmac)."""
+    token = request.cookies.get(COOKIE_NAME) or ""
+    if auth_configured() and hmac.compare_digest(token, session_token()):
+        return True
+    parsed = _parse_db_cookie(token)
+    if parsed:
+        user_id, sig = parsed
+        storage = _get_storage(request)
+        if storage is not None:
+            user = storage.get_user_by_id(user_id)
+            if user and user.get("is_active"):
+                if hmac.compare_digest(sig, _db_session_token(user["id"], user["password_hash"])):
+                    return True
+    return False
+
+
+def get_current_user(request: Request) -> dict | None:
+    """Возвращает данные текущего авторизованного пользователя или None."""
+    if not is_authenticated(request):
+        return None
+    token = request.cookies.get(COOKIE_NAME) or ""
+    parsed = _parse_db_cookie(token)
+    if parsed:
+        user_id, sig = parsed
+        storage = _get_storage(request)
+        if storage is not None:
+            user = storage.get_user_by_id(user_id)
+            if user and user.get("is_active"):
+                if hmac.compare_digest(sig, _db_session_token(user["id"], user["password_hash"])):
+                    return user
+    return None
 
 
 def is_public_path(path: str) -> bool:
@@ -126,7 +212,20 @@ def cookie_kwargs(request: Request | None = None) -> dict:
 
 
 def login_page(request: Request, templates, *, error: str | None = None) -> HTMLResponse:
-    return templates.TemplateResponse(request, "auth.html", {"error": error, "auth_enabled": auth_configured()})
+    storage = _get_storage(request)
+    has_db_users = storage.has_users() if storage else False
+    return templates.TemplateResponse(
+        request, "auth.html",
+        {"error": error, "auth_enabled": lambda: auth_configured(storage), "has_db_users": has_db_users},
+    )
+
+
+def register_page(request: Request, templates, *, error: str | None = None) -> HTMLResponse:
+    storage = _get_storage(request)
+    return templates.TemplateResponse(
+        request, "auth_register.html",
+        {"error": error, "auth_enabled": lambda: auth_configured(storage)},
+    )
 
 
 def apply_headers(response: Response) -> Response:

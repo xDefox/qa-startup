@@ -11,7 +11,7 @@
   <div>
     <span class="eyebrow"><span class="eyebrow__dot"></span>Бесплатно</span>
     <h1>Быстрая проверка сайта</h1>
-    <p class="page-header__meta">{% if auth_enabled and not is_authenticated(request) %}Проверка запускается из кабинета: войдите, и адрес откроется в форме.{% else %}Вставьте адрес — проверим доступность, формы, консоль и мобильную вёрстку. Результат за 30–60 секунд.{% endif %}</p>
+    <p class="page-header__meta">{% if auth_enabled() and not is_authenticated(request) %}Проверка запускается из кабинета: войдите, и адрес откроется в форме.{% else %}Вставьте адрес — проверим доступность, формы, консоль и мобильную вёрстку. Результат за 30–60 секунд.{% endif %}</p>
   </div>
 </div>
 

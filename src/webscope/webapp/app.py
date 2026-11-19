@@ -89,7 +89,7 @@ def create_app(
     )
     scheduler = Scheduler(monitor, storage, check_interval=check_interval)
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-    templates.env.globals["auth_enabled"] = auth_configured()
+    templates.env.globals["auth_enabled"] = lambda: auth_configured(storage)
     templates.env.globals["is_authenticated"] = is_authenticated
     templates.env.globals["mock_scanner_enabled"] = os.environ.get("WEBSCOPE_MOCK_SCANNER") == "1"
     register_filters(templates.env)

@@ -14,6 +14,7 @@ from .auth import (
     is_public_path,
     unauthorized_response,
 )
+from .state import STATE_KEY
 
 CSP = (
     "default-src 'self'; "
@@ -38,7 +39,9 @@ def install(app: FastAPI) -> None:
     @app.middleware("http")
     async def guard(request: Request, call_next):
         """Вход и CSRF для всех маршрутов, кроме публичных."""
-        if auth_configured() and not is_public_path(request.url.path):
+        state = getattr(request.app.state, STATE_KEY, None)
+        storage = getattr(state, "storage", None) if state else None
+        if auth_configured(storage) and not is_public_path(request.url.path):
             if request.method not in SAFE_METHODS and not csrf_safe(request):
                 return PlainTextResponse("Запрос с чужого Origin отклонён", status_code=403)
             if not is_authenticated(request):

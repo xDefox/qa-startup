@@ -25,7 +25,7 @@
       <a href="/dashboard" class="nav-link{% if is_dashboard %} active{% endif %}">Кабинет</a>
     </nav>
     <div class="header-actions">
-      {% if auth_enabled and is_authenticated(request) %}
+      {% if auth_enabled() and is_authenticated(request) %}
       <a class="pill" href="/auth/logout">Выйти</a>
       {% endif %}
       {% if show_scan_cta %}
@@ -44,7 +44,7 @@
   <a href="/" class="mobile-nav-link{% if is_home %} active{% endif %}">Главная {{ icon("arrow-right", 18) }}</a>
   <a href="/landing" class="mobile-nav-link{% if is_landing %} active{% endif %}">Возможности {{ icon("arrow-right", 18) }}</a>
   <a href="/dashboard" class="mobile-nav-link{% if is_dashboard %} active{% endif %}">Кабинет {{ icon("arrow-right", 18) }}</a>
-  {% if auth_enabled and is_authenticated(request) %}
+  {% if auth_enabled() and is_authenticated(request) %}
   <a href="/auth/logout" class="mobile-nav-link">Выйти {{ icon("arrow-right", 18) }}</a>
   {% endif %}
   {% if show_scan_cta %}

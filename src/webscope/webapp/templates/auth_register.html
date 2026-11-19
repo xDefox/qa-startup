@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "_macros.html" import field, input, btn, alert %}
+{% from "_icons.html" import icon %}
+
+{% block title %}Регистрация — webscope{% endblock %}
+{% block body_class %}auth-page{% endblock %}
+{% block main_class %}page page--tight{% endblock %}
+{% block container_class %} auth-shell{% endblock %}
+{% block header %}{% endblock %}
+{% block footer %}{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+  <a class="brand mb-6" href="/" aria-label="webscope — на главную">
+    <span class="brand__mark">{{ icon("scan", 17) }}</span>
+    <span>webscope<span class="brand__dot">.</span></span>
+  </a>
+  <h1>Регистрация</h1>
+  <p class="subtitle">Создайте учётную запись, чтобы управлять настройками и просмотром отчётов.</p>
+
+  {% if error %}{{ alert(error, variant="error", icon_name="alert") }}{% endif %}
+
+  <form method="post" action="/auth/register" class="stack">
+    {{ field("Email", input("email", type="email", autocomplete="email", required=True, placeholder="email@example.com"), id="email") }}
+    {{ field("Пароль", input("password", type="password", autocomplete="current-password", required=True, placeholder="Пароль"), id="password") }}
+    {{ field("Подтверждение пароля", input("password_confirm", type="password", autocomplete="current-password", required=True, placeholder="Повторите пароль"), id="password_confirm") }}
+    <div class="form-actions">
+      {{ btn("Зарегистрироваться", type="submit", size="lg", icon_name="arrow-right", icon_right=True) }}
+    </div>
+  </form>
+
+  <p class="muted small mt-4">Уже есть аккаунт? <a href="/auth/login">Войти</a></p>
+</div>
+{% endblock %}
