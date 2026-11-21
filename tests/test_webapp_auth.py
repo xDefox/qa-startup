@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from webscope.webapp.app import create_app
 from webscope.webapp.auth import COOKIE_NAME, auth_configured
+from webscope.webapp.services.site_service import create_organization
 
 PASSWORD = "test-password-123"
 
@@ -270,3 +271,20 @@ def test_env_admin_still_works(tmp_path: Path, stub_scanner, monkeypatch: pytest
         )
         assert response.status_code == 303
         assert client.get("/dashboard").status_code == 200
+
+def test_first_user_gets_single_organization_for_legacy_sites(tmp_path: Path, stub_scanner) -> None:
+    """Организации «Default», накопленные до входа, схлопываются в одну."""
+    app = create_app(db_path=tmp_path / "legacy.sqlite", scanner_func=stub_scanner, notifier=lambda **kw: [])
+    storage = app.state.webscope.storage
+    first = create_organization(storage, name="Default", owner_email="old@example.com")
+    second = create_organization(storage, name="Default", owner_email="old@example.com")
+    storage.add_site("https://one.example", organization_id=first.id)
+    storage.add_site("https://two.example", organization_id=second.id)
+
+    with TestClient(app) as client:
+        assert register(client, "owner@example.com").status_code == 303
+        orgs = client.get("/api/organizations").json()["organizations"]
+        sites = client.get("/api/sites").json()["sites"]
+
+    assert len(orgs) == 1
+    assert {site["organization_id"] for site in sites} == {orgs[0]["id"]}

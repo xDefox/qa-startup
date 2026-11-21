@@ -1150,8 +1150,39 @@ class Storage:
         return bool(row and row[0] == user_id)
 
     def adopt_orphan_data(self, user_id: int) -> None:
-        """Отдаёт первому пользователю данные, созданные до появления входа."""
+        """Отдаёт первому пользователю данные, созданные до появления входа.
+
+        До регистрации каждый сайт мог получить свою организацию «Default».
+        Чтобы в кабинете не появилось пять одинаковых групп, оставляем одну
+        организацию и переносим в неё сайты и пакеты сканов.
+        """
         with self._conn() as conn:
+            orphan_orgs = [
+                row["id"]
+                for row in conn.execute("SELECT id FROM organizations WHERE owner_id = 0 ORDER BY id")
+            ]
+            if orphan_orgs:
+                row = conn.execute(
+                    "SELECT organization_id FROM sites"
+                    " WHERE organization_id != 0 ORDER BY id LIMIT 1"
+                ).fetchone()
+                primary = row["organization_id"] if row and row["organization_id"] in orphan_orgs else orphan_orgs[0]
+                conn.execute(
+                    "UPDATE sites SET organization_id = ? WHERE owner_id = 0 AND organization_id != ?",
+                    (primary, primary),
+                )
+                placeholders = ",".join("?" for _ in orphan_orgs)
+                conn.execute(
+                    f"UPDATE scan_packages SET organization_id = ? WHERE organization_id IN ({placeholders})",
+                    (primary, *orphan_orgs),
+                )
+                extras = [org_id for org_id in orphan_orgs if org_id != primary]
+                if extras:
+                    extra_placeholders = ",".join("?" for _ in extras)
+                    conn.execute(
+                        f"DELETE FROM organizations WHERE id IN ({extra_placeholders})",
+                        extras,
+                    )
             conn.execute("UPDATE sites SET owner_id = ? WHERE owner_id = 0", (user_id,))
             conn.execute("UPDATE organizations SET owner_id = ? WHERE owner_id = 0", (user_id,))
             conn.commit()
