@@ -16,22 +16,18 @@
     <span>webscope<span class="brand__dot">.</span></span>
   </a>
   <h1>Вход в кабинет</h1>
-  <p class="subtitle">В отчётах — адреса сайтов, расписание проверок и адреса для алертов, поэтому интерфейс закрыт паролем.</p>
+  <p class="subtitle">В отчётах — адреса сайтов, расписание проверок и адреса для алертов, поэтому у каждого свой кабинет.</p>
 
   {% if error %}{{ alert(error, variant="error", icon_name="alert") }}{% endif %}
 
-  {% if auth_enabled() %}
   <form method="post" action="/auth/login" class="stack">
-    {{ field("Логин", input("username", type="text", autocomplete="username", required=True, placeholder="Логин"), id="username") }}
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    {{ field("Email", input("email", type="email", autocomplete="username", required=True, placeholder="you@example.com", attrs={"spellcheck": "false"}), id="email") }}
     {{ field("Пароль", input("password", type="password", autocomplete="current-password", required=True, placeholder="Пароль"), id="password") }}
     <div class="form-actions">
       {{ btn("Войти", type="submit", size="lg", icon_name="arrow-right", icon_right=True) }}
     </div>
   </form>
-  <p class="auth-meta"><a href="/auth/register">Регистрация</a> · <a href="/">← На главную</a></p>
-  {% else %}
-  {{ alert("Вход не настроен: интерфейс работает в демо-режиме.", variant="info", icon_name="info") }}
-  <p class="muted small mt-4">Задайте <code>WEBSCOPE_AUTH_PASSWORD</code> и перезапустите сервер, чтобы закрыть кабинет.</p>
-  {% endif %}
+  <p class="auth-meta">Нет аккаунта? <a href="/auth/register">Зарегистрироваться</a> · <a href="/">← На главную</a></p>
 </div>
 {% endblock %}

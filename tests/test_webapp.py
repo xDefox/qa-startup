@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from conftest import sign_in
 from fastapi.testclient import TestClient
 
 from webscope.models import Finding, ScanResult, Severity
@@ -295,6 +296,7 @@ def test_dashboard_shows_failed_run_not_progress(tmp_path: Path) -> None:
 
     app = create_app(db_path=tmp_path / "db.sqlite", scanner_func=_never, notifier=lambda **kwargs: [])
     with TestClient(app) as test_client:
+        sign_in(test_client)
         body = test_client.get("/dashboard").text
 
     assert "проверка выполняется…" not in body
@@ -313,6 +315,7 @@ def client(tmp_path: Path):
         notifier=lambda **kwargs: [],
     )
     with TestClient(app) as test_client:
+        sign_in(test_client)
         yield test_client
 
 
@@ -474,7 +477,7 @@ def test_delete_site_removes_history(client: TestClient) -> None:
 
     response = client.post(f"/sites/{site_id}/delete", follow_redirects=False)
     assert response.status_code == 303
-    assert response.headers["location"] == "/"
+    assert response.headers["location"] == "/dashboard"
     assert storage.get_site(site_id) is None
     assert storage.findings_of(run.id) == []  # каскад унёс прогоны и находки
 
@@ -579,6 +582,7 @@ def test_upload_uses_request_host(tmp_path: Path) -> None:
         notifier=lambda **kwargs: [],
     )
     with TestClient(app) as client:
+        sign_in(client)
         response = client.post(
             "/upload",
             files=[("files", ("index.html", b"<html><title>x</title></html>", "text/html"))],

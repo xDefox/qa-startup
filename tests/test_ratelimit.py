@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from conftest import sign_in
 from fastapi.testclient import TestClient
 
 from webscope.webapp.app import create_app
@@ -17,6 +18,7 @@ def test_rate_limit_stops_scan_loop(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.delenv("WEBSCOPE_AUTH_PASSWORD", raising=False)
     app = create_app(db_path=tmp_path / "db.sqlite", scanner_func=stub_scanner, notifier=lambda **kwargs: [])
     with TestClient(app) as client:
+        sign_in(client)
         statuses = [
             client.post("/sites", data={"url": f"example{index}.com"}, follow_redirects=False).status_code
             for index in range(3)
@@ -33,6 +35,7 @@ def test_max_concurrent_scans_returns_429(tmp_path: Path, monkeypatch: pytest.Mo
     site = storage.add_site("https://example.com/")
 
     with TestClient(app) as client:
+        sign_in(client)
         storage.start_run(site.id)  # идущий прогон имитируем уже после старта:
         # на самом запуске reconcile_running() закрыл бы такую сироту
         response = client.post(f"/api/sites/{site.id}/scan")

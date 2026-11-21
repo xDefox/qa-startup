@@ -8,8 +8,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from ...scoring import is_false_positive
-from ..deps import get_site_or_404, scan_limit_response, trigger
-from ..services.site_service import create_organization, get_organizations
+from ..deps import get_current_user, get_site_or_404, scan_limit_response, trigger
+from ..services.site_service import create_organization, get_organization, get_organizations
 from ..services.site_service import list_sites as list_sites_service
 from ..state import AppState, get_state
 from ..webhook_queue import WebhookEvent
@@ -20,11 +20,13 @@ LOGGER = logging.getLogger("webscope.api")
 
 @router.get("/api/sites")
 def api_sites(
+    request: Request,
     state: AppState = Depends(get_state),
     organization_id: int | None = Query(None, alias="org_id"),
 ):
-    """Список сайтов с опциональной фильтрацией по организации."""
-    sites = list_sites_service(state.storage, organization_id=organization_id)
+    """Список сайтов текущего пользователя (опционально — по организации)."""
+    user = get_current_user(request)
+    sites = list_sites_service(state.storage, organization_id=organization_id, owner_id=user["id"])
     payload = []
     for site in sites:
         last = state.storage.latest_ok_run(site.id)
@@ -39,8 +41,8 @@ def api_sites(
 
 
 @router.get("/api/sites/{site_id}")
-def api_site(site_id: int, state: AppState = Depends(get_state)):
-    site = get_site_or_404(state, site_id)
+def api_site(request: Request, site_id: int, state: AppState = Depends(get_state)):
+    site = get_site_or_404(state, site_id, get_current_user(request)["id"])
     last = state.storage.latest_ok_run(site.id)
     newest = state.storage.latest_run(site.id)
     findings = state.storage.findings_of(last.id) if last else []
@@ -57,8 +59,8 @@ def api_site(site_id: int, state: AppState = Depends(get_state)):
 
 
 @router.get("/api/sites/{site_id}/runs")
-def api_runs(site_id: int, state: AppState = Depends(get_state)):
-    site = get_site_or_404(state, site_id)
+def api_runs(request: Request, site_id: int, state: AppState = Depends(get_state)):
+    site = get_site_or_404(state, site_id, get_current_user(request)["id"])
     return {"runs": [run.to_dict() for run in state.storage.list_runs(site.id, limit=100)]}
 
 
@@ -72,7 +74,7 @@ def api_scan(
     limited = scan_limit_response(state, request)
     if limited is not None:
         return limited
-    site = get_site_or_404(state, site_id)
+    site = get_site_or_404(state, site_id, get_current_user(request)["id"])
     run = trigger(state, site, background_tasks)
     return JSONResponse(
         {"status": "started", "site_id": site_id, "run_id": run.id},
@@ -81,9 +83,9 @@ def api_scan(
 
 
 @router.get("/api/organizations")
-def api_organizations(state: AppState = Depends(get_state)):
-    """Список организаций для UI селектора."""
-    orgs = get_organizations(state.storage)
+def api_organizations(request: Request, state: AppState = Depends(get_state)):
+    """Список организаций текущего пользователя для UI-селектора."""
+    orgs = get_organizations(state.storage, owner_id=get_current_user(request)["id"])
     return {
         "organizations": [
             {"id": o.id, "name": o.name, "owner_email": o.owner_email, "created_at": o.created_at} for o in orgs
@@ -93,13 +95,19 @@ def api_organizations(state: AppState = Depends(get_state)):
 
 @router.post("/api/organizations")
 async def api_create_organization(request: Request, state: AppState = Depends(get_state)):
-    """Создаёт новую организацию."""
+    """Создаёт новую организацию для текущего пользователя."""
     body = await request.json()
     name = body.get("name", "").strip()
     owner_email = body.get("owner_email", "").strip()
     if not name:
         return JSONResponse({"detail": "Название обязательно"}, status_code=400)
-    org = create_organization(state.storage, name=name, owner_email=owner_email)
+    user = get_current_user(request)
+    org = create_organization(
+        state.storage,
+        name=name,
+        owner_email=owner_email,
+        owner_id=user["id"],
+    )
     return {"id": org.id, "name": org.name, "owner_email": org.owner_email, "created_at": org.created_at}
 
 
@@ -111,6 +119,9 @@ async def api_update_organization(org_id: int, request: Request, state: AppState
     owner_email = body.get("owner_email", "").strip()
     if not name:
         return JSONResponse({"detail": "Название обязательно"}, status_code=400)
+    user = get_current_user(request)
+    if get_organization(state.storage, org_id, owner_id=user["id"]) is None:
+        return JSONResponse({"detail": "Организация не найдена"}, status_code=404)
     with state.storage._conn() as conn:
         conn.execute(
             "UPDATE organizations SET name = ?, owner_email = ? WHERE id = ?",
@@ -121,10 +132,13 @@ async def api_update_organization(org_id: int, request: Request, state: AppState
 
 
 @router.delete("/api/organizations/{org_id}")
-def api_delete_organization(org_id: int, state: AppState = Depends(get_state)):
+def api_delete_organization(org_id: int, request: Request, state: AppState = Depends(get_state)):
     """Удаляет организацию (если нет привязанных сайтов)."""
+    user = get_current_user(request)
+    if get_organization(state.storage, org_id, owner_id=user["id"]) is None:
+        return JSONResponse({"detail": "Организация не найдена"}, status_code=404)
     # Проверяем, есть ли сайты в организации
-    sites = list_sites_service(state.storage, organization_id=org_id)
+    sites = list_sites_service(state.storage, organization_id=org_id, owner_id=user["id"])
     if sites:
         return JSONResponse({"detail": "Нельзя удалить организацию с сайтами"}, status_code=400)
     with state.storage._conn() as conn:
@@ -138,6 +152,17 @@ async def api_mark_fp(finding_id: int, request: Request, state: AppState = Depen
     """Помечает находку как ложное срабатывание (FP) или снимает пометку."""
     body = await request.json()
     fp = body.get("fp", True)
+    user = get_current_user(request)
+    with state.storage._conn() as conn:
+        row = conn.execute(
+            "SELECT s.owner_id FROM findings f"
+            " JOIN runs r ON r.id = f.run_id"
+            " JOIN sites s ON s.id = r.site_id"
+            " WHERE f.id = ?",
+            (finding_id,),
+        ).fetchone()
+    if row is None or (user["id"] and row[0] != user["id"]):
+        return JSONResponse({"detail": "Находка не найдена"}, status_code=404)
     state.storage.mark_finding_fp(finding_id, fp)
     return {"status": "ok", "finding_id": finding_id, "fp": fp}
 
@@ -147,20 +172,25 @@ async def api_mark_fp(finding_id: int, request: Request, state: AppState = Depen
 
 @router.get("/api/packages")
 def api_list_packages(
+    request: Request,
     state: AppState = Depends(get_state),
     organization_id: int = Query(..., alias="org_id"),
     active_only: bool = True,
 ):
     """Список пакетов сканов для организации."""
+    user = get_current_user(request)
+    if get_organization(state.storage, organization_id, owner_id=user["id"]) is None:
+        return JSONResponse({"detail": "Организация не найдена"}, status_code=404)
     packages = state.storage.list_scan_packages(organization_id, active_only=active_only)
     return {"packages": [pkg.to_dict() for pkg in packages]}
 
 
 @router.get("/api/packages/{package_id}")
-def api_get_package(package_id: int, state: AppState = Depends(get_state)):
+def api_get_package(request: Request, package_id: int, state: AppState = Depends(get_state)):
     """Детали пакета сканов."""
+    user = get_current_user(request)
     pkg = state.storage.get_scan_package(package_id)
-    if not pkg:
+    if not pkg or get_organization(state.storage, pkg.organization_id, owner_id=user["id"]) is None:
         return JSONResponse({"detail": "Пакет не найден"}, status_code=404)
     return pkg.to_dict()
 
@@ -190,6 +220,10 @@ async def api_buy_package(
     if not organization_id:
         return JSONResponse({"detail": "organization_id обязателен"}, status_code=400)
 
+    user = get_current_user(request)
+    if get_organization(state.storage, organization_id, owner_id=user["id"]) is None:
+        return JSONResponse({"detail": "Организация не найдена"}, status_code=404)
+
     # Пакеты: starter=10 ($29), pro=50 ($99), agency=100 ($179)
     packages_config = {
         "starter": {"scans": 10, "price_cents": 2900, "stripe_price_id_env": "STRIPE_PRICE_STARTER"},
@@ -202,8 +236,6 @@ async def api_buy_package(
     config = packages_config[package_type]
 
     # Получаем организацию для получения email клиента
-    from ..services.site_service import get_organization
-
     org = get_organization(state.storage, organization_id)
     if not org:
         return JSONResponse({"detail": "Организация не найдена"}, status_code=404)
@@ -536,6 +568,10 @@ async def api_scan_oneshot(
     if not organization_id:
         return JSONResponse({"detail": "organization_id обязателен"}, status_code=400)
 
+    user = get_current_user(request)
+    if get_organization(state.storage, organization_id, owner_id=user["id"]) is None:
+        return JSONResponse({"detail": "Организация не найдена"}, status_code=404)
+
     # Проверяем наличие активного пакета
     pkg = state.storage.get_active_package_for_org(organization_id)
     if not pkg:
@@ -555,6 +591,7 @@ async def api_scan_oneshot(
         state.storage,
         url=normalized_url,
         organization_id=organization_id,
+        owner_id=user["id"],
         schedule="off",
     )
 

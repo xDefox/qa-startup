@@ -8,13 +8,11 @@ from fastapi.responses import PlainTextResponse
 from .auth import (
     SAFE_METHODS,
     apply_headers,
-    auth_configured,
     csrf_safe,
-    is_authenticated,
+    get_current_user,
     is_public_path,
     unauthorized_response,
 )
-from .state import STATE_KEY
 
 CSP = (
     "default-src 'self'; "
@@ -38,13 +36,16 @@ def install(app: FastAPI) -> None:
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
-        """Вход и CSRF для всех маршрутов, кроме публичных."""
-        state = getattr(request.app.state, STATE_KEY, None)
-        storage = getattr(state, "storage", None) if state else None
-        if auth_configured(storage) and not is_public_path(request.url.path):
+        """Вход и CSRF для всех маршрутов, кроме публичных.
+
+        Вход требуется всегда. Пока пользователей нет, кабинет пуст, а
+        единственная доступная точка входа — регистрация.
+        """
+        user = get_current_user(request)
+        if not is_public_path(request.url.path):
             if request.method not in SAFE_METHODS and not csrf_safe(request):
                 return PlainTextResponse("Запрос с чужого Origin отклонён", status_code=403)
-            if not is_authenticated(request):
+            if user is None:
                 return apply_headers(unauthorized_response(request))
         response = await call_next(request)
         return apply_headers(response)

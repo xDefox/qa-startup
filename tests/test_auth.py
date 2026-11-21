@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.parse import parse_qs
 
 import pytest
+from conftest import sign_in
 from fastapi.testclient import TestClient
 
 from webscope.cli import _auth_from_args, build_parser
@@ -348,6 +349,7 @@ def web(tmp_path: Path):
         notifier=lambda **kwargs: [],
     )
     with TestClient(app) as client:
+        sign_in(client)
         yield client, app.state.webscope.storage
 
 

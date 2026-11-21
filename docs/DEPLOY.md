@@ -54,10 +54,19 @@ curl -s -o /dev/null -w '%{http_code}\n' https://webscope.duckdns.org/
 curl -s -o /dev/null -w '%{http_code}\n' https://webscope.duckdns.org/static/css/base.css
 ```
 
-## Секреты и вход
+## Вход и регистрация
 
-Сейчас вход **выключен** (`WEBSCOPE_AUTH_PASSWORD` не задан): кабинет и
-запуск сканов доступны любому, кто знает адрес. Чтобы закрыть:
+Кабинет закрыт по умолчанию: при первом открытии создайте аккаунт на
+<https://webscope.duckdns.org/auth/register>. У каждого пользователя свои
+сайты, организации, история и отчёты; чужой объект по прямому id отдаёт 404.
+
+- пароли хранятся как scrypt-хеши. Сессия — HttpOnly/SameSite-cookie со
+  случайным токеном, в базе лежит только SHA-256 токена. Выход отзывает сессию.
+- `WEBSCOPE_SESSION_DAYS` — срок жизни сессии в днях (по умолчанию 30).
+- первый зарегистрированный пользователь становится администратором и
+  забирает сайты, созданные до появления регистрации.
+
+Аварийный вход для старых установок (необязательно):
 
 ```bash
 flyctl secrets set -a webscope \
@@ -65,7 +74,9 @@ flyctl secrets set -a webscope \
   WEBSCOPE_AUTH_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
 ```
 
-- `WEBSCOPE_AUTH_USER` — логин, по умолчанию `admin`.
+- `WEBSCOPE_AUTH_USER` — логин аварийного пользователя, по умолчанию `admin`.
+  Пользователь создаётся при старте, если его ещё нет; обычная регистрация
+  продолжает работать.
 - `WEBSCOPE_AUTH_KEY` — Fernet-ключ для паролей к защищённым сайтам.
   Без него пароли хранятся как есть.
 - `WEBSCOPE_MOCK_SCANNER=1` — включает заглушку (одинаковые отчёты для всех
@@ -73,7 +84,8 @@ flyctl secrets set -a webscope \
   На проде **не задавать**.
 
 Публичные маршруты без входа: `/`, `/landing`, `/auth/*`, `/healthz`,
-`/static/*`, `/__local/*`. Остальное требует авторизации.
+`/static/*`, `/__local/*`, `/webhook/*` (у вебхуков своя подпись).
+Остальное требует авторизации.
 
 ## Домен DuckDNS
 

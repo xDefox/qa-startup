@@ -67,3 +67,36 @@ def stub_scanner():
         return CrawlOutcome(ScanResult(url=url, final_url=url))
 
     return _scan
+
+
+DEFAULT_TEST_EMAIL = "tester@example.com"
+DEFAULT_TEST_PASSWORD = "test-password-123"
+
+
+def sign_in(
+    client,
+    email: str = DEFAULT_TEST_EMAIL,
+    password: str = DEFAULT_TEST_PASSWORD,
+    *,
+    register: bool = True,
+):
+    """Регистрирует тестового пользователя и оставляет его залогиненным.
+
+    Кабинет закрыт по умолчанию, поэтому почти каждому тесту веб-слоя нужен
+    реальный пользователь. Если аккаунт уже есть — просто входит.
+    """
+    if register:
+        response = client.post(
+            "/auth/register",
+            data={"email": email, "password": password, "password_confirm": password},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303, response.text
+        return response
+    response = client.post(
+        "/auth/login",
+        data={"email": email, "password": password},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303, response.text
+    return response

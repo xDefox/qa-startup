@@ -31,8 +31,21 @@ def page(browser):
     """Page fixture that creates a new context and page for each test."""
     context = browser.new_context()
     page = context.new_page()
+    _ensure_login(page)
     yield page
     context.close()
+
+
+def _ensure_login(page) -> None:
+    """Кабинет закрыт, поэтому e2e-контекст регистрируется/входит один раз."""
+    credentials = {"email": "e2e@example.com", "password": "e2e-password-123"}
+    register = page.request.post(
+        f"{BASE_URL}/auth/register",
+        data={**credentials, "password_confirm": credentials["password"]},
+        max_redirects=0,
+    )
+    if register.status not in (302, 303):
+        page.request.post(f"{BASE_URL}/auth/login", data=credentials, max_redirects=0)
 
 
 # --- Вспомогательные функции ---

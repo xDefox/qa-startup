@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from conftest import sign_in
 from fastapi.testclient import TestClient
 
 from webscope.webapp import uploads as uploads_module
@@ -38,6 +39,7 @@ def test_upload_rejects_absolute_path(tmp_path: Path, monkeypatch: pytest.Monkey
     )
     outside = tmp_path / "pwned.txt"
     with TestClient(app) as client:
+        sign_in(client)
         response = _upload(client, [str(outside)])
     assert response.status_code == 400
     assert not outside.exists()
@@ -54,6 +56,7 @@ def test_upload_keeps_relative_paths_inside(tmp_path: Path, monkeypatch: pytest.
         local_dir=local_dir,
     )
     with TestClient(app) as client:
+        sign_in(client)
         response = _upload(client, ["../../escape/index.html"])
     assert response.status_code == 200
     written = list(local_dir.rglob("index.html"))
@@ -73,6 +76,7 @@ def test_upload_rejects_too_many_files(tmp_path: Path, monkeypatch: pytest.Monke
         local_dir=local_dir,
     )
     with TestClient(app) as client:
+        sign_in(client)
         response = _upload(client, ["a.html", "b.html", "c.html"])
     assert response.status_code == 413
 
@@ -89,6 +93,7 @@ def test_upload_rejects_huge_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         local_dir=local_dir,
     )
     with TestClient(app) as client:
+        sign_in(client)
         response = _upload(client, ["index.html"], content=b"x" * 100)
     assert response.status_code == 413
 
@@ -105,6 +110,7 @@ def test_uploaded_page_is_served_in_sandbox(tmp_path: Path, monkeypatch: pytest.
         local_dir=local_dir,
     )
     with TestClient(app) as client:
+        sign_in(client)
         response = _upload(client, ["index.html"], content=b"<html><script>fetch('/api/sites')</script></html>")
         assert response.status_code == 200
         page = client.get(response.json()["url"].split("testserver")[-1])
@@ -142,6 +148,7 @@ def test_upload_dir_is_configurable(tmp_path: Path, stub_scanner) -> None:
         local_dir=local_dir,
     )
     with TestClient(app) as client:
+        sign_in(client)
         response = _upload(client, ["index.html"])
 
     assert response.status_code == 200

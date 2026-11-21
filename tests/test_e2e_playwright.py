@@ -24,6 +24,14 @@ async def page(browser):
     """Page fixture that creates a new context and page for each test."""
     context = await browser.new_context()
     page = await context.new_page()
+    credentials = {"email": "e2e@example.com", "password": "e2e-password-123"}
+    response = await page.request.post(
+        f"{BASE_URL}/auth/register",
+        data={**credentials, "password_confirm": credentials["password"]},
+        max_redirects=0,
+    )
+    if response.status not in (302, 303):
+        await page.request.post(f"{BASE_URL}/auth/login", data=credentials, max_redirects=0)
     yield page
     await context.close()
 

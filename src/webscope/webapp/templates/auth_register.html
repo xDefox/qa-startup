@@ -5,7 +5,7 @@
 {% block title %}Регистрация — webscope{% endblock %}
 {% block body_class %}auth-page{% endblock %}
 {% block main_class %}page page--tight{% endblock %}
-{% block container_class %} auth-shell{% endblock %}
+{% block container_class %}auth-shell{% endblock %}
 {% block header %}{% endblock %}
 {% block footer %}{% endblock %}
 
@@ -16,19 +16,19 @@
     <span>webscope<span class="brand__dot">.</span></span>
   </a>
   <h1>Регистрация</h1>
-  <p class="subtitle">Создайте учётную запись, чтобы управлять настройками и просмотром отчётов.</p>
+  <p class="subtitle">Создайте аккаунт: сайты, история проверок и настройки будут только вашими.</p>
 
   {% if error %}{{ alert(error, variant="error", icon_name="alert") }}{% endif %}
 
   <form method="post" action="/auth/register" class="stack">
-    {{ field("Email", input("email", type="email", autocomplete="email", required=True, placeholder="email@example.com"), id="email") }}
-    {{ field("Пароль", input("password", type="password", autocomplete="current-password", required=True, placeholder="Пароль"), id="password") }}
-    {{ field("Подтверждение пароля", input("password_confirm", type="password", autocomplete="current-password", required=True, placeholder="Повторите пароль"), id="password_confirm") }}
+    {{ field("Email", input("email", type="email", value=email, autocomplete="username", required=True, placeholder="you@example.com", attrs={"spellcheck": "false"}), id="email") }}
+    {{ field("Пароль", input("password", type="password", autocomplete="new-password", required=True, placeholder="Не короче " ~ min_password ~ " символов"), help_text="Минимум " ~ min_password ~ " символов.", id="password") }}
+    {{ field("Ещё раз пароль", input("password_confirm", type="password", autocomplete="new-password", required=True, placeholder="Повторите пароль"), id="password_confirm") }}
     <div class="form-actions">
-      {{ btn("Зарегистрироваться", type="submit", size="lg", icon_name="arrow-right", icon_right=True) }}
+      {{ btn("Создать аккаунт", type="submit", size="lg", icon_name="arrow-right", icon_right=True) }}
     </div>
   </form>
 
-  <p class="muted small mt-4">Уже есть аккаунт? <a href="/auth/login">Войти</a></p>
+  <p class="auth-meta">Уже есть аккаунт? <a href="/auth/login">Войти</a> · <a href="/">← На главную</a></p>
 </div>
 {% endblock %}

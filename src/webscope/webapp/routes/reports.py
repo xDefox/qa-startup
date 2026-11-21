@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 
-from ..deps import get_site_or_404
+from ..deps import get_current_user, get_site_or_404
 from ..report_files import (
     REPORT_MEDIA_TYPES,
     REPORT_RENDERERS,
@@ -19,16 +19,18 @@ from ..views import result_from_run
 router = APIRouter()
 
 
-def _report_payload(state: AppState, site_id: int, fmt: str) -> tuple[Site, Run, str]:
+def _report_payload(state: AppState, site_id: int, fmt: str, owner_id: int) -> tuple[Site, Run, str]:
     """Готовый отчёт: сайт, прогон и содержимое в нужном формате."""
-    site = get_site_or_404(state, site_id)
+    site = get_site_or_404(state, site_id, owner_id)
     last = state.storage.latest_ok_run(site.id)
     if last is None:
         raise HTTPException(status_code=404, detail="Отчёт ещё не готов")
     return site, last, REPORT_RENDERERS[fmt](result_from_run(state.storage, last))
 
 
-def _report_response(state: AppState, site_id: int, fmt: str, download: bool, filename: str | None = None) -> Response:
+def _report_response(
+    state: AppState, site_id: int, fmt: str, download: bool, owner_id: int, filename: str | None = None
+) -> Response:
     """Отчёт для просмотра в браузере или файлом на скачивание.
 
     ``filename`` — имя, выбранное пользователем в панели сохранения;
@@ -36,7 +38,7 @@ def _report_response(state: AppState, site_id: int, fmt: str, download: bool, fi
     Заголовок важнее атрибута ``download`` в ссылке, поэтому имя задаётся
     именно здесь, а не в разметке.
     """
-    site, run, payload = _report_payload(state, site_id, fmt)
+    site, run, payload = _report_payload(state, site_id, fmt, owner_id)
     headers: dict[str, str] = {}
     if download:
         headers["Content-Disposition"] = content_disposition(
@@ -49,59 +51,65 @@ def _report_response(state: AppState, site_id: int, fmt: str, download: bool, fi
 
 @router.get("/api/sites/{site_id}/report.txt")
 def api_report_text(
+    request: Request,
     site_id: int,
     state: AppState = Depends(get_state),
     download: bool = False,
     filename: str | None = None,
 ):
-    return _report_response(state, site_id, "txt", download, filename)
+    return _report_response(state, site_id, "txt", download, get_current_user(request)["id"], filename)
 
 
 @router.get("/api/sites/{site_id}/report.json")
 def api_report_json(
+    request: Request,
     site_id: int,
     state: AppState = Depends(get_state),
     download: bool = False,
     filename: str | None = None,
 ):
-    return _report_response(state, site_id, "json", download, filename)
+    return _report_response(state, site_id, "json", download, get_current_user(request)["id"], filename)
 
 
 @router.get("/api/sites/{site_id}/report.html")
 def api_report_html(
+    request: Request,
     site_id: int,
     state: AppState = Depends(get_state),
     download: bool = False,
     filename: str | None = None,
 ):
-    return _report_response(state, site_id, "html", download, filename)
+    return _report_response(state, site_id, "html", download, get_current_user(request)["id"], filename)
 
 
 @router.get("/api/sites/{site_id}/report.sarif")
 def api_report_sarif(
+    request: Request,
     site_id: int,
     state: AppState = Depends(get_state),
     download: bool = False,
     filename: str | None = None,
 ):
-    return _report_response(state, site_id, "sarif", download, filename)
+    return _report_response(state, site_id, "sarif", download, get_current_user(request)["id"], filename)
 
 
 @router.get("/api/sites/{site_id}/report.pdf")
 def api_report_pdf(
+    request: Request,
     site_id: int,
     state: AppState = Depends(get_state),
     download: bool = False,
     filename: str | None = None,
 ):
-    return _report_response(state, site_id, "pdf", download, filename)
+    return _report_response(state, site_id, "pdf", download, get_current_user(request)["id"], filename)
 
 
 @router.get("/api/sites/{site_id}/report.xml")
 def api_report_junit(
+    request: Request,
     site_id: int,
     state: AppState = Depends(get_state),
     download: bool = False,
     filename: str | None = None,
 ):
-    return _report_response(state, site_id, "xml", download, filename)
+    return _report_response(state, site_id, "xml", download, get_current_user(request)["id"], filename)

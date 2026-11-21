@@ -6,14 +6,23 @@
 
 ## S1. Аутентификация / middleware
 
-- **Где:** `auth.py:34` (`auth_configured()`), `auth.py:57` (`is_authenticated()`), `auth.py:88` (`csrf_safe()`), `app.py:450` (`guard` middleware).
-- **Проблема:** ни один маршрут не проверял cookie `webscope_session` — ни middleware, ни `Depends`.
-- **Реализация:**
-  - `auth_configured()` — проверяет `WEBSCOPE_AUTH_PASSWORD` в env; если выключен, все маршруты открыты.
-  - `is_authenticated(request)` — валидация HMAC-коokie: `secret, token = cookie.split("|")`; `hmac.compare_digest(hmac.new(secret.encode(), token.encode(), hashlib.sha256).hexdigest(), token)`.
-  - `csrf_safe()` — проверяет `Origin` / `Referer` headers; при mismatch возвращает 403.
-  - Middleware `guard` в `app.py:450` оборачивает все маршруты, кроме публичных: `/`, `/landing`, `/healthz`, `/auth/*`, `/static/*`, `/__local/*`.
-- **Тест:** `test_security.py::test_pages_require_login`, `test_login_sets_session_and_grants_access`, `test_forged_cookie_is_rejected`, `test_csrf_blocks_foreign_origin`.
+- **Где:** `auth.py`, `routes/auth.py`, `middleware.py` (`guard`).
+- **Проблема (2026-10-30):** ни один маршрут не проверял cookie `webscope_session` — ни middleware, ни `Depends`.
+- **Реализация (2026-11-21):** пользователи и сессии в SQLite.
+  - регистрация `/auth/register` и вход `/auth/login`; пароли — scrypt-хеши
+    (`storage._hash_password`), открытый пароль в базу не попадает;
+  - cookie `webscope_session` содержит случайный токен, в таблице `sessions`
+    лежит только его SHA-256; выход удаляет серверную сессию;
+  - middleware `guard` требует вход для всех маршрутов, кроме публичных:
+    `/`, `/landing`, `/auth/*`, `/healthz`, `/static/*`, `/__local/*`,
+    `/webhook/*` (у вебхуков своя подпись);
+  - `csrf_safe()` проверяет `Origin` / `Referer`; при mismatch — 403;
+  - у каждого пользователя свои сайты, организации и отчёты: `owner_id`
+    проверяется в `get_site_or_404`, API и выгрузке отчётов (чужой id → 404).
+  - `WEBSCOPE_AUTH_PASSWORD` — только аварийный вход: создаёт пользователя
+    при старте, если его ещё нет.
+- **Тесты:** `tests/test_webapp_auth.py` (регистрация, вход, cookie, выход,
+  CSRF, изоляция кабинетов, миграция старых сайтов).
 
 ---
 

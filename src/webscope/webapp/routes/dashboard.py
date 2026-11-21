@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
-from ..auth import COOKIE_NAME, auth_configured
+from ..auth import COOKIE_NAME
 from ..deps import get_current_user, index_cards
 from ..services.site_service import get_organizations
 from ..state import AppState, get_state
@@ -24,7 +24,7 @@ async def dashboard_index(
     state: AppState = Depends(get_state),
     user: dict = Depends(get_current_user),
 ):
-    cards = index_cards(state)
+    cards = index_cards(state, user["id"])
     summary = {
         "total": len(cards),
         "ok": sum(1 for card in cards if card.run and card.run.status == "ok"),
@@ -39,7 +39,7 @@ async def dashboard_index(
             "user": user,
             "cards": cards,
             "summary": summary,
-            "organizations": get_organizations(state.storage),
+            "organizations": get_organizations(state.storage, owner_id=user["id"]),
             "schedule_options": SCHEDULE_OPTIONS,
             "active_tab": "sites",
         },
@@ -58,7 +58,6 @@ async def dashboard_settings(
         "dashboard_settings.html",
         {
             "user": user,
-            "auth_enabled": auth_configured(),
             "active_tab": "settings",
         },
     )
@@ -90,7 +89,7 @@ async def dashboard_organizations(
     state: AppState = Depends(get_state),
     user: dict = Depends(get_current_user),
 ):
-    orgs = get_organizations(state.storage)
+    orgs = get_organizations(state.storage, owner_id=user["id"])
     return _page(
         state,
         request,

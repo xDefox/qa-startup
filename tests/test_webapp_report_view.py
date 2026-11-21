@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from conftest import sign_in
 
 from webscope.models import Finding, ScanResult, Severity
 from webscope.webapp.app import create_app
@@ -65,6 +66,7 @@ def client(tmp_path: Path):
     )
     app = create_app(db_path=tmp_path / "test.db")
     with TestClient(app) as test_client:
+        sign_in(test_client)
         yield test_client, site
 
 

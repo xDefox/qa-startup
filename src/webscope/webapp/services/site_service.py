@@ -30,11 +30,12 @@ def _open(password: str | None) -> str | None:
 class Organization:
     """Организация, к которой принадлежит сайт."""
 
-    def __init__(self, id: int, name: str, owner_email: str, created_at: str):
+    def __init__(self, id: int, name: str, owner_email: str, created_at: str, owner_id: int = 0):
         self.id = id
         self.name = name
         self.owner_email = owner_email
         self.created_at = created_at
+        self.owner_id = owner_id
 
 
 def create_organization(
@@ -42,27 +43,28 @@ def create_organization(
     *,
     name: str,
     owner_email: str,
+    owner_id: int = 0,
 ) -> Organization:
     """Создаёт организацию и возвращает объект."""
-    # Самое простое: добавляем запись в конфигурационную таблицу
-    # или просто создаём идентификатор и сохраняем метаданные.
-    # Пока возвращаем структуру, storage.update_site будет привязывать sites к org.
     with storage._conn() as conn:
-        org_id = conn.execute(
-            "INSERT OR IGNORE INTO organizations (name, owner_email, created_at) VALUES (?, ?, ?)",
-            (name, owner_email, now_iso()),
-        ).lastrowid
+        cursor = conn.execute(
+            "INSERT INTO organizations (name, owner_email, owner_id, created_at) VALUES (?, ?, ?, ?)",
+            (name, owner_email, owner_id, now_iso()),
+        )
         conn.commit()
-    return Organization(id=org_id, name=name, owner_email=owner_email, created_at=now_iso())
+        org_id = cursor.lastrowid
+    return Organization(id=org_id, name=name, owner_email=owner_email, created_at=now_iso(), owner_id=owner_id)
 
 
-def get_organization(storage: Storage, org_id: int) -> Organization | None:
-    """Получает организацию по ID."""
+def get_organization(storage: Storage, org_id: int, owner_id: int | None = None) -> Organization | None:
+    """Получает организацию по ID (опционально — только свою)."""
+    query = "SELECT id, name, owner_email, created_at, owner_id FROM organizations WHERE id = ?"
+    params: tuple = (org_id,)
+    if owner_id is not None:
+        query += " AND owner_id = ?"
+        params += (owner_id,)
     with storage._conn() as conn:
-        row = conn.execute(
-            "SELECT id, name, owner_email, created_at FROM organizations WHERE id = ?",
-            (org_id,),
-        ).fetchone()
+        row = conn.execute(query, params).fetchone()
     if row is None:
         return None
     return Organization(
@@ -70,6 +72,7 @@ def get_organization(storage: Storage, org_id: int) -> Organization | None:
         name=row[1],
         owner_email=row[2],
         created_at=row[3],
+        owner_id=row[4],
     )
 
 
@@ -78,6 +81,7 @@ def create_site(
     *,
     url: str,
     organization_id: int,
+    owner_id: int = 0,
     email: str | None = None,
     telegram_chat: str | None = None,
     schedule: str = "off",
@@ -90,21 +94,25 @@ def create_site(
     watchdog_triggers: list[str] | None = None,
     watchdog_webhook_secret: str | None = None,
 ) -> Site:
-    """Создаёт сайт, привязанный к организации.
+    """Создаёт сайт, привязанный к организации и владельцу.
 
-    Ранее sites не имели явной привязки к организации — теперь
-    каждый site имеет organization_id, а organization_id = 0 (или None)
-    означает "общий/непривязанный".
+    URL уникален в базе, поэтому сайт, добавленный другим аккаунтом, не
+    переиспользуется: это отдельный кабинет, а не общий список.
     """
-    # Гарантируем, что организация существует
-    org = get_organization(storage, organization_id)
+    # Гарантируем, что организация существует и принадлежит этому же владельцу
+    org = get_organization(storage, organization_id, owner_id=owner_id)
     if org is None:
         raise ValueError(f"Organization with id={organization_id} does not exist")
 
     # Проверяем, не существует ли сайт с таким URL уже
     existing = storage.get_site_by_url(url)
     if existing is not None:
+        if existing.owner_id not in (0, owner_id):
+            raise ValueError("Этот сайт уже отслеживается в другом аккаунте")
         existing_site = existing
+        # Сайт из «доавторизационной» эпохи забирает текущий владелец.
+        if existing_site.owner_id == 0 and owner_id:
+            storage.update_site(existing_site.id, owner_id=owner_id)
         # Если переданы новые авторизационные данные — обновляем их
         if auth_kind is not None:
             storage.update_site(
@@ -132,6 +140,7 @@ def create_site(
         auth_login_url=auth_login_url,
         created_at=now_iso(),
         organization_id=organization_id,
+        owner_id=owner_id,
         watchdog_enabled=watchdog_enabled,
         watchdog_triggers=watchdog_triggers or ["webhook", "content_hash"],
         watchdog_webhook_secret=watchdog_webhook_secret,
@@ -142,9 +151,9 @@ def create_site(
             """INSERT INTO sites 
                (url, email, telegram_chat, schedule, interval_days, 
                 auth_kind, auth_login, auth_password, auth_login_url, 
-                organization_id, created_at,
+                organization_id, owner_id, created_at,
                 watchdog_enabled, watchdog_triggers, watchdog_webhook_secret)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 url,
                 email,
@@ -156,6 +165,7 @@ def create_site(
                 site.auth_password,
                 auth_login_url,
                 organization_id,
+                owner_id,
                 now_iso(),
                 1 if watchdog_enabled else 0,
                 ",".join(watchdog_triggers) if watchdog_triggers else "webhook,content_hash",
@@ -179,27 +189,37 @@ def list_sites(
     storage: Storage,
     *,
     organization_id: int | None = None,
+    owner_id: int | None = None,
 ) -> list[Site]:
-    """Список сайтов, фильтр по организации опционален."""
+    """Список сайтов: опционально только свои и/или по организации."""
+    query = "SELECT * FROM sites"
+    where: list[str] = []
+    params: list = []
     if organization_id is not None:
-        with storage._conn() as connection:
-            rows = connection.execute(
-                "SELECT * FROM sites WHERE organization_id = ? ORDER BY id",
-                (organization_id,),
-            ).fetchall()
-    else:
-        with storage._conn() as connection:
-            rows = connection.execute("SELECT * FROM sites ORDER BY id").fetchall()
+        where.append("organization_id = ?")
+        params.append(organization_id)
+    if owner_id is not None:
+        where.append("owner_id = ?")
+        params.append(owner_id)
+    if where:
+        query += " WHERE " + " AND ".join(where)
+    query += " ORDER BY id"
+    with storage._conn() as connection:
+        rows = connection.execute(query, params).fetchall()
     return [_site_from_row(row) for row in rows]
 
 
-def get_organizations(storage: Storage) -> list[Organization]:
-    """Все организации — для UI-селектора."""
+def get_organizations(storage: Storage, owner_id: int | None = None) -> list[Organization]:
+    """Организации для UI-селектора (только свои, если задан owner_id)."""
+    query = "SELECT id, name, owner_email, created_at, owner_id FROM organizations"
+    params: tuple = ()
+    if owner_id is not None:
+        query += " WHERE owner_id = ?"
+        params = (owner_id,)
+    query += " ORDER BY id"
     with storage._conn() as connection:
-        rows = connection.execute(
-            "SELECT id, name, owner_email, created_at FROM organizations ORDER BY id",
-        ).fetchall()
-    return [Organization(id=r[0], name=r[1], owner_email=r[2], created_at=r[3]) for r in rows]
+        rows = connection.execute(query, params).fetchall()
+    return [Organization(id=r[0], name=r[1], owner_email=r[2], created_at=r[3], owner_id=r[4]) for r in rows]
 
 
 def update_site(
@@ -219,6 +239,7 @@ def update_site(
         "telegram_chat",
         "schedule",
         "interval_days",
+        "owner_id",
         "auth_kind",
         "auth_login",
         "auth_password",

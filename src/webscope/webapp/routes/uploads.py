@@ -9,7 +9,8 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 
 from .. import uploads
-from ..deps import scan_limit_response, trigger
+from ..deps import get_current_user, scan_limit_response, trigger
+from ..services.site_service import create_organization, get_organizations
 from ..state import AppState, get_state
 from ..urls import normalize_url
 
@@ -81,6 +82,24 @@ async def upload_files(
         normalized = normalize_url(url)
     except ValueError:
         normalized = url
-    site = state.storage.add_site(normalized, email=None, telegram_chat=None, schedule="off")
+    user = get_current_user(request)
+    orgs = get_organizations(state.storage, owner_id=user["id"])
+    if orgs:
+        org_id = orgs[0].id
+    else:
+        org_id = create_organization(
+            state.storage,
+            name="Личный кабинет",
+            owner_email=user["email"],
+            owner_id=user["id"],
+        ).id
+    site = state.storage.add_site(
+        normalized,
+        email=None,
+        telegram_chat=None,
+        schedule="off",
+        owner_id=user["id"],
+        organization_id=org_id,
+    )
     trigger(state, site, background_tasks)
     return {"url": normalized, "site_id": site.id}

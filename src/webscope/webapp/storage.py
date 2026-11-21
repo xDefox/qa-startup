@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS sites (
     auth_password   TEXT,
     auth_login_url  TEXT,
     organization_id INTEGER NOT NULL DEFAULT 0,
+    owner_id        INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL,
     watchdog_enabled INTEGER NOT NULL DEFAULT 0,
     watchdog_triggers TEXT,
@@ -50,6 +51,7 @@ CREATE TABLE IF NOT EXISTS organizations (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT NOT NULL,
     owner_email TEXT NOT NULL,
+    owner_id    INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT NOT NULL
 );
 
@@ -63,6 +65,15 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 
 CREATE TABLE IF NOT EXISTS runs (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,6 +117,9 @@ _MIGRATIONS = (
     ("sites", "auth_login", "TEXT"),
     ("sites", "auth_password", "TEXT"),
     ("sites", "auth_login_url", "TEXT"),
+    ("sites", "organization_id", "INTEGER NOT NULL DEFAULT 0"),
+    ("sites", "owner_id", "INTEGER NOT NULL DEFAULT 0"),
+    ("organizations", "owner_id", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 # Миграция биллинга (Milestone 4): таблицы subscriptions + invoices.
@@ -209,6 +223,7 @@ class Site:
     auth_password: str | None = None
     auth_login_url: str | None = None
     organization_id: int = 0
+    owner_id: int = 0
     # Watchdog
     watchdog_enabled: bool = False
     watchdog_triggers: list[str] = field(default_factory=lambda: ["webhook", "content_hash"])
@@ -440,16 +455,22 @@ class Storage:
         auth_login: str | None = None,
         auth_password: str | None = None,
         auth_login_url: str | None = None,
+        owner_id: int = 0,
+        organization_id: int = 0,
     ) -> Site:
-        """Создаёт сайт. Возвращает существующий, если URL уже известен."""
+        """Создаёт сайт. Возвращает существующий, если URL уже известен.
+
+        URL глобально уникален (историческое ограничение схемы), поэтому
+        вызывающая сторона должна заранее проверить, чей это сайт.
+        """
         with self._conn() as connection:
             existing = connection.execute("SELECT * FROM sites WHERE url = ?", (url,)).fetchone()
             if existing is not None:
                 return _site_from_row(existing)
             cursor = connection.execute(
                 "INSERT INTO sites (url, email, telegram_chat, schedule, interval_days,"
-                " auth_kind, auth_login, auth_password, auth_login_url, created_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " auth_kind, auth_login, auth_password, auth_login_url, owner_id, organization_id, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     url,
                     email,
@@ -460,6 +481,8 @@ class Storage:
                     auth_login,
                     _seal(auth_password),
                     auth_login_url,
+                    owner_id,
+                    organization_id,
                     now_iso(),
                 ),
             )
@@ -472,15 +495,27 @@ class Storage:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
         return _site_from_row(row) if row else None
 
-    def get_site_by_url(self, url: str) -> Site | None:
-        """Найти сайт по URL."""
+    def get_site_by_url(self, url: str, owner_id: int | None = None) -> Site | None:
+        """Найти сайт по URL (опционально — только свой)."""
+        query = "SELECT * FROM sites WHERE url = ?"
+        params: tuple = (url,)
+        if owner_id is not None:
+            query += " AND owner_id = ?"
+            params += (owner_id,)
         with self._conn() as connection:
-            row = connection.execute("SELECT * FROM sites WHERE url = ?", (url,)).fetchone()
+            row = connection.execute(query, params).fetchone()
         return _site_from_row(row) if row else None
 
-    def list_sites(self) -> list[Site]:
+    def list_sites(self, owner_id: int | None = None) -> list[Site]:
+        """Сайты; ``owner_id`` ограничивает выборку личным кабинетом."""
+        query = "SELECT * FROM sites"
+        params: tuple = ()
+        if owner_id is not None:
+            query += " WHERE owner_id = ?"
+            params = (owner_id,)
+        query += " ORDER BY id"
         with self._conn() as connection:
-            rows = connection.execute("SELECT * FROM sites ORDER BY id").fetchall()
+            rows = connection.execute(query, params).fetchall()
         return [_site_from_row(row) for row in rows]
 
     def update_site(self, site_id: int, **fields) -> None:
@@ -1037,7 +1072,7 @@ class Storage:
     # --- Пользователи (регистрация / вход) ---
 
     def create_user(self, email: str, password: str, organization_id: int = 0) -> int:
-        """Создаёт пользователя. Возвращает id. Hashes password via scrypt."""
+        """Создаёт пользователя. Возвращает id. Пароль хранится как scrypt-хеш."""
         password_hash = _hash_password(password)
         with self._conn() as conn:
             cur = conn.execute(
@@ -1048,10 +1083,11 @@ class Storage:
             return cur.lastrowid or 0
 
     def get_user_by_email(self, email: str) -> dict | None:
-        """Возвращает словарь с полями пользователя или None."""
+        """Возвращает словарь с полями пользователя или None (email без учёта регистра)."""
         with self._conn() as conn:
             row = conn.execute(
-                "SELECT id, email, password_hash, organization_id, is_active, created_at FROM users WHERE email = ?",
+                "SELECT id, email, password_hash, organization_id, is_active, created_at"
+                " FROM users WHERE lower(email) = lower(?)",
                 (email,),
             ).fetchone()
         if not row:
@@ -1069,15 +1105,18 @@ class Storage:
 
     def user_exists(self, email: str) -> bool:
         with self._conn() as conn:
-            row = conn.execute(
-                "SELECT 1 FROM users WHERE email = ?", (email,)
-            ).fetchone()
+            row = conn.execute("SELECT 1 FROM users WHERE lower(email) = lower(?)", (email,)).fetchone()
         return row is not None
 
     def has_users(self) -> bool:
         with self._conn() as conn:
             row = conn.execute("SELECT 1 FROM users LIMIT 1").fetchone()
         return row is not None
+
+    def count_users(self) -> int:
+        with self._conn() as conn:
+            row = conn.execute("SELECT COUNT(*) FROM users").fetchone()
+        return int(row[0]) if row else 0
 
     def get_user_by_id(self, user_id: int) -> dict | None:
         with self._conn() as conn:
@@ -1088,6 +1127,89 @@ class Storage:
         if not row:
             return None
         return dict(row)
+
+    def set_user_organization(self, user_id: int, organization_id: int) -> None:
+        with self._conn() as conn:
+            conn.execute("UPDATE users SET organization_id = ? WHERE id = ?", (organization_id, user_id))
+            conn.commit()
+
+    def set_user_password(self, user_id: int, password: str) -> None:
+        """Меняет пароль; все сессии пользователя при этом отзываются."""
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (_hash_password(password), user_id),
+            )
+            conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            conn.commit()
+
+    def is_admin(self, user_id: int) -> bool:
+        """Администратор — самый первый зарегистрированный пользователь."""
+        with self._conn() as conn:
+            row = conn.execute("SELECT MIN(id) FROM users").fetchone()
+        return bool(row and row[0] == user_id)
+
+    def adopt_orphan_data(self, user_id: int) -> None:
+        """Отдаёт первому пользователю данные, созданные до появления входа."""
+        with self._conn() as conn:
+            conn.execute("UPDATE sites SET owner_id = ? WHERE owner_id = 0", (user_id,))
+            conn.execute("UPDATE organizations SET owner_id = ? WHERE owner_id = 0", (user_id,))
+            conn.commit()
+
+    # --- Сессии (cookie хранит случайный токен, в БД — только его хеш) ---
+
+    @staticmethod
+    def _token_hash(token: str) -> str:
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    def create_session(self, user_id: int, token: str, expires_at: str) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                (self._token_hash(token), user_id, now_iso(), expires_at),
+            )
+            conn.commit()
+
+    def session_user(self, token: str) -> dict | None:
+        """Пользователь по токену сессии; просроченные сессии удаляются."""
+        if not token:
+            return None
+        token_hash = self._token_hash(token)
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT u.id, u.email, u.password_hash, u.organization_id, u.is_active, u.created_at,"
+                " s.expires_at"
+                " FROM sessions s JOIN users u ON u.id = s.user_id"
+                " WHERE s.token_hash = ?",
+                (token_hash,),
+            ).fetchone()
+            if row is None:
+                return None
+            if row["expires_at"] <= now_iso():
+                conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
+                conn.commit()
+                return None
+        user = dict(row)
+        user.pop("expires_at", None)
+        return user if user.get("is_active") else None
+
+    def delete_session(self, token: str) -> None:
+        if not token:
+            return
+        with self._conn() as conn:
+            conn.execute("DELETE FROM sessions WHERE token_hash = ?", (self._token_hash(token),))
+            conn.commit()
+
+    def delete_user_sessions(self, user_id: int) -> None:
+        with self._conn() as conn:
+            conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            conn.commit()
+
+    def purge_expired_sessions(self) -> int:
+        with self._conn() as conn:
+            cursor = conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (now_iso(),))
+            conn.commit()
+            return cursor.rowcount
 
 
 def _finding_from_row(row: sqlite3.Row) -> Finding:
@@ -1134,6 +1256,7 @@ def _site_from_row(row: sqlite3.Row) -> Site:
         auth_password=_open(row["auth_password"]) if "auth_password" in keys else None,
         auth_login_url=row["auth_login_url"] if "auth_login_url" in keys else None,
         organization_id=row["organization_id"] if "organization_id" in keys else 0,
+        owner_id=row["owner_id"] if "owner_id" in keys else 0,
         # Watchdog
         watchdog_enabled=bool(row["watchdog_enabled"]) if "watchdog_enabled" in keys else False,
         watchdog_triggers=row["watchdog_triggers"].split(",")

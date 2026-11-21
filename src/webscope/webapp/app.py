@@ -20,7 +20,7 @@ from fastapi.templating import Jinja2Templates
 from .. import __version__
 from . import middleware
 from .alerts import notify
-from .auth import auth_configured, is_authenticated
+from .auth import auth_configured, bootstrap_env_admin, is_authenticated, public_user
 from .limits import RateLimiter, rate_limit, rate_window_seconds
 from .mock_scanner import mock_scanner
 from .presentation import register_filters
@@ -68,6 +68,7 @@ def create_app(
     storage = Storage(db_path)
     migrate_add_organization_id(storage)
     ensure_default_organization(storage)
+    bootstrap_env_admin(storage)
 
     upload_dir = Path(local_dir) if local_dir is not None else LOCAL_DIR
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -91,6 +92,7 @@ def create_app(
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     templates.env.globals["auth_enabled"] = lambda: auth_configured(storage)
     templates.env.globals["is_authenticated"] = is_authenticated
+    templates.env.globals["current_user"] = public_user
     templates.env.globals["mock_scanner_enabled"] = os.environ.get("WEBSCOPE_MOCK_SCANNER") == "1"
     register_filters(templates.env)
 
@@ -121,6 +123,7 @@ def create_app(
         limiter=RateLimiter(rate_limit(), rate_window_seconds()),
         scan_options=scan_options,
         local_dir=upload_dir,
+        auth_limiter=RateLimiter(15, 60.0),
     )
     setattr(app.state, STATE_KEY, state)
 

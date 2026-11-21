@@ -18,7 +18,7 @@
 ) %}
 <div>
   <h2>Проверить сайт</h2>
-  {% if not (auth_enabled() and not is_authenticated(request)) %}
+  {% if not is_authenticated(request) %}
   <p class="muted small">Вставьте адрес — покажем оценку и три первых дела.</p>
   {% endif %}
   {{ quick_scan_form(request, compact=False, note=None) }}

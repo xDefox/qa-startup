@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from ..deps import get_site_or_404, index_cards, scan_limit_response, trigger
+from ..deps import get_current_user, get_site_or_404, index_cards, scan_limit_response, trigger
 from ..forms import auth_fields
 from ..report_files import DOWNLOAD_FORMATS, default_report_stem, human_date
 from ..services.site_service import (
@@ -44,7 +44,8 @@ def index(request: Request, state: AppState = Depends(get_state)):
 @router.get("/scan/oneshot", response_class=HTMLResponse)
 def scan_oneshot(request: Request, state: AppState = Depends(get_state)):
     """Страница разовой проверки — требует авторизацию."""
-    orgs = get_organizations(state.storage)
+    user = get_current_user(request)
+    orgs = get_organizations(state.storage, owner_id=user["id"])
     return _page(state, request, "oneshot.html", {"organizations": orgs})
 
 
@@ -75,6 +76,7 @@ def create_site(
     auth_login_url: str = Form(""),
     organization_id: int = Form(0),
 ):
+    user = get_current_user(request)
     limited = scan_limit_response(state, request)
     if limited is not None:
         return limited
@@ -88,7 +90,7 @@ def create_site(
             "scan.html",
             {
                 "error": str(exc),
-                "sites": index_cards(state),
+                "sites": index_cards(state, user["id"]),
             },
             status_code=400,
         )
@@ -100,14 +102,23 @@ def create_site(
             "scan.html",
             {
                 "error": "Включена авторизация, но не указан логин.",
-                "sites": index_cards(state),
+                "sites": index_cards(state, user["id"]),
             },
             status_code=400,
         )
 
-    org = get_organization(state.storage, organization_id)
+    org = get_organization(state.storage, organization_id, owner_id=user["id"])
     if org is None:
-        org = create_organization(state.storage, name="Default", owner_email="")
+        existing = get_organizations(state.storage, owner_id=user["id"])
+        if existing:
+            org = existing[0]
+        else:
+            org = create_organization(
+                state.storage,
+                name="Личный кабинет",
+                owner_email=user["email"],
+                owner_id=user["id"],
+            )
 
     auth = auth_fields(
         enabled=auth_enabled,
@@ -116,18 +127,28 @@ def create_site(
         password=auth_password,
         login_url=auth_login_url,
     )
-    site = create_site_service(
-        state.storage,
-        url=normalized,
-        organization_id=org.id,
-        email=email.strip() or None,
-        telegram_chat=telegram_chat.strip() or None,
-        schedule=schedule if schedule in SCHEDULE_LABELS else "off",
-        auth_kind=auth.get("auth_kind"),
-        auth_login=auth.get("auth_login"),
-        auth_password=auth.get("auth_password"),
-        auth_login_url=auth.get("auth_login_url"),
-    )
+    try:
+        site = create_site_service(
+            state.storage,
+            url=normalized,
+            organization_id=org.id,
+            owner_id=user["id"],
+            email=email.strip() or None,
+            telegram_chat=telegram_chat.strip() or None,
+            schedule=schedule if schedule in SCHEDULE_LABELS else "off",
+            auth_kind=auth.get("auth_kind"),
+            auth_login=auth.get("auth_login"),
+            auth_password=auth.get("auth_password"),
+            auth_login_url=auth.get("auth_login_url"),
+        )
+    except ValueError as exc:
+        return _page(
+            state,
+            request,
+            "scan.html",
+            {"error": str(exc), "sites": index_cards(state, user["id"])},
+            status_code=400,
+        )
     trigger(state, site, background_tasks)
     return RedirectResponse(url=f"/sites/{site.id}", status_code=303)
 
@@ -160,7 +181,7 @@ def _report_context(state: AppState, site, run, *, pending=None, last_error=None
 
 @router.get("/sites/{site_id}", response_class=HTMLResponse)
 def site_page(request: Request, site_id: int, state: AppState = Depends(get_state)):
-    site = get_site_or_404(state, site_id)
+    site = get_site_or_404(state, site_id, get_current_user(request)["id"])
     pending = state.storage.running_run(site.id)
     last = state.storage.latest_ok_run(site.id)
     newest = state.storage.latest_run(site.id)
@@ -178,14 +199,14 @@ def rescan(request: Request, site_id: int, background_tasks: BackgroundTasks, st
     limited = scan_limit_response(state, request)
     if limited is not None:
         return limited
-    site = get_site_or_404(state, site_id)
+    site = get_site_or_404(state, site_id, get_current_user(request)["id"])
     trigger(state, site, background_tasks)
     return RedirectResponse(url=f"/sites/{site.id}", status_code=303)
 
 
 @router.get("/sites/{site_id}/history", response_class=HTMLResponse)
 def site_history(request: Request, site_id: int, state: AppState = Depends(get_state)):
-    site = get_site_or_404(state, site_id)
+    site = get_site_or_404(state, site_id, get_current_user(request)["id"])
     runs = [run for run in state.storage.list_runs(site.id, limit=60) if run.status == "ok"]
     counts = state.storage.severity_counts([run.id for run in runs])
     return _page(state, request, "history.html", {"site": site, "runs": runs, "counts": counts})
@@ -194,7 +215,7 @@ def site_history(request: Request, site_id: int, state: AppState = Depends(get_s
 @router.get("/sites/{site_id}/runs/{run_id}", response_class=HTMLResponse)
 def run_detail(request: Request, site_id: int, run_id: int, state: AppState = Depends(get_state)):
     """Детальный отчёт конкретного прогона."""
-    site = get_site_or_404(state, site_id)
+    site = get_site_or_404(state, site_id, get_current_user(request)["id"])
     run = state.storage.get_run(run_id)
     if not run or run.site_id != site.id:
         raise HTTPException(status_code=404, detail="Прогон не найден")
@@ -205,7 +226,8 @@ def run_detail(request: Request, site_id: int, run_id: int, state: AppState = De
 
 @router.get("/sites/{site_id}/settings", response_class=HTMLResponse)
 def site_settings(request: Request, site_id: int, state: AppState = Depends(get_state), saved: bool = False):
-    site = get_site_or_404(state, site_id)
+    user = get_current_user(request)
+    site = get_site_or_404(state, site_id, user["id"])
     org = get_organization(state.storage, site.organization_id) if site.organization_id else None
     packages = state.storage.list_scan_packages(site.organization_id) if site.organization_id else []
     return _page(
@@ -215,7 +237,7 @@ def site_settings(request: Request, site_id: int, state: AppState = Depends(get_
         {
             "site": site,
             "organization_name": org.name if org else None,
-            "organizations": get_organizations(state.storage),
+            "organizations": get_organizations(state.storage, owner_id=user["id"]),
             "schedules": SCHEDULE_OPTIONS,
             "saved": saved,
             "packages": packages,
@@ -225,6 +247,7 @@ def site_settings(request: Request, site_id: int, state: AppState = Depends(get_
 
 @router.post("/sites/{site_id}/settings")
 def site_settings_save(
+    request: Request,
     site_id: int,
     state: AppState = Depends(get_state),
     email: str = Form(""),
@@ -241,7 +264,11 @@ def site_settings_save(
     watchdog_webhook_secret: str = Form(""),
     watchdog_save: str = Form(""),
 ):
-    site = get_site_or_404(state, site_id)
+    user = get_current_user(request)
+    site = get_site_or_404(state, site_id, user["id"])
+    # Сменить организацию можно только на свою; чужой id игнорируем.
+    if get_organization(state.storage, organization_id, owner_id=user["id"]) is None:
+        organization_id = site.organization_id
     schedule = schedule if schedule in SCHEDULE_LABELS else "off"
     update_site_service(
         state.storage,
@@ -271,7 +298,8 @@ def site_settings_save(
 
 
 @router.post("/sites/{site_id}/delete")
-def site_delete(site_id: int, state: AppState = Depends(get_state)):
-    if not delete_site_service(state.storage, site_id=site_id):
+def site_delete(request: Request, site_id: int, state: AppState = Depends(get_state)):
+    site = get_site_or_404(state, site_id, get_current_user(request)["id"])
+    if not delete_site_service(state.storage, site_id=site.id):
         raise HTTPException(status_code=404, detail="Сайт не найден")
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url="/dashboard", status_code=303)

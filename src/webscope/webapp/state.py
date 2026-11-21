@@ -34,6 +34,7 @@ class AppState:
     limiter: RateLimiter
     scan_options: ScanOptions
     local_dir: Path
+    auth_limiter: RateLimiter | None = None
     # фоновые задачи прогонов, запущенных без BackgroundTasks
     tasks: set[asyncio.Task] = field(default_factory=set)
 

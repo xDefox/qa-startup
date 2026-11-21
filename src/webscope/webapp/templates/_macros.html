@@ -116,7 +116,7 @@
 {%- endmacro %}
 
 {% macro quick_scan_form(request=None, form_id="scan-form", submit_id="scan-submit", button_text="Проверить сайт", compact=False, note="Бесплатно · без установки") -%}
-{% if auth_enabled() and not (request and is_authenticated(request)) %}
+{% if not (request and is_authenticated(request)) %}
 <div class="stack">
   <p class="muted small">Проверки сохраняются в кабинете, поэтому сначала нужно войти.</p>
   <a class="btn btn-primary{% if not compact %} btn-lg{% endif %}" href="/auth/login?next=/scan" id="{{ submit_id }}">{{ button_text }}</a>

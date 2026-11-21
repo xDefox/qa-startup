@@ -12,6 +12,7 @@
 
 {% macro app_header(request) -%}
 {%- set path = request.url.path if request else "/" -%}
+{%- set user = current_user(request) if request else None -%}
 {%- set is_home = path == "/" -%}
 {%- set is_landing = path.startswith("/landing") -%}
 {%- set is_dashboard = path.startswith("/dashboard") or path.startswith("/sites") -%}
@@ -25,8 +26,11 @@
       <a href="/dashboard" class="nav-link{% if is_dashboard %} active{% endif %}">Кабинет</a>
     </nav>
     <div class="header-actions">
-      {% if auth_enabled() and is_authenticated(request) %}
+      {% if user %}
+      <a class="pill" href="/dashboard" title="{{ user.email }}">{{ user.username }}</a>
       <a class="pill" href="/auth/logout">Выйти</a>
+      {% else %}
+      <a class="pill" href="/auth/login">Войти</a>
       {% endif %}
       {% if show_scan_cta %}
       <a class="btn btn-sm btn-secondary" href="/scan">Проверить сайт</a>
@@ -44,8 +48,12 @@
   <a href="/" class="mobile-nav-link{% if is_home %} active{% endif %}">Главная {{ icon("arrow-right", 18) }}</a>
   <a href="/landing" class="mobile-nav-link{% if is_landing %} active{% endif %}">Возможности {{ icon("arrow-right", 18) }}</a>
   <a href="/dashboard" class="mobile-nav-link{% if is_dashboard %} active{% endif %}">Кабинет {{ icon("arrow-right", 18) }}</a>
-  {% if auth_enabled() and is_authenticated(request) %}
+  {% if user %}
+  <a href="/dashboard" class="mobile-nav-link">{{ user.email }} {{ icon("arrow-right", 18) }}</a>
   <a href="/auth/logout" class="mobile-nav-link">Выйти {{ icon("arrow-right", 18) }}</a>
+  {% else %}
+  <a href="/auth/login" class="mobile-nav-link">Войти {{ icon("arrow-right", 18) }}</a>
+  <a href="/auth/register" class="mobile-nav-link">Регистрация {{ icon("arrow-right", 18) }}</a>
   {% endif %}
   {% if show_scan_cta %}
   <div class="mobile-nav__footer">

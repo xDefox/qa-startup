@@ -6,7 +6,7 @@
 {% block content %}
 {{ page_header(
     "Аккаунт",
-    subtitle="Доступ к кабинету и уведомления по умолчанию.",
+    subtitle="Профиль и доступ к личному кабинету.",
     actions=btn("Мои сайты", href="/dashboard", variant="secondary")
 ) }}
 
@@ -15,19 +15,19 @@
 <div class="grid grid--2">
   {% call card("Профиль") %}
   <div class="stack stack--sm">
-    <div class="metric"><span class="metric__label">Логин</span><span class="metric__value small">{{ user.username }}</span></div>
+    <div class="metric"><span class="metric__label">Email</span><span class="metric__value small">{{ user.email }}</span></div>
     <div class="metric"><span class="metric__label">Роль</span><span class="metric__value small">{{ "Администратор" if user.is_admin else "Пользователь" }}</span></div>
+    {% if user.created_at %}
+    <div class="metric"><span class="metric__label">Аккаунт создан</span><span class="metric__value small">{{ user.created_at[:10] }}</span></div>
+    {% endif %}
   </div>
-  <p class="muted small mt-4">Логин задаётся переменной окружения <code>WEBSCOPE_AUTH_USER</code> при запуске сервера.</p>
   {% endcall %}
 
   {% call card("Доступ") %}
-  {% if auth_enabled() %}
-  {{ alert("Кабинет закрыт паролем: без входа открыта только витрина, страницы отчётов и API требуют входа.", variant="success", icon_name="lock") }}
-  {% else %}
-  {{ alert("Вход не настроен: интерфейс работает в демо-режиме и доступен всем, кто дотянется до порта.", variant="warning", icon_name="alert") }}
-  {% endif %}
-  <p class="muted small mt-3">Пароль задаётся через <code>WEBSCOPE_AUTH_PASSWORD</code>. После изменения перезапустите сервер — активные сессии завершатся.</p>
+  {{ alert("Кабинет закрыт: сайты, история и отчёты видны только после входа и только их владельцу.", variant="success", icon_name="lock") }}
+  <div class="form-actions mt-4">
+    {{ btn("Выйти", href="/auth/logout", variant="secondary", icon_name="arrow-right") }}
+  </div>
   {% endcall %}
 </div>
 
