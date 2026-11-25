@@ -195,7 +195,8 @@ def test_csrf_allows_same_origin(client: TestClient, app) -> None:
     assert len(app.state.webscope.storage.list_sites()) == 1
 
 
-def test_users_have_separate_cabinets(client: TestClient, app) -> None:
+def test_users_see_shared_sites(client: TestClient, app) -> None:
+    """Публичная модель: сайт виден всем, никто не блокируется владельцем."""
     register(client, "alice@example.com")
     created = client.post("/sites", data={"url": "alice-site.example"}, follow_redirects=False)
     assert created.status_code == 303
@@ -206,15 +207,15 @@ def test_users_have_separate_cabinets(client: TestClient, app) -> None:
 
     dashboard = client.get("/dashboard")
     assert dashboard.status_code == 200
-    assert "alice-site.example" not in dashboard.text
-    assert client.get(f"/sites/{site_id}", follow_redirects=False).status_code == 404
-    assert client.get(f"/api/sites/{site_id}").status_code == 404
-    assert client.get(f"/api/sites/{site_id}/report.txt").status_code == 404
+    assert "alice-site.example" in dashboard.text
+    assert client.get(f"/sites/{site_id}", follow_redirects=False).status_code == 200
+    assert client.get(f"/api/sites/{site_id}").status_code == 200
+    assert client.get(f"/api/sites/{site_id}/report.txt").status_code == 200
 
     sites = client.get("/api/sites").json()["sites"]
-    assert sites == []
+    assert [site["id"] for site in sites] == [site_id]
 
-    # Алиса после повторного входа видит свой сайт.
+    # Алиса после повторного входа видит тот же сайт.
     client.get("/auth/logout")
     sign_in(client, "alice@example.com", register=False)
     alice_sites = client.get("/api/sites").json()["sites"]

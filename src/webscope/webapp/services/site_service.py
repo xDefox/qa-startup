@@ -107,8 +107,9 @@ def create_site(
     # Проверяем, не существует ли сайт с таким URL уже
     existing = storage.get_site_by_url(url)
     if existing is not None:
-        if existing.owner_id not in (0, owner_id):
-            raise ValueError("Этот сайт уже отслеживается в другом аккаунте")
+        # Публичный сервис: человек кинул ссылку — сайт видим. Несколько
+        # аккаунтов могут отслеживать один URL; владелец (owner_id) остаётся
+        # первым, а остальные попадают в список видимых в их кабинете.
         existing_site = existing
         # Сайт из «доавторизационной» эпохи забирает текущий владелец.
         if existing_site.owner_id == 0 and owner_id:
@@ -191,16 +192,13 @@ def list_sites(
     organization_id: int | None = None,
     owner_id: int | None = None,
 ) -> list[Site]:
-    """Список сайтов: опционально только свои и/или по организации."""
+    """Список сайтов: опционально по организации. Публичная модель — сайты видны всем."""
     query = "SELECT * FROM sites"
     where: list[str] = []
     params: list = []
     if organization_id is not None:
         where.append("organization_id = ?")
         params.append(organization_id)
-    if owner_id is not None:
-        where.append("owner_id = ?")
-        params.append(owner_id)
     if where:
         query += " WHERE " + " AND ".join(where)
     query += " ORDER BY id"

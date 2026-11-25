@@ -51,18 +51,18 @@ def trigger(state: AppState, site: Site, background_tasks: BackgroundTasks | Non
 
 
 def get_site_or_404(state: AppState, site_id: int, owner_id: int | None = None) -> Site:
-    """Сайт по id; чужой сайт для текущего пользователя — тоже 404."""
+    """Сайт по id. Публичный сервис: сайт открывается всем, owner_id не проверяется."""
     site = state.storage.get_site(site_id)
-    if site is None or (owner_id is not None and site.owner_id != owner_id):
+    if site is None:
         raise HTTPException(status_code=404, detail="Сайт не найден")
     return site
 
 
 def index_cards(state: AppState, owner_id: int | None = None) -> list[SiteCard]:
-    """Сайты с последним прогоном — данные главной и кабинета."""
+    """Сайты с последним прогоном — данные главной и кабинета. Публичная модель — все сайты."""
     return [
         SiteCard(site=item, run=state.storage.latest_run(item.id))
-        for item in list_sites_service(state.storage, owner_id=owner_id)
+        for item in list_sites_service(state.storage)
     ]
 
 
