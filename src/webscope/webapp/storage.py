@@ -14,7 +14,7 @@ import sqlite3
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from ..auth_vault import decrypt as vault_decrypt
@@ -683,6 +683,27 @@ class Storage:
             cursor = connection.execute(
                 "UPDATE runs SET status = 'error', finished_at = ?, error = ? WHERE status = 'running'",
                 (now_iso(), error[:2000]),
+            )
+            connection.commit()
+            return int(cursor.rowcount or 0)
+
+    def reconcile_stale_running(self, max_minutes: int = 10) -> int:
+        """Намеренно останавливает висящие дольше `max_minutes` минут в активном состоянии.
+
+        Защита от зависания: если проверка «работает» больше 10 минут и результата
+        не появилось — закрываем её как error, чтобы не тратить лимиты
+        count_running() на непонятные состояния.
+        """
+        cutoff = (utcnow() - timedelta(minutes=max_minutes)).isoformat()
+        with self._conn() as connection:
+            cursor = connection.execute(
+                "UPDATE runs SET status = 'error', finished_at = ?, error = ?"
+                " WHERE status = 'running' AND started_at < ?",
+                (
+                    now_iso(),
+                    f"прогон намеренно остановлен: висел более {max_minutes} минут",
+                    cutoff,
+                ),
             )
             connection.commit()
             return int(cursor.rowcount or 0)

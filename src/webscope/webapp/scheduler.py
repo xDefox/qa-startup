@@ -110,6 +110,7 @@ class Monitor:
         # Сбрасываем старые stuck-прогоны (trial-машины останавливаются
         # и не маркируются), чтобы не расходовать слоты max_concurrent_scans.
         self.storage.reconcile_running(error="прогон прерван: новый запуск проверки")
+        self.storage.reconcile_stale_running(max_minutes=10)
         run = self.storage.start_run(site.id)
         self.schedule_next(site)
         return run
