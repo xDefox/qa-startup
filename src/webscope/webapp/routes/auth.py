@@ -19,19 +19,16 @@ from ..auth import (
     start_session,
     validate_registration,
 )
+from ..limits import client_key
 from ..services.site_service import create_organization, get_organizations
 from ..state import get_state
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _client_key(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
-
-
 def _too_many(state, request: Request, page: str, **context):
     """Ограничение попыток входа и регистрации с одного адреса."""
-    if state.auth_limiter is not None and not state.auth_limiter.allow(_client_key(request)):
+    if state.auth_limiter is not None and not state.auth_limiter.allow(client_key(request)):
         error = "Слишком много попыток. Подождите минуту и попробуйте снова."
         if page == "register":
             return register_page(request, state.templates, error=error, **context)

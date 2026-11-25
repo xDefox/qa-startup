@@ -10,14 +10,18 @@
 * сессия живёт ``WEBSCOPE_SESSION_DAYS`` дней (по умолчанию 30) и продлевается
   при каждом входе;
 * ``WEBSCOPE_AUTH_PASSWORD`` остался как аварийный вход: при старте создаётся
-  пользователь ``WEBSCOPE_AUTH_USER`` с этим паролем, если его ещё нет.
+  пользователь ``WEBSCOPE_AUTH_USER`` с этим паролем, если его ещё нет;
+  пароль проверяется на силу (см. ``password_weakness_warnings``) — слишком
+  короткий или однородный вызывает предупреждение при запуске.
 """
 
 from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
+import re
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
@@ -25,6 +29,8 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from .state import STATE_KEY
+
+LOGGER = logging.getLogger(__name__)
 
 COOKIE_NAME = "webscope_session"
 
@@ -113,14 +119,36 @@ def end_session(storage, request: Request) -> None:
         storage.delete_session(token)
 
 
+def password_weakness_warnings(password: str) -> list[str]:
+    """Проблемы силы пароля для аварийного входа: длина и наличие регистров/цифр."""
+    warnings = []
+    if len(password) < MIN_PASSWORD_LENGTH:
+        warnings.append(f"менее {MIN_PASSWORD_LENGTH} символов")
+    if not re.search(r"[A-Z]", password):
+        warnings.append("нет заглавных букв")
+    if not re.search(r"[a-z]", password):
+        warnings.append("нет строчных букв")
+    if not re.search(r"\d", password):
+        warnings.append("нет цифр")
+    return warnings
+
+
 def bootstrap_env_admin(storage) -> None:
-    """Создаёт аварийного пользователя из env, если его ещё нет."""
-    if not _password():
+    """Создаёт аварийного пользователя из env, если его ещё нет.
+
+    Пароль из ``WEBSCOPE_AUTH_PASSWORD`` проверяется на силу
+    (``password_weakness_warnings``): слабый пароль даёт предупреждение при
+    запуске, вход с ним никем не блокируется — доступ решает администратор.
+    """
+    password = _password()
+    if not password:
         return
     email = auth_username()
     if storage.user_exists(email):
         return
-    user_id = storage.create_user(email, _password())
+    for warning in password_weakness_warnings(password):
+        LOGGER.warning("WEBSCOPE_AUTH_PASSWORD: %s — рекомендуется сильнее", warning)
+    user_id = storage.create_user(email, password)
     if storage.count_users() == 1:
         storage.adopt_orphan_data(user_id)
 

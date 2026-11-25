@@ -267,6 +267,10 @@
 {%- endmacro %}
 
 {# ---------- ТАБЛИЦЫ ---------- #}
+{# Осознанный `|safe`: `row.attrs` и `cell.content` собираются серверными
+   шаблонами (history.html, index.html, dashboard_integrations.html) — ссылки,
+   `<strong>` и `<code>` в отображаемых данных; ввода от пользователей сюда
+   не попадает, иначе следует делать escape. #}
 {% macro table(headers, rows, class="", empty_text="Ничего не найдено.", attrs=None) -%}
   {%- set attrs = attrs or {} -%}
   {% if rows %}

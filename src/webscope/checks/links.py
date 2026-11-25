@@ -1,11 +1,15 @@
-"""Ссылки: битые, безымянные, небезопасные.
+"""Битые внутренние ссылки — только подтверждённые 4xx/5xx, плюс типовые
+проблемы переходов: target="_blank" без noopener, пустой href, ресурсы по http.
 
-Часть проверок требует сети (статус внутренних ссылок), поэтому они выполняются
-с ограничением по количеству и таймауту — скан не должен упираться в сеть.
+Ссылка — это путь клиента к заявке. Поэтому проверяем только переходы внутри
+сайта и только реальные ответы 404/410/5xx. Таймауты, 401/403 (закрытые
+разделы), 429 (лимит запросов), якоря и «пустые» href из JavaScript-кнопок
+не считаются дефектом: владельцу нечего исправлять.
 """
 
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse
 
@@ -15,6 +19,8 @@ from ..context import ScanContext
 from ..credscope import strip_out_of_scope_headers
 from ..models import Finding, Severity
 from ..netguard import GuardedTransport
+
+_DESTRUCTIVE_PATH = re.compile(r"/(logout|signout|log-out|delete|remove|unsubscribe)(/|$)", re.IGNORECASE)
 
 COLLECT = r"""
 () => {
@@ -28,9 +34,27 @@ COLLECT = r"""
     text: u.text(a).slice(0, 120),
     target: a.getAttribute('target') || '',
     rel: a.getAttribute('rel') || '',
+    role: a.getAttribute('role') || '',
     selector: u.cssPath(a),
     snippet: (a.outerHTML || '').slice(0, 200),
   }));
+}
+"""
+
+# Ресурсы по http:// на https-странице — mixed content (links/mixed-content).
+MIXED_COLLECT = r"""
+() => {
+  const u = window.__webscopeUtils;
+  const out = [];
+  for (const el of Array.from(document.querySelectorAll(
+    'a[href], img[src], script[src], iframe[src], link[href], video[src], source[src], embed[src], object[data], input[src]'
+  ))) {
+    const raw = (el.getAttribute('href') || el.getAttribute('src') || el.getAttribute('data') || '').trim();
+    if (raw.toLowerCase().startsWith('http://')) {
+      out.push({ selector: u.cssPath(el), snippet: (el.outerHTML || '').slice(0, 200) });
+    }
+  }
+  return out;
 }
 """
 
@@ -41,18 +65,71 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
     url = ctx.final_url
     page_host = urlparse(url).netloc
 
-    def add(rule: str, severity: Severity, title: str, message: str, **kwargs) -> None:
+    # links/target-blank-noopener: target="_blank" без noopener — вкладка получает доступ к сайту.
+    for a in links:
+        if (a.get("target") or "").strip().lower() != "_blank":
+            continue
+        rel = {token.strip().lower() for token in (a.get("rel") or "").split()}
+        if "noopener" not in rel:
+            findings.append(
+                Finding(
+                    rule="links/target-blank-noopener",
+                    severity=Severity.MINOR,
+                    title="Ссылка с target=\"_blank\" без rel=\"noopener\"",
+                    message="Открытая вкладка получает доступ к вашему сайту — укажите rel=\"noopener\".",
+                    url=url,
+                    selector=a.get("selector"),
+                    snippet=a.get("snippet"),
+                    source="webscope.links",
+                ),
+            )
+
+    # links/empty-href: ссылка с пустым href — клик не ведёт никуда.
+    for a in links:
+        if (a.get("href") or "").strip() != "":
+            continue
+        if (a.get("role") or "").strip().lower() == "button":
+            continue  # семантика кнопки: имена ловят content/forms
         findings.append(
             Finding(
-                rule=rule,
-                severity=severity,
-                title=title,
-                message=message,
+                rule="links/empty-href",
+                severity=Severity.MODERATE,
+                title="Ссылка без адреса",
+                message="У ссылки пустой href — клик не даёт эффекта.",
                 url=url,
+                selector=a.get("selector"),
+                snippet=a.get("snippet"),
                 source="webscope.links",
-                **kwargs,
             ),
         )
+
+    # links/mixed-content — на https-странице ресурсы по http считаются mixed content.
+    if urlparse(url).scheme == "https":
+        mixed_seen: set[str] = set()
+        try:
+            mixed = page.evaluate(MIXED_COLLECT) or []  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 - подготовка к проверке не должна ронять скан
+            mixed = []
+        for item in mixed[:5]:
+            selector = item.get("selector") or ""
+            if selector in mixed_seen:
+                continue
+            mixed_seen.add(selector)
+            findings.append(
+                Finding(
+                    rule="links/mixed-content",
+                    severity=Severity.MODERATE,
+                    title="Ресурс загружается по http",
+                    message=(
+                        "Ресурс грузится по http:// — на https-странице браузер может "
+                        "заблокировать его и показать «небезопасное» предупреждение."
+                    ),
+                    url=url,
+                    selector=selector or None,
+                    snippet=item.get("snippet"),
+                    source="webscope.links",
+                ),
+            )
 
     seen: set[str] = set()
     candidates: list[dict] = []
@@ -61,43 +138,31 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
         href = (link.get("href") or "").strip()
         resolved = (link.get("resolved") or "").strip()
 
-        if href in {"", "#"} or href.lower().startswith("javascript:void"):
-            add(
-                "links/empty-href",
-                Severity.MODERATE,
-                "Ссылка без адреса",
-                f'href="{href or "(пусто)"}" не ведёт ни в какое место — вероятно, обработчик потерялся.',
-                selector=link.get("selector"),
-                snippet=link.get("snippet"),
-                details={"href": href},
-            )
+        # Якоря, пустые href и javascript: — это кнопки/меню, а не переходы.
+        if not href or href == "#" or href.lower().startswith("javascript:"):
             continue
 
-        if link.get("target") == "_blank" and "noopener" not in (link.get("rel") or "").lower():
-            add(
-                "links/target-blank-noopener",
-                Severity.MODERATE,
-                "target=_blank без rel=noopener",
-                "Открытая вкладка получает доступ к window.opener.",
-                selector=link.get("selector"),
-                snippet=link.get("snippet"),
-            )
-
-        if url.startswith("https://") and resolved.startswith("http://"):
-            add(
-                "links/mixed-content",
-                Severity.SERIOUS,
-                "Смешанное содержимое (http на https-странице)",
-                "Браузер может заблокировать или пометить ресурс как небезопасный.",
-                selector=link.get("selector"),
-                snippet=link.get("snippet"),
-                details={"href": resolved},
-            )
-
         parsed = urlparse(resolved)
-        if parsed.scheme in {"http", "https"} and parsed.netloc == page_host and resolved not in seen:
+        if parsed.scheme not in {"http", "https"} or parsed.netloc != page_host:
+            continue
+
+        # Один и тот же документ с якорем — не отдельная страница.
+        if resolved.split("#", 1)[0] == url.split("#", 1)[0]:
+            continue
+
+        if _DESTRUCTIVE_PATH.search(parsed.path or ""):
+            # GET по /logout или /delete — не проверяем: это действие, а не ссылка.
+            continue
+
+        if resolved not in seen:
             seen.add(resolved)
-            candidates.append({"url": resolved, "selector": link.get("selector"), "text": link.get("text")})
+            candidates.append(
+                {
+                    "url": resolved,
+                    "selector": link.get("selector"),
+                    "text": (link.get("text") or "").strip(),
+                },
+            )
 
     findings.extend(_check_internal_links(candidates, ctx))
     return findings
@@ -169,38 +234,41 @@ def _check_internal_links(candidates: list[dict], ctx: ScanContext) -> list[Find
         if error is not None:
             rule, severity = _error_rule(error)
             if rule == "links/timeout":
-                title = "Ссылка не ответила вовремя"
-                message = (
-                    "Проверка прервана по таймауту (8 с): сервер медленный или ссылка ведёт "
-                    "на внешний ресурс. Это не обязательно битая ссылка — перепроверьте вручную."
-                )
-            else:
-                title = "Ссылка недоступна"
-                message = f"Не удалось получить ответ: {error}"
+                # Не дождались — это про сеть и терпение сканера, а не про сайт.
+                continue
             findings.append(
                 Finding(
                     rule=rule,
                     severity=severity,
-                    title=title,
-                    message=message,
+                    title="Ссылка недоступна",
+                    message=f"Не удалось получить ответ: {error}",
                     url=ctx.final_url,
                     selector=link.get("selector"),
                     source="webscope.links",
-                    details={"href": link["url"], "error": error},
+                    details={"href": link["url"], "error": error, "text": link.get("text")},
                 ),
             )
             continue
-        if status is not None and status >= 400:
+
+        if status is None:
+            continue
+        # Закрытый раздел, лимит запросов и «не туда» редирект — не битая ссылка.
+        if status in {401, 403, 429}:
+            continue
+        if status >= 400:
             findings.append(
                 Finding(
                     rule="links/broken",
                     severity=Severity.SERIOUS if status >= 500 else Severity.MODERATE,
                     title=f"Битая ссылка (HTTP {status})",
-                    message="Страница, на которую ведёт ссылка, отвечает ошибкой.",
+                    message=(
+                        f"Ссылка «{link.get('text') or link['url']}» ведёт на страницу, "
+                        f"которая отвечает HTTP {status}."
+                    ),
                     url=ctx.final_url,
                     selector=link.get("selector"),
                     source="webscope.links",
-                    details={"href": link["url"], "status": status},
+                    details={"href": link["url"], "status": status, "text": link.get("text")},
                 ),
             )
 

@@ -59,7 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan_cmd.add_argument(
         "--checks",
         default="",
-        help="Список проверок через запятую (по умолчанию все): a11y,content,forms,links,console,viewport",
+        help="Проверки через запятую. По умолчанию — только блокеры заявок: interaction,forms,links,console,viewport. all — полный аудит с a11y и content",
     )
     scan_cmd.add_argument("--format", choices=FORMATS, default="text", help="Формат вывода")
     scan_cmd.add_argument("--out", type=Path, default=None, help="Записать вывод в файл")
@@ -110,7 +110,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Игнорировать robots.txt (только для своих стендов)",
     )
     crawl_cmd.add_argument("--all-pages", action="store_true", help="Проверять все страницы, а не по одной на шаблон")
-    crawl_cmd.add_argument("--checks", default="", help="Список проверок через запятую")
+    crawl_cmd.add_argument("--checks", default="", help="Проверки через запятую или all (по умолчанию — только блокеры заявок)")
     crawl_cmd.add_argument("--format", choices=FORMATS, default="text", help="Формат вывода")
     crawl_cmd.add_argument("--out", type=Path, default=None, help="Записать вывод в файл")
     crawl_cmd.add_argument(

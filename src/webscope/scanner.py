@@ -17,7 +17,7 @@ from playwright.sync_api import sync_playwright
 
 from . import __version__
 from .archetype import detect_archetype
-from .checks import DEFAULT_CHECKS, REGISTRY
+from .checks import ALL_CHECKS, DEFAULT_CHECKS, REGISTRY
 from .checks.js import JS_UTILS
 from .context import ScanContext
 from .crawler import CrawlResult, PageTarget, crawl, fetch_robots, representative_pages, squash_ws
@@ -493,6 +493,39 @@ def _snippet_key(snippet: str | None) -> str:
     return "".join(snippet.split())[:80].lower()
 
 
+def _reveal_page(page) -> None:
+    """Прокручивает страницу, чтобы проявились ленивые блоки и анимации.
+
+    Без прокрутки формы и кнопки, которые WOW.js/AOS показывают при появлении
+    в окне, остаются ``visibility: hidden`` — и проверка их просто не видит.
+    Именно так мёртвая форма обратной связи на реальном сайте выглядела
+    «нормальной»: до неё не доскроллили. Прокручиваем до низа и возвращаемся.
+
+    Шаг ограничен: бесконечная лента не должна зациклить скан.
+    """
+    try:
+        page.evaluate(
+            """async () => {
+                const height = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+                const step = Math.max(400, Math.ceil(height / 12));
+                for (let y = 0; y <= height && y < 60000; y += step) {
+                    window.scrollTo(0, y);
+                    await new Promise((resolve) => setTimeout(resolve, 60));
+                }
+                window.scrollTo(0, 0);
+            }""",
+        )
+        page.wait_for_timeout(300)
+        try:
+            page.wait_for_load_state("networkidle", timeout=2000)
+        except PlaywrightError:
+            # Долгие трекеры не должны задерживать скан: проверки уже можно запускать.
+            pass
+    except PlaywrightError:
+        # Страница успела закрыться/упасть — работаем с тем, что есть.
+        pass
+
+
 def _dedupe_findings(findings: list[Finding]) -> list[Finding]:
     """Убирает дубли: одна и та же проблема, найденная двумя источниками."""
     own: dict[str, set[str]] = {}
@@ -557,6 +590,7 @@ def _scan_page(
                 "url": request.url,
                 "method": request.method,
                 "status": None,
+                "resource_type": request.resource_type,
                 "failure": getattr(failure, "error_text", None) or "request failed",
             },
         )
@@ -580,6 +614,7 @@ def _scan_page(
                     "url": response.url,
                     "method": response.request.method,
                     "status": response.status,
+                    "resource_type": response.request.resource_type,
                     "failure": None,
                 },
             )
@@ -623,6 +658,9 @@ def _scan_page(
             page.wait_for_load_state("networkidle", timeout=min(5000, timeout_ms))
         except PlaywrightError:
             pass
+
+        # Многие сайты прячут формы и CTA до прокрутки (wow.js, AOS, lazy).
+        _reveal_page(page)
 
         # Check if the browser showed its own error page (chrome-error://) — indicates navigation failure
         if page.url.startswith("chrome-error://"):
@@ -671,11 +709,23 @@ def _scan_page(
 
 
 def _resolve_checks(checks: Sequence[str] | None) -> list[str]:
-    selected = list(checks or DEFAULT_CHECKS)
-    unknown = [name for name in selected if name not in REGISTRY]
+    """Набор проверок: по умолчанию — только то, что мешает заявке.
+
+    ``all`` (или ``audit``) включает полный аудит: a11y и SEO-контент.
+    Явный список проверок тоже работает — тогда выводятся все его находки.
+    """
+    requested = [name.strip() for name in (checks or ()) if name.strip()]
+    if not requested:
+        return list(DEFAULT_CHECKS)
+    if any(name in {"all", "audit"} for name in requested):
+        return list(ALL_CHECKS)
+    unknown = [name for name in requested if name not in REGISTRY]
     if unknown:
-        raise ScanError(f"Неизвестные проверки: {', '.join(unknown)}. Доступны: {', '.join(sorted(REGISTRY))}")
-    return selected
+        raise ScanError(
+            f"Неизвестные проверки: {', '.join(unknown)}. "
+            f"Доступны: {', '.join(sorted(REGISTRY))}, all",
+        )
+    return requested
 
 
 def _meta_key(value: str) -> str:
@@ -967,8 +1017,9 @@ def scan_site(
         findings.append(_timeout_finding(root_url, scanned, len(targets), time_budget_s))
 
     duration_ms = int((time.monotonic() - started) * 1000)
-    # Дубли title/description по шаблонам — проверка уровня сайта, а не страницы
-    findings.extend(_duplicate_meta_findings(crawl_result))
+    # Дубли title/description по шаблонам — часть SEO-аудита, не «проблема заявки».
+    if "content" in selected:
+        findings.extend(_duplicate_meta_findings(crawl_result))
     result = ScanResult(
         url=root_url,
         final_url=final_url,

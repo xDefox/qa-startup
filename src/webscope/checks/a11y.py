@@ -14,7 +14,10 @@ from ..models import Finding, Severity, severity_from_impact
 
 AXE_PATH = Path(__file__).resolve().parent.parent / "vendor" / "axe.min.js"
 
-AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"]
+# Только нарушения WCAG. «best-practice» (region, landmark-one-main) — это
+# советы по структуре, а не барьеры: они давали десятки строк шума на каждой
+# странице, поэтому в аудит не входят.
+AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
 
 
 def run(page: object, ctx: ScanContext) -> list[Finding]:

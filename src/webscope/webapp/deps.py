@@ -12,17 +12,12 @@ from fastapi import BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from .auth import public_user
-from .limits import max_concurrent_scans
+from .limits import client_key, max_concurrent_scans
 from .presentation import SiteCard
 from .scheduler import Site
 from .services.site_service import list_sites as list_sites_service
 from .state import AppState
 from .storage import Run
-
-
-def client_key(request: Request) -> str:
-    """Ключ лимита: адрес клиента (за прокси нужен доверенный X-Forwarded-For)."""
-    return request.client.host if request.client else "unknown"
 
 
 def scan_limit_response(state: AppState, request: Request) -> PlainTextResponse | JSONResponse | None:

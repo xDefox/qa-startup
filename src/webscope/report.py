@@ -40,6 +40,8 @@ ACCEPTANCE: dict[str, str] = {
     "content/duplicate-description": "Каждая страница шаблона имеет уникальный meta description.",
     "content/missing-og-title": 'В <head> есть <meta property="og:title" content="...">.',
     "content/missing-og-image": 'В <head> есть <meta property="og:image" content="https://...png"> с обложкой 1200×630.',
+    "forms/dead-submit": "Кнопка отправки связана с <form> или имеет обработчик; после нажатия заявка уходит.",
+    "forms/field-without-name": "У каждого поля есть name; значение клиента приходит на сервер в заявку.",
     "forms/control-without-label": "У поля есть <label for> (или aria-label/aria-labelledby).",
     "forms/placeholder-as-label": "У поля есть постоянная подпись <label>, а не только placeholder.",
     "forms/control-without-name": "У поля есть атрибут name, значение отправляется в форму.",
@@ -60,6 +62,8 @@ ACCEPTANCE: dict[str, str] = {
     "viewport/horizontal-overflow": "При ширине 320px нет горизонтальной прокрутки.",
     "viewport/overflowing-element": "Элемент не выходит за границу окна.",
     "viewport/target-size": "Цель касания не меньше 24×24 px.",
+    "viewport/meta-viewport": "В meta viewport content есть width=device-width и нет user-scalable=no.",
+    "viewport/horizontal-scroll": "Горизонтальный скролл работает: блоки с горизонтальным overflow и документ отвечают на скролл.",
 }
 
 

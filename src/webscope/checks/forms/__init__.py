@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from ...context import ScanContext
 from ...models import Finding
-from . import base, validation
+from . import base
 
 
 def run(page: object, ctx: ScanContext) -> list[Finding]:
-    findings: list[Finding] = []
-    findings.extend(base.run(page, ctx))
-    findings.extend(validation.run(page, ctx))
-    return findings
+    """Формы: только подтверждённые поломки отправки и потери полей."""
+    return base.run(page, ctx)

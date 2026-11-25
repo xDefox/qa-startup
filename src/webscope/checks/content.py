@@ -6,8 +6,15 @@ alt-тексты, доступные имена, дубли идентифика
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urljoin, urlparse
+
+import httpx
+
 from ..context import ScanContext
+from ..credscope import strip_out_of_scope_headers
 from ..models import Finding, Severity
+from ..netguard import GuardedTransport
 
 COLLECT = r"""
 () => {
@@ -81,6 +88,10 @@ COLLECT = r"""
     ogUrl: og('og:url'),
     twitterCard: twitter('twitter:card'),
     twitterImage: twitter('twitter:image'),
+    canonical: (doc.querySelector('link[rel="canonical"]') || {}).href || '',
+    ogSiteName: og('og:site_name'),
+    jsonLdPresent: doc.querySelectorAll('script[type="application/ld+json"]').length > 0,
+    jsonLdCount: doc.querySelectorAll('script[type="application/ld+json"]').length,
     headings,
     images,
     iframes,
@@ -123,6 +134,64 @@ def _check_social_card(data: dict, add) -> None:
             "серый пустой прямоугольник вместо обложки, которую клиенты замечают в ленте.",
             help_url="https://ogp.me/#optional",
         )
+
+
+def _check_broken_images(data: dict, ctx: ScanContext, add) -> None:
+    """Битые картинки на странице — подтверждённые 4xx/5xx (сервер вернул ошибку).
+
+    Сканер увидит это только в отчёте, но владельцу сайта это важно: картинка с
+    битым адресом часто не видна пользователю, контент — тоже. Таймауты не
+    считаем дефектом страницы.
+    """
+    page_host = urlparse(ctx.final_url).netloc
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for image in data.get("images") or []:
+        src = (image.get("src") or "").strip()
+        if not src or src.startswith(("data:", "blob:")):
+            continue
+        resolved = urljoin(ctx.final_url, src)
+        parsed = urlparse(resolved)
+        if parsed.scheme not in {"http", "https"} or parsed.netloc != page_host:
+            continue
+        if resolved not in seen:
+            seen.add(resolved)
+            candidates.append(resolved)
+
+    if not candidates:
+        return
+
+    with httpx.Client(
+        timeout=httpx.Timeout(8.0, connect=4.0),
+        follow_redirects=True,
+        transport=GuardedTransport(allow_private=ctx.allow_private),
+        headers=ctx.site_headers or None,
+        event_hooks={"request": [strip_out_of_scope_headers(ctx.final_url)]},
+    ) as client:
+
+        def probe(url: str) -> tuple[str, int | None]:
+            try:
+                response = client.head(url)
+                if response.status_code in (403, 405, 501):
+                    response = client.get(url)
+                return url, response.status_code
+            except Exception:  # noqa: BLE001 - сеть не должна ронять скан
+                return url, None
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(probe, candidates))
+
+    for url, status in results:
+        if status is not None and status >= 400:
+            severity = Severity.MODERATE if status < 500 else Severity.SERIOUS
+            add(
+                "content/broken-image",
+                severity,
+                "Битая картинка",
+                f"Картинка по адресу получила HTTP {status} — сервер отвечает ошибкой вместо изображения.",
+                details={"src": url},
+                help_url="https://developer.mozilla.org/en-US/docs/Web/HTML/Element/img",
+            )
 
 
 def run(page: object, ctx: ScanContext) -> list[Finding]:
@@ -170,6 +239,39 @@ def run(page: object, ctx: ScanContext) -> list[Finding]:
         )
 
     _check_social_card(data, add)
+
+    if not (data.get("canonical") or "").strip():
+        add(
+            "content/missing-canonical",
+            Severity.MODERATE,
+            "Нет canonical URL",
+            "Поисковики решат сами, какую версию страницы считать основной; "
+            "если нет <link rel=\"canonical\"> — риск дублей и размытия веса.",
+            help_url="https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+        )
+
+    if not (data.get("ogSiteName") or "").strip():
+        add(
+            "content/missing-og-site-name",
+            Severity.MODERATE,
+            "Нет og:site_name",
+            "В соцсетях и мессенджерах ссылка будет показываться без названия сайта — "
+            "добавьте <meta property=\"og:site_name\"> в head.",
+            help_url="https://ogp.me/#global",
+        )
+
+    if not data.get("jsonLdPresent"):
+        add(
+            "content/missing-structured-data",
+            Severity.MODERATE,
+            "Нет JSON-LD или структурированных данных",
+            "Не добавлено структурированное описание страницы в коде (JSON-LD) — "
+            "боты и поисковики не видят контакты, часы работы, услуги в коде, "
+            "только визуально.",
+            help_url="https://developers.google.com/search/docs/appearance/structured-data",
+        )
+
+    _check_broken_images(data, ctx, add)
 
     if not (data.get("viewport") or "").strip():
         add(

@@ -21,6 +21,8 @@ dev = [
     "ruff>=0.17,<0.18",
     # нужен тестам шифрования паролей (WEBSCOPE_AUTH_KEY)
     "cryptography>=43",
+    # для джобы `security` в .github/workflows/ci.yml
+    "pip-audit>=2.7",
 ]
 web = [
     "fastapi>=0.115",

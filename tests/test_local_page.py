@@ -59,7 +59,7 @@ def local_site(tmp_path: Path):
 
 @pytest.mark.browser
 def test_scan_local_page_finds_defects_once(local_site: str) -> None:
-    result = scan(local_site, allow_private=True)
+    result = scan(local_site, allow_private=True, checks=["all"])
     rules = [finding.rule for finding in result.findings]
 
     # Если iframe без title: одна находка, не две (axe frame-title + наша).

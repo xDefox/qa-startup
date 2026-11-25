@@ -32,7 +32,7 @@ BROKEN_HTML = """
   <button></button>
   <div id="dup">a</div>
   <div id="dup">b</div>
-  <input type="text" name="q" placeholder="Поиск по сайту">
+  <form><input type="text" name="q" placeholder="Поиск по сайту"></form>
   <iframe src="/frame"></iframe>
 </body>
 </html>
@@ -140,6 +140,36 @@ DUPLICATE_HTML = """
   </form>
 </body>
 </html>
+"""
+
+# Страница с проблемами в новых правилах форм (src/webscope/checks/forms/base.py).
+FORMS_NEW_RULES_HTML = """
+<html lang="ru"><head><title>Проблемы в формах</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body>
+  <form novalidate action="/send">
+    <input name="email" type="text">
+    <input name="phone" type="tel">
+    <button type="submit"></button>
+  </form>
+  <form action="/search">
+    <input type="email" name="mail2">
+    <button type="submit">Поиск</button>
+  </form>
+</body></html>
+"""
+
+# Страница для новых правил ссылок (src/webscope/checks/links.py).
+LINKS_NEW_RULES_HTML = """
+<html lang="ru"><head><title>Новые правила ссылок</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body>
+  <a href="https://example.com/secure" target="_blank">Открыть в новой вкладке</a>
+  <a href="https://example.com/ok" target="_blank" rel="noopener noreferrer">Хорошая</a>
+  <a href="">Клик в никуда</a>
+  <a href="http://insecure-resource.example">На http</a>
+  <img src="http://insecure-resource.example/x.png" alt="изображение">
+</body></html>
 """
 
 
@@ -265,12 +295,15 @@ def test_one_defect_is_one_finding(browser) -> None:
     finally:
         context.close()
 
-    # Каждый из шести пустых интерактивов — одна находка, без дублей по правилам.
+    # Каждый из пяти пустых интерактивов — одна находка, без дублей по правилам.
+    # Кнопка отправки в форме (button type="submit", пустая) — пятая находка:
+    # правило forms/submit-without-accessible-name теперь работает, т.к.
+    # forms.run видит кнопки внутри форм (раньше только orphan-кнопки).
     rules_by_selector = {}
     for f in name_findings:
         rules_by_selector.setdefault(f.selector, []).append(f.rule)
 
-    assert len(name_findings) == 6, rules_by_selector
+    assert len(name_findings) == 5, rules_by_selector
     assert all(len(rules) == 1 for rules in rules_by_selector.values()), rules_by_selector
 
 
@@ -281,7 +314,7 @@ def test_forms_findings(browser) -> None:
     finally:
         context.close()
 
-    assert "forms/placeholder-as-label" in rules
+    assert "forms/dead-submit" not in rules
     assert "forms/control-without-name" not in rules
 
 
@@ -320,6 +353,37 @@ def test_content_accepts_full_social_card(browser) -> None:
     rules = _rules(findings)
     assert "content/missing-og-title" not in rules
     assert "content/missing-og-image" not in rules
+
+
+def test_forms_new_rules(browser) -> None:
+    """Новые правила форм (forms/base.py): поведение и вводные атрибуты считаются."""
+    context, ctx = _context(FORMS_NEW_RULES_HTML, browser)
+    try:
+        rules = _rules(forms.run(context.pages[0], ctx))
+    finally:
+        context.close()
+
+    assert "forms/novalidate" in rules
+    assert "forms/email-wrong-type" in rules
+    assert "forms/email-without-autocomplete" in rules
+    assert "forms/tel-missing-inputmode" in rules
+    assert "forms/submit-without-accessible-name" in rules
+
+
+def test_links_new_rules(browser) -> None:
+    """Новые правила ссылок (links.py): noopener, пустой href, mixed content."""
+    from webscope.checks import links
+
+    context, ctx = _context(LINKS_NEW_RULES_HTML, browser)
+    try:
+        findings = links.run(context.pages[0], ctx)
+    finally:
+        context.close()
+
+    rules = _rules(findings)
+    assert "links/target-blank-noopener" in rules
+    assert "links/empty-href" in rules
+    assert "links/mixed-content" in rules
 
 
 def test_checks_are_deterministic(browser) -> None:

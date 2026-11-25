@@ -25,7 +25,8 @@
                     │  │       forms       │  │     label, name, autocomplete, кнопки
                     │  │       links       │  │     href=#, noopener, mixed, битые
                     │  │       console     │  │     errors, warnings, uncaught, failed
-                    │  │       viewport    │  │     overflow 320/768, target-size 24px
+                    │  │       viewport    │  │     overflow 320/768
+                    │  │       mobile      │  │     meta viewport формат, target-size 24px, скролл
                     │  │       interaction │  │     кнопку нельзя нажать (hit-test)
                     │  │       js          │  │     (заглушка, не используется)
                     │  ├ scoring.py       │  │  ← балл 0–100 + человеческий язык
@@ -92,7 +93,8 @@
 | `forms` | input-no-label, label-placeholder-only, input-no-name, email-autocomplete, submit-accessible-name | serious→minor | свои |
 | `links` | href-hash, blank-no-noopener, mixed-content, internal-broken, timeout | serious→minor | свои |
 | `console` | error, warning, pageerror (uncaught), requestfailed | serious→moderate | свои |
-| `viewport` | overflow-320, overflow-768, target-size | serious→minor | свои |
+| `viewport` | horizontal-overflow, overflowing-element | serious→moderate | свои |
+| `mobile` | meta-viewport (формат), horizontal-scroll, target-size (24×24) | serious→moderate | свои |
 | `site` | duplicate-title, duplicate-description | moderate→minor | crawl |
 
 **FP-дедуп:** находки, совпадающие с axe-правилом по элементу, схлопываются (`_AXE_EQUIVALENTS` в `checks/content.py`). Для проверок уровня документа (lang, title, h1) — по URL страницы.

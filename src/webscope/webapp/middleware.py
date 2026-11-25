@@ -65,6 +65,8 @@ def install(app: FastAPI) -> None:
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["Referrer-Policy"] = "same-origin"
             response.headers["X-Frame-Options"] = "DENY"
+            response.headers["X-XSS-Protection"] = "1; mode=block"
+            response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         return response
 
 

@@ -16,9 +16,24 @@ import threading
 import time
 from collections import defaultdict, deque
 
+from fastapi import Request
+
 DEFAULT_LIMIT = 20
 DEFAULT_WINDOW_SECONDS = 60.0
 DEFAULT_MAX_CONCURRENT = 2
+
+
+def client_key(request: Request) -> str:
+    """Адрес клиента для лимитов: за nginx доверяем X-Forwarded-For.
+
+    nginx дописывает адрес клиента в конец XFF (``$proxy_add_x_forwarded_for``),
+    поэтому берём первую запись. Без прокси заголовок игнорируется: иначе
+    подмена им разными адресами ослабила бы лимит.
+    """
+    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if forwarded:
+        return forwarded
+    return request.client.host if request.client else "unknown"
 
 
 def _env_int(name: str, default: int) -> int:
