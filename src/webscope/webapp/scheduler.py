@@ -107,6 +107,9 @@ class Monitor:
         Прогон открывается до самой проверки, чтобы веб-интерфейс сразу видел
         состояние «идёт проверка».
         """
+        # Сбрасываем старые stuck-прогоны (trial-машины останавливаются
+        # и не маркируются), чтобы не расходовать слоты max_concurrent_scans.
+        self.storage.reconcile_running(error="прогон прерван: новый запуск проверки")
         run = self.storage.start_run(site.id)
         self.schedule_next(site)
         return run
